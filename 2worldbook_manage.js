@@ -41,7 +41,7 @@ $menuBtn.on('click', async () => {
             .wb-item-actions { display: flex; gap: 5px; flex-shrink: 0; }
             .wb-icon-btn { width: 26px; height: 26px; border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; border: 1px solid var(--SmartThemeBorderColor); background: var(--SmartThemeBlurTintColor); color: var(--SmartThemeBodyColor); transition: 0.2s; font-size: 12px; }
             .wb-icon-btn:hover { background: var(--SmartThemeQuoteColor); color: #fff; border-color: var(--SmartThemeQuoteColor); }
-            .wb-icon-btn.hover-red:hover { background: #dc3545; color: #fff; border-color: #dc3545; }
+            .wb-icon-btn.hover-red:hover { background: #ff6b6b; color: #fff; border-color: #ff6b6b; }
 
             /* 标签交互 */
             .wb-bind-tag { font-size: 11px; border-radius: 4px; padding: 3px 6px; display: inline-block; width: fit-content; font-weight: bold; cursor: pointer; transition: 0.2s; }
@@ -52,28 +52,80 @@ $menuBtn.on('click', async () => {
             .wb-controls-group { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; flex-shrink: 0; justify-content: flex-end;}
 
             .wb-btn-group { display: flex; gap: 10px; margin: 10px 0; flex-wrap: wrap; }
-            .wb-action-btn { flex: 1; min-width: 140px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; padding: 10px; border-radius: 6px; background: var(--SmartThemeBotMesColor); color: var(--SmartThemeBodyColor); border: 1px solid var(--SmartThemeBorderColor); transition: 0.2s; font-weight: bold; font-size: 13px; box-sizing: border-box; text-align: center; white-space: nowrap; word-break: keep-all; }
-            .wb-action-btn:hover { background: var(--SmartThemeBlurTintColor); box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+            /* 优化后的按钮基础样式：Outline 风格，去油腻 */
+            .wb-action-btn {
+                flex: 1; min-width: 140px; display: flex; align-items: center; justify-content: center; gap: 6px;
+                cursor: pointer; padding: 10px; border-radius: 6px;
+                background: transparent; color: var(--SmartThemeBodyColor);
+                border: 1px solid var(--SmartThemeBorderColor);
+                transition: 0.2s; font-weight: bold; font-size: 13px;
+                box-sizing: border-box; text-align: center; white-space: nowrap; word-break: keep-all;
+            }
+            .wb-action-btn:hover { background: var(--SmartThemeBlurTintColor); box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
 
             /* 强制文字不换行保护 */
             .wb-nowrap-btn { white-space: nowrap !important; flex-shrink: 0 !important; word-break: keep-all !important; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
 
-            /* 辅助颜色补充 */
-            .btn-primary { color: #fff !important; background: #007bff !important; border-color: #007bff !important; }
-            .btn-primary:hover { background: #0056b3 !important; }
-            .btn-success { color: #fff !important; background: #28a745 !important; border-color: #28a745 !important; }
-            .btn-success:hover { background: #218838 !important; }
-            .btn-danger { color: #fff !important; background: #dc3545 !important; border-color: #dc3545 !important; }
-            .btn-danger:hover { background: #c82333 !important; }
-            .btn-warning { color: #212529 !important; background: #ffc107 !important; border-color: #ffc107 !important; }
+            /* UI细节点：更优雅的颜色类，适配各种深浅色主题 */
+            .btn-primary {
+                color: var(--SmartThemeQuoteColor) !important;
+                border-color: var(--SmartThemeQuoteColor) !important;
+                background: rgba(125, 125, 125, 0.05) !important;
+            }
+            .btn-primary:hover {
+                background: var(--SmartThemeQuoteColor) !important;
+                color: #fff !important;
+                text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+            }
+
+            .btn-success {
+                color: #51cf66 !important;
+                border-color: #51cf66 !important;
+                background: rgba(81, 207, 102, 0.05) !important;
+            }
+            .btn-success:hover {
+                background: #51cf66 !important;
+                color: #fff !important;
+                text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+            }
+
+            .btn-danger {
+                color: #ff6b6b !important;
+                border-color: #ff6b6b !important;
+                background: rgba(255, 107, 107, 0.05) !important;
+            }
+            .btn-danger:hover {
+                background: #ff6b6b !important;
+                color: #fff !important;
+                text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+            }
+
+            .btn-warning {
+                color: #fcc419 !important;
+                border-color: #fcc419 !important;
+                background: rgba(252, 196, 25, 0.05) !important;
+            }
+             .btn-warning:hover {
+                background: #fcc419 !important;
+                color: #212529 !important;
+            }
 
             /* 复合快照UI专用 */
             #dsnap-wb-list { flex: 0 0 250px; overflow-y: auto; border-right: 2px solid var(--SmartThemeBorderColor); padding-right: 10px; }
             #dsnap-entry-list { flex: 1; overflow-y: auto; padding-left: 10px; }
-            .dsnap-wb-item { padding: 8px; border-radius: 4px; cursor: pointer; border: 1px solid transparent; }
-            .dsnap-wb-item.active { background: var(--SmartThemeQuoteColor); color: white; font-weight: bold; border-color: var(--SmartThemeQuoteColor); }
+            .dsnap-wb-item { padding: 8px; border-radius: 4px; cursor: pointer; border: 1px solid transparent; transition: 0.1s; }
+            .dsnap-wb-item.active {
+                background: var(--SmartThemeQuoteColor);
+                color: #fff;
+                font-weight: bold;
+                border-color: var(--SmartThemeQuoteColor);
+                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            }
+            /* 激活项里的数字计数反色显示 */
+            .dsnap-wb-item.active b { color: #fff !important; }
+
             .dsnap-wb-item:not(.active):hover { background: var(--SmartThemeBlurTintColor); }
-            .dsnap-entry-item { display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: 4px; }
+            .dsnap-entry-item { display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: 4px; transition:0.1s;}
             .dsnap-entry-item:hover { background: var(--SmartThemeBotMesColor); }
 
             /* 输入框样式 */
@@ -97,15 +149,10 @@ $menuBtn.on('click', async () => {
                 #dsnap-container { flex-direction: column; }
                 #dsnap-wb-list-wrapper { border-right: none; border-bottom: 2px solid var(--SmartThemeBorderColor); padding-right: 0; padding-bottom: 10px; margin-bottom: 10px; flex: 0 0 auto; max-height: 25vh;}
                 #dsnap-entry-list { padding-left: 0; }
+                .wb-name-text { white-space: normal; overflow: visible; text-overflow: initial; word-break: break-word; line-height: 1.4; }
 
-                /* 核心：移动端响应式调整，让世界书标题可以换行显示，避免被截断 */
-                .wb-name-text {
-                    white-space: normal;      /* 允许换行 */
-                    overflow: visible;        /* 移除溢出隐藏 */
-                    text-overflow: initial;   /* 移除省略号 */
-                    word-break: break-word;   /* 在单词边界处断开长词 */
-                    line-height: 1.4;         /* 保持合适的行高 */
-                }
+                /* 移动端把复合快照顶部的按钮组调整好顺序 */
+                #wb-detailed-snap-view .wb-btn-group { order: -1; margin-bottom: 10px; }
             }
         </style>
     `;
@@ -163,14 +210,14 @@ $menuBtn.on('click', async () => {
 
                 <div class="wb-btn-group">
                     <div class="wb-action-btn wb-nowrap-btn" id="wb-btn-clear" style="color: #888;"><i class="fa-solid fa-power-off"></i> 关闭当前所有全局启用</div>
-                    <div class="wb-action-btn wb-nowrap-btn btn-primary" id="wb-btn-save-snap" style="border: none;"><i class="fa-solid fa-box-archive"></i> 将当前勾选存为快照</div>
-                    <div class="wb-action-btn wb-nowrap-btn btn-primary" id="wb-btn-create-detail-snap" style="border: none;"><i class="fa-solid fa-puzzle-piece"></i> 创建复合快照</div>
-                    <div class="wb-action-btn wb-nowrap-btn btn-danger" id="wb-btn-batch-toggle" style="border: none;"><i class="fa-solid fa-trash-can"></i> 批量删除模式</div>
+                    <div class="wb-action-btn wb-nowrap-btn btn-primary" id="wb-btn-save-snap"><i class="fa-solid fa-box-archive"></i> 将当前勾选存为快照</div>
+                    <div class="wb-action-btn wb-nowrap-btn btn-primary" id="wb-btn-create-detail-snap"><i class="fa-solid fa-puzzle-piece"></i> 创建复合快照</div>
+                    <div class="wb-action-btn wb-nowrap-btn btn-danger" id="wb-btn-batch-toggle"><i class="fa-solid fa-trash-can"></i> 批量删除模式</div>
                 </div>
 
-                <div id="wb-batch-actions" style="display: none; background: rgba(220,53,69,0.1); border: 1px dashed #dc3545; border-radius: 6px; padding: 10px; margin-bottom: 10px; flex-direction: column; gap: 10px;">
+                <div id="wb-batch-actions" style="display: none; background: rgba(255, 107, 107, 0.1); border: 1px dashed #ff6b6b; border-radius: 6px; padding: 10px; margin-bottom: 10px; flex-direction: column; gap: 10px;">
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap: wrap; gap: 10px;">
-                        <span style="color: #dc3545; font-weight: bold; font-size: 14px; margin-top: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> 待删除的世界书：</span>
+                        <span style="color: #ff6b6b; font-weight: bold; font-size: 14px; margin-top: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> 待删除的世界书：</span>
                         <button class="menu_button interactable btn-danger wb-nowrap-btn" id="wb-btn-confirm-delete" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-burst"></i> 确认永久删除 (<span id="wb-batch-count">0</span>)</button>
                     </div>
                     <div id="wb-batch-selected-list" style="display: flex; flex-wrap: wrap; gap: 6px; max-height: 80px; overflow-y: auto;"></div>
@@ -208,16 +255,23 @@ $menuBtn.on('click', async () => {
                     <label style="font-size: 13px; font-weight: bold; display:block; margin-bottom:4px;">🧩 快照名称</label>
                     <input type="text" id="dsnap-name" class="wb-input-dt" placeholder="例如：战斗场景A，日常场景B...">
                 </div>
+                <!-- 已将按钮组移动到顶部，方便操作 -->
+                <div class="wb-btn-group" style="margin: 0 0 10px 0;">
+                    <div class="wb-action-btn wb-nowrap-btn btn-success" id="dsnap-save" style="border:none; flex:unset; min-width: 180px;"><i class="fa-solid fa-check"></i> 保存该复合场景</div>
+                    <div class="wb-action-btn wb-nowrap-btn" id="dsnap-cancel" style="color:#888; flex:unset; min-width: 100px;"><i class="fa-solid fa-arrow-left"></i> 返回</div>
+                </div>
+
                 <div id="dsnap-container" style="display: flex; flex: 1; min-height: 0; border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px; padding: 10px; background: var(--SmartThemeBotMesColor);">
                     <div id="dsnap-wb-list-wrapper" style="flex: 0 0 250px; display: flex; flex-direction: column; border-right: 2px solid var(--SmartThemeBorderColor); padding-right: 10px;">
-                        <input type="text" id="dsnap-wb-search" class="text_pole" placeholder="🔍 搜索世界书..." style="width: 100%; box-sizing: border-box; margin-bottom: 10px; padding: 6px; flex-shrink: 0;">
+                        <input type="text" id="dsnap-wb-search" class="text_pole" placeholder="🔍 搜索世界书..." style="width: 100%; box-sizing: border-box; margin-bottom: 6px; padding: 6px; flex-shrink: 0;">
+                        <!-- 新增：仅显示未绑定筛选 -->
+                        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 8px; flex-shrink:0;">
+                            <input type="checkbox" id="dsnap-filter-unbound" style="accent-color: var(--SmartThemeQuoteColor);">
+                            <span style="font-weight: bold; color: gray;">仅显示未绑定卡片的世界书</span>
+                        </label>
                         <div id="dsnap-wb-list" class="scrollableInnerFull" style="flex: 1; min-height: 0;"></div>
                     </div>
                     <div id="dsnap-entry-list" class="scrollableInnerFull" style="padding-left: 10px;"></div>
-                </div>
-                 <div class="wb-btn-group" style="margin-top: 15px;">
-                    <div class="wb-action-btn wb-nowrap-btn btn-success" id="dsnap-save" style="border:none;"><i class="fa-solid fa-check"></i> 保存该复合场景</div>
-                    <div class="wb-action-btn wb-nowrap-btn" id="dsnap-cancel" style="color:#888;"><i class="fa-solid fa-arrow-left"></i> 返回</div>
                 </div>
             </div>
 
@@ -251,7 +305,7 @@ $menuBtn.on('click', async () => {
                 </div>
             </div>
 
-            <!-- ================= V1.0 原版参数细节视图 ================= -->
+             <!-- ================= V1.0 原版参数细节视图 ================= -->
              <div id="wb-detail-view" style="display: none; height: 100%; flex-direction: column;">
                 <div style="font-weight: bold; font-size: 16px; margin-bottom: 10px; color: var(--SmartThemeQuoteColor); flex-shrink: 0;">
                     <i class="fa-solid fa-pen-nib"></i> 编辑参数细节：<span id="wb-detail-title"></span>
@@ -365,12 +419,10 @@ $menuBtn.on('click', async () => {
                     try {
                         const charData = await getCharacter(charItem.avatar);
                         if (!charData) {
-                            console.warn(`鹿酱提示：跳过了无法完整读取的角色数据 (avatar: ${charItem.avatar})`);
                             return;
                         }
                         const charName = charItem.name;
                         if (!charName) {
-                            console.warn(`鹿酱补充提示：角色(avatar: ${charItem.avatar})数据已唤醒，但仍然无法获取名称，已跳过。`);
                             return;
                         }
 
@@ -567,7 +619,7 @@ $menuBtn.on('click', async () => {
         $ui.find('#wb-batch-count').text(batchSelected.size);
         const $batchList = $ui.find('#wb-batch-selected-list').empty();
         if (batchSelected.size > 0) {
-            batchSelected.forEach(wb => $batchList.append(`<span style="background:rgba(220,53,69,0.2);color:#dc3545;padding:3px 6px;border-radius:4px;font-size:12px;white-space:nowrap;border:1px solid #dc3545;"><i class="fa-solid fa-xmark"></i> ${wb}</span>`));
+            batchSelected.forEach(wb => $batchList.append(`<span style="background:rgba(255, 107, 107,0.2);color:#ff6b6b;padding:3px 6px;border-radius:4px;font-size:12px;white-space:nowrap;border:1px solid #ff6b6b;"><i class="fa-solid fa-xmark"></i> ${wb}</span>`));
         } else {
              $batchList.html('<span style="color:gray; font-size:12px;">暂未选中任何项目</span>');
         }
@@ -639,10 +691,13 @@ $menuBtn.on('click', async () => {
 
         const $snapContainer = $ui.find('#wb-snapshot-container').empty();
         Object.entries(snapshots).forEach(([name, snapData]) => {
-            const isDetailed = snapData.type === 'detailed';
-            const wbs = isDetailed ? Object.keys(snapData.data) : snapData.wbs;
+            const isLegacy = Array.isArray(snapData);
+            const isDetailed = !isLegacy && snapData.type === 'detailed';
+            const wbs = isLegacy ? snapData : (isDetailed ? Object.keys(snapData.data) : snapData.wbs);
             const icon = isDetailed ? 'fa-puzzle-piece' : 'fa-box-archive';
-            const countText = isDetailed ? `含 ${Object.values(snapData.data).reduce((acc, uids) => acc + uids.length, 0)} 条目` : `含 ${wbs.length} 项设定`;
+
+            const safeWbs = wbs || [];
+            const countText = isDetailed ? `含 ${Object.values(snapData.data).reduce((acc, uids) => acc + uids.length, 0)} 条目` : `含 ${safeWbs.length} 项设定`;
 
             const $item = $(`<div style="display:flex; justify-content:space-between; align-items:center; padding:10px; background:var(--SmartThemeBotMesColor); border-radius:6px; border:1px solid var(--SmartThemeBorderColor); flex-wrap:wrap; gap:8px;"></div>`);
             $item.append(`<div style="flex:1; min-width: 150px;"><div style="font-weight:bold;font-size:14px;"><i class="fa-solid ${icon}" style="color:var(--SmartThemeQuoteColor);"></i> ${name}</div><div style="font-size:12px;color:gray;">${countText}</div></div>`);
@@ -783,12 +838,19 @@ $menuBtn.on('click', async () => {
 
         const renderWbList = () => {
             const keyword = $ui.find('#dsnap-wb-search').val().toLowerCase();
+            const hideBound = $ui.find('#dsnap-filter-unbound').is(':checked');
             $wbList.empty();
-            const filteredWbs = allWbs.filter(wb => wb.toLowerCase().includes(keyword));
+
+            const filteredWbs = allWbs.filter(wb => {
+                const visible = wb.toLowerCase().includes(keyword);
+                // 核心逻辑：过滤已绑定的世界书
+                if (hideBound && (globalBindingMapCache[wb] || []).length > 0) return false;
+                return visible;
+            });
 
             filteredWbs.forEach(wbName => {
                 const selectedCount = (detailedSnapData[wbName] || []).length;
-                const $item = $(`<div class="dsnap-wb-item">${wbName} ${selectedCount > 0 ? `<b style="color:var(--okGreen);">(${selectedCount})</b>` : ''}</div>`);
+                const $item = $(`<div class="dsnap-wb-item" data-wbname="${wbName}">${wbName} <b style="color:var(--okGreen); display:${selectedCount>0?'inline':'none'};">(${selectedCount})</b></div>`);
                 $item.on('click', async () => {
                     if ($item.hasClass('active')) return;
                     $wbList.find('.active').removeClass('active');
@@ -805,7 +867,10 @@ $menuBtn.on('click', async () => {
             }
         };
 
-        $ui.find('#dsnap-wb-search').off('input').on('input', renderWbList).val('');
+        $ui.find('#dsnap-wb-search, #dsnap-filter-unbound').off('input change').on('input change', renderWbList);
+        // 初始化重置搜索框和筛选
+        $ui.find('#dsnap-wb-search').val('');
+        // $ui.find('#dsnap-filter-unbound').prop('checked', false);
 
         const renderEntryListFor = async (wbName) => {
             $entryList.html('<i class="fa-solid fa-spinner fa-spin"></i> 正在加载条目...');
@@ -819,18 +884,31 @@ $menuBtn.on('click', async () => {
                 entries.forEach(entry => {
                     const isChecked = (detailedSnapData[wbName] || []).includes(entry.uid);
                     const $item = $(`<div class="dsnap-entry-item"><input type="checkbox" style="transform:scale(1.2); flex-shrink:0;"><span></span></div>`);
+                    const $label = $item.find('span');
+                    $label.text(entry.name || `(未命名条目 UID: ${entry.uid})`);
+
+                    // 核心优化：点击勾选不再刷新左侧列表，而是平滑更新计数
                     $item.find('input').prop('checked', isChecked).on('change', function() {
+                        const checked = $(this).is(':checked');
                         if (!detailedSnapData[wbName]) detailedSnapData[wbName] = [];
-                        if ($(this).is(':checked')) {
+
+                        if (checked) {
                             if (!detailedSnapData[wbName].includes(entry.uid)) detailedSnapData[wbName].push(entry.uid);
                         } else {
                             detailedSnapData[wbName] = detailedSnapData[wbName].filter(uid => uid !== entry.uid);
                         }
+
                         if (detailedSnapData[wbName].length === 0) delete detailedSnapData[wbName];
-                        renderWbList();
-                        $wbList.find('.dsnap-wb-item').filter((i, el) => $(el).text().startsWith(wbName)).addClass('active');
+
+                        // 平滑更新左侧计数，不触发重绘
+                        const newCount = (detailedSnapData[wbName] || []).length;
+                        const $wbItem = $wbList.find(`.dsnap-wb-item.active[data-wbname="${wbName}"]`);
+                        const $counter = $wbItem.find('b');
+
+                        $counter.text(`(${newCount})`);
+                        if(newCount > 0) $counter.show(); else $counter.hide();
                     });
-                     $item.find('span').text(entry.name || `(未命名条目 UID: ${entry.uid})`);
+
                     $entryList.append($item);
                 });
             } catch (e) {
@@ -927,13 +1005,13 @@ $menuBtn.on('click', async () => {
         filteredEntries.forEach((entry) => {
             const index = tuneEntries.indexOf(entry);
             const strategy = entry.strategy || { type: 'constant', keys: [] };
-            const keysInfo = strategy.type !== 'selective' ? `<span style="color:gray;">[常驻无触发词]</span>` : `🔑 ${(strategy.keys||[]).join(', ')||'<span style="color:#dc3545">未设置触发词汇</span>'}`;
+            const keysInfo = strategy.type !== 'selective' ? `<span style="color:gray;">[常驻无触发词]</span>` : `🔑 ${(strategy.keys||[]).join(', ')||'<span style="color:#d63384">未设置触发词汇</span>'}`;
             const $item = $(`<div style="display:flex; align-items:center; gap:12px; padding:10px; border-left: 4px solid ${entry.enabled ? 'var(--okGreen)' : 'gray'};"></div>`);
             const $chk = $(`<input type="checkbox" style="transform: scale(1.2); flex-shrink:0;">`).prop('checked', entry.enabled).on('change', function() { entry.enabled = $(this).is(':checked'); renderEntryList(); });
             const $info = $(`<div><div style="font-weight:bold; margin-bottom: 4px; font-size:14px;">${entry.name || '未定义模块'}</div><div style="font-size:12px;color:gray;display:flex;align-items:center;">${strategy.type !== 'selective' ? '<span class="badge-blue">常驻</span>' : '<span class="badge-green">匹配</span>'} ${keysInfo}</div></div>`);
             const $right = $('<div style="display:flex; gap:8px; margin-left:auto;"></div>');
             $right.append($('<button class="menu_button interactable wb-nowrap-btn" style="color:var(--SmartThemeQuoteColor); margin:0;" title="修改内容"><i class="fa fa-pen-nib"></i></button>').on('click', () => openDetailEditView(index)));
-            $right.append($('<button class="menu_button interactable wb-nowrap-btn" style="color:#dc3545; margin:0;" title="删除条目"><i class="fa fa-trash"></i></button>').on('click', async () => {
+            $right.append($('<button class="menu_button interactable wb-nowrap-btn" style="color:#ff6b6b; margin:0;" title="删除条目"><i class="fa fa-trash"></i></button>').on('click', async () => {
                 if(await SillyTavern.callGenericPopup(`确认删除条目 [${entry.name || '未命名'}]？`, SillyTavern.POPUP_TYPE.CONFIRM) === SillyTavern.POPUP_RESULT.AFFIRMATIVE) { tuneEntries.splice(index, 1); renderEntryList(); }
             }));
             $item.append($chk, $info, $right);
@@ -1003,4 +1081,3 @@ $menuBtn.on('click', async () => {
 
     await popup.show();
 });
-
