@@ -10,8 +10,24 @@ const $menuBtn = $("<a>", { id: "option_lulu_wb_manager", class: "interactable",
 
 $menuBtn.insertBefore($targetHr);
 
-// 全局缓存的绑定状态数据：已升级为存储包含 name 和 avatar 的对象架构，支持同名角色
+// 全局缓存的绑定状态数据
 let globalBindingMapCache = {};
+
+// 辅助函数：将位置信息格式化为漂亮的简短标签，供列表只读显示
+const formatPositionBadge = (pos) => {
+    if (!pos) return '📍未知位置 | 🔢100';
+    const posMap = {
+        'before_character_definition': '前:角色定义', 'after_character_definition': '后:角色定义',
+        'before_example_messages': '前:示例消息', 'after_example_messages': '后:示例消息',
+        'before_author_note': '前:作者注释', 'after_author_note': '后:作者注释',
+    };
+    let typeStr = pos.type || 'at_depth';
+    if (typeStr === 'at_depth' || typeStr === 'outlet') {
+        const roleIcon = pos.role === 'user' ? '👤用户' : (pos.role === 'assistant' ? '🤖助手' : '⚙️系统');
+        return `🌊深度[${roleIcon}]: ${pos.depth || 0} | 🔢${pos.order || 100}`;
+    }
+    return `📍${posMap[typeStr] || typeStr} | 🔢${pos.order || 100}`;
+};
 
 // 4. 面板核心控制逻辑
 $menuBtn.on('click', async () => {
@@ -67,66 +83,35 @@ $menuBtn.on('click', async () => {
             .wb-nowrap-btn { white-space: nowrap !important; flex-shrink: 0 !important; word-break: keep-all !important; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
 
             /* UI细节点：更优雅的颜色类，适配各种深浅色主题 */
-            .btn-primary {
-                color: var(--SmartThemeQuoteColor) !important;
-                border-color: var(--SmartThemeQuoteColor) !important;
-                background: rgba(125, 125, 125, 0.05) !important;
-            }
-            .btn-primary:hover {
-                background: var(--SmartThemeQuoteColor) !important;
-                color: #fff !important;
-                text-shadow: 0 1px 2px rgba(0,0,0,0.3);
-            }
+            .btn-primary { color: var(--SmartThemeQuoteColor) !important; border-color: var(--SmartThemeQuoteColor) !important; background: rgba(125, 125, 125, 0.05) !important;}
+            .btn-primary:hover { background: var(--SmartThemeQuoteColor) !important; color: #fff !important; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
 
-            .btn-success {
-                color: #51cf66 !important;
-                border-color: #51cf66 !important;
-                background: rgba(81, 207, 102, 0.05) !important;
-            }
-            .btn-success:hover {
-                background: #51cf66 !important;
-                color: #fff !important;
-                text-shadow: 0 1px 2px rgba(0,0,0,0.3);
-            }
+            .btn-success { color: #51cf66 !important; border-color: #51cf66 !important; background: rgba(81, 207, 102, 0.05) !important; }
+            .btn-success:hover { background: #51cf66 !important; color: #fff !important; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
 
-            .btn-danger {
-                color: #ff6b6b !important;
-                border-color: #ff6b6b !important;
-                background: rgba(255, 107, 107, 0.05) !important;
-            }
-            .btn-danger:hover {
-                background: #ff6b6b !important;
-                color: #fff !important;
-                text-shadow: 0 1px 2px rgba(0,0,0,0.3);
-            }
+            .btn-danger { color: #ff6b6b !important; border-color: #ff6b6b !important; background: rgba(255, 107, 107, 0.05) !important; }
+            .btn-danger:hover { background: #ff6b6b !important; color: #fff !important; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
 
-            .btn-warning {
-                color: #fcc419 !important;
-                border-color: #fcc419 !important;
-                background: rgba(252, 196, 25, 0.05) !important;
-            }
-             .btn-warning:hover {
-                background: #fcc419 !important;
-                color: #212529 !important;
-            }
+            .btn-warning { color: #fcc419 !important; border-color: #fcc419 !important; background: rgba(252, 196, 25, 0.05) !important; }
+            .btn-warning:hover { background: #fcc419 !important; color: #212529 !important; }
 
-            /* 复合快照UI专用 */
-            #dsnap-wb-list { flex: 0 0 250px; overflow-y: auto; border-right: 2px solid var(--SmartThemeBorderColor); padding-right: 10px; }
-            #dsnap-entry-list { flex: 1; overflow-y: auto; padding-left: 10px; }
+            /* 复合快照UI专用排版调整 (满足要求1：独立滑动，重置比例) */
+            #dsnap-container { display: flex; min-height: 50vh; max-height: 65vh; border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px; padding: 10px; background: var(--SmartThemeBotMesColor); overflow: hidden; }
+            #dsnap-wb-list-wrapper { flex: 0 0 40%; max-width: 380px; display: flex; flex-direction: column; border-right: 2px solid var(--SmartThemeBorderColor); padding-right: 10px; overflow: hidden;}
+            #dsnap-wb-list { flex: 1; overflow-y: auto; overflow-x: hidden; margin-right: -5px; padding-right: 5px;}
+            #dsnap-entry-list-wrapper { flex: 1; display: flex; flex-direction: column; padding-left: 10px; min-width: 0; overflow: hidden;}
+            #dsnap-entry-list { flex: 1; overflow-y: auto; overflow-x: hidden;}
+
             .dsnap-wb-item { padding: 8px; border-radius: 4px; cursor: pointer; border: 1px solid transparent; transition: 0.1s; }
-            .dsnap-wb-item.active {
-                background: var(--SmartThemeQuoteColor);
-                color: #fff;
-                font-weight: bold;
-                border-color: var(--SmartThemeQuoteColor);
-                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-            }
-            /* 激活项里的数字计数反色显示 */
+            .dsnap-wb-item.active { background: var(--SmartThemeQuoteColor); color: #fff; font-weight: bold; border-color: var(--SmartThemeQuoteColor); box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
             .dsnap-wb-item.active b { color: #fff !important; }
-
             .dsnap-wb-item:not(.active):hover { background: var(--SmartThemeBlurTintColor); }
-            .dsnap-entry-item { display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: 4px; transition:0.1s;}
-            .dsnap-entry-item:hover { background: var(--SmartThemeBotMesColor); }
+
+            .dsnap-entry-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px; border-radius: 4px; transition:0.1s; border-bottom: 1px solid rgba(125,125,125,0.1);}
+            .dsnap-entry-item:hover { background: var(--SmartThemeBlurTintColor); }
+            .dsnap-entry-body { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+            .dsnap-entry-title { font-weight: bold; font-size: 13px; line-height: 1.3;}
+            .dsnap-entry-meta { display: flex; gap: 6px; flex-wrap: wrap; font-size: 11px; }
 
             /* 输入框样式 */
             .wb-input-dt { width: 100%; box-sizing: border-box; padding: 8px; border-radius: 4px; border: 1px solid var(--SmartThemeBorderColor); background: var(--SmartThemeBlurTintColor); color: var(--SmartThemeBodyColor); transition: 0.2s; font-family: inherit;}
@@ -134,8 +119,9 @@ $menuBtn.on('click', async () => {
             .wb-form-group { display: flex; flex-direction: column; margin-bottom: 10px;}
 
             /* 徽章样式 */
-            .badge-blue { background: rgba(51, 154, 240, 0.15); color: #339af0; border: 1px solid #339af0; padding: 2px 6px; border-radius: 4px; font-size: 12px; font-weight: bold; margin-right: 6px; }
-            .badge-green { background: rgba(81, 207, 102, 0.15); color: #51cf66; border: 1px solid #51cf66; padding: 2px 6px; border-radius: 4px; font-size: 12px; font-weight: bold; margin-right: 6px; }
+            .badge-blue { background: rgba(51, 154, 240, 0.15); color: #339af0; border: 1px solid #339af0; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; margin-right: 4px; white-space: nowrap; }
+            .badge-green { background: rgba(81, 207, 102, 0.15); color: #51cf66; border: 1px solid #51cf66; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; margin-right: 4px; white-space: nowrap; }
+            .badge-grey { background: rgba(150, 150, 150, 0.15); color: #999; border: 1px solid #999; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; margin-right: 4px; white-space: nowrap; }
 
             /* 响应式媒体查询 */
             @media (max-width: 768px) {
@@ -146,9 +132,11 @@ $menuBtn.on('click', async () => {
                 .wb-controls-group { justify-content: flex-start; }
                 #wb-detail-view .scrollableInnerFull > div:first-child { flex-direction: column; align-items: stretch; }
                 #wb-detail-view .scrollableInnerFull > div:first-child > .wb-form-group { width: 100% !important; }
-                #dsnap-container { flex-direction: column; }
-                #dsnap-wb-list-wrapper { border-right: none; border-bottom: 2px solid var(--SmartThemeBorderColor); padding-right: 0; padding-bottom: 10px; margin-bottom: 10px; flex: 0 0 auto; max-height: 25vh;}
-                #dsnap-entry-list { padding-left: 0; }
+
+                /* 移动端排版修正：复合快照独立滑动 */
+                #dsnap-container { flex-direction: column; height: 60vh; max-height: unset;}
+                #dsnap-wb-list-wrapper { max-width: 100%; border-right: none; border-bottom: 2px solid var(--SmartThemeBorderColor); padding-right: 0; padding-bottom: 10px; margin-bottom: 10px; flex: 0 0 35%;}
+                #dsnap-entry-list-wrapper { padding-left: 0; flex: 1; }
                 .wb-name-text { white-space: normal; overflow: visible; text-overflow: initial; word-break: break-word; line-height: 1.4; }
 
                 /* 移动端把复合快照顶部的按钮组调整好顺序 */
@@ -255,23 +243,36 @@ $menuBtn.on('click', async () => {
                     <label style="font-size: 13px; font-weight: bold; display:block; margin-bottom:4px;">🧩 快照名称</label>
                     <input type="text" id="dsnap-name" class="wb-input-dt" placeholder="例如：战斗场景A，日常场景B...">
                 </div>
-                <!-- 已将按钮组移动到顶部，方便操作 -->
+
                 <div class="wb-btn-group" style="margin: 0 0 10px 0;">
                     <div class="wb-action-btn wb-nowrap-btn btn-success" id="dsnap-save" style="border:none; flex:unset; min-width: 180px;"><i class="fa-solid fa-check"></i> 保存该复合场景</div>
                     <div class="wb-action-btn wb-nowrap-btn" id="dsnap-cancel" style="color:#888; flex:unset; min-width: 100px;"><i class="fa-solid fa-arrow-left"></i> 返回</div>
                 </div>
 
-                <div id="dsnap-container" style="display: flex; flex: 1; min-height: 0; border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px; padding: 10px; background: var(--SmartThemeBotMesColor);">
-                    <div id="dsnap-wb-list-wrapper" style="flex: 0 0 250px; display: flex; flex-direction: column; border-right: 2px solid var(--SmartThemeBorderColor); padding-right: 10px;">
+                <div id="dsnap-container">
+                    <div id="dsnap-wb-list-wrapper">
                         <input type="text" id="dsnap-wb-search" class="text_pole" placeholder="🔍 搜索世界书..." style="width: 100%; box-sizing: border-box; margin-bottom: 6px; padding: 6px; flex-shrink: 0;">
-                        <!-- 新增：仅显示未绑定筛选 -->
                         <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 8px; flex-shrink:0;">
                             <input type="checkbox" id="dsnap-filter-unbound" style="accent-color: var(--SmartThemeQuoteColor);">
                             <span style="font-weight: bold; color: gray;">仅显示未绑定卡片的世界书</span>
                         </label>
-                        <div id="dsnap-wb-list" class="scrollableInnerFull" style="flex: 1; min-height: 0;"></div>
+                        <div id="dsnap-wb-list" class="scrollableInnerFull"></div>
                     </div>
-                    <div id="dsnap-entry-list" class="scrollableInnerFull" style="padding-left: 10px;"></div>
+                    <div id="dsnap-entry-list-wrapper">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-shrink: 0; padding-bottom: 4px; border-bottom: 1px solid rgba(125,125,125,0.2);">
+                            <span style="font-size: 12px; font-weight: bold; color: gray;">🔍 查看条目 (仅供阅览排序)</span>
+                            <select id="dsnap-entry-sort" class="wb-input-dt" style="width: auto; padding: 4px 6px; font-size: 12px;">
+                                <option value="default">↕ 默认(原来顺序)</option>
+                                <option value="order_asc">🔢 顺序 (小到大)</option>
+                                <option value="order_desc">🔢 顺序 (大到小)</option>
+                                <option value="depth_asc">🌊 深度 (小到大)</option>
+                                <option value="depth_desc">🌊 深度 (大到小)</option>
+                                <option value="az">🔤 名称 (A-Z)</option>
+                                <option value="za">🔡 名称 (Z-A)</option>
+                            </select>
+                        </div>
+                        <div id="dsnap-entry-list" class="scrollableInnerFull"></div>
+                    </div>
                 </div>
             </div>
 
@@ -292,7 +293,18 @@ $menuBtn.on('click', async () => {
                 <div style="font-weight: bold; font-size: 16px; margin-bottom: 8px; color: var(--SmartThemeQuoteColor);">
                     <i class="fa-solid fa-sliders"></i> 编辑内容条目：<span id="wb-entry-title"></span>
                 </div>
-                <input type="text" id="wb-entry-search" class="text_pole" placeholder="🔍 检索条目标题或触发关键字..." style="width: 100%; box-sizing: border-box; margin-bottom: 10px; padding: 8px;">
+                <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                    <input type="text" id="wb-entry-search" class="text_pole" placeholder="🔍 检索条目标题或触发关键字..." style="width: 100%; box-sizing: border-box; padding: 8px;">
+                    <select id="wb-entry-sort" class="wb-input-dt" style="width: 160px; padding: 8px;">
+                        <option value="default">↕ 默认(原来顺序)</option>
+                        <option value="order_asc">🔢 顺序 (小到大)</option>
+                        <option value="order_desc">🔢 顺序 (大到小)</option>
+                        <option value="depth_asc">🌊 深度 (小到大)</option>
+                        <option value="depth_desc">🌊 深度 (大到小)</option>
+                        <option value="az">🔤 名称 (A-Z)</option>
+                        <option value="za">🔡 名称 (Z-A)</option>
+                    </select>
+                </div>
                 <div class="wb-btn-group" style="margin: 0 0 10px 0;">
                     <div class="wb-action-btn wb-nowrap-btn" id="wb-btn-entry-all" style="padding: 6px;"><i class="fa-solid fa-check-double"></i> 启用全部</div>
                     <div class="wb-action-btn wb-nowrap-btn" id="wb-btn-entry-none" style="padding: 6px;"><i class="fa-regular fa-square"></i> 关闭全部</div>
@@ -384,14 +396,9 @@ $menuBtn.on('click', async () => {
         $sub.hide(); $sec.hide();
         $overlay.fadeIn('fast');
 
-        try {
-            await asyncFunction();
-        } catch (error) {
-            console.error(`处理 [${message}] 时发生错误:`, error);
-            toastr.error(`操作失败: ${error.message}`);
-        } finally {
-            $overlay.fadeOut('slow');
-        }
+        try { await asyncFunction(); }
+        catch (error) { toastr.error(`操作失败: ${error.message}`); }
+        finally { $overlay.fadeOut('slow'); }
     };
 
     const initiateDeepScan = async () => {
@@ -403,16 +410,13 @@ $menuBtn.on('click', async () => {
 
         try {
             const wb2Chars = {};
-            // 安全获取所有世界书名称
             (typeof getWorldbookNames === 'function' ? getWorldbookNames() : []).forEach(wb => wb2Chars[wb] = []);
 
-            // 取出酒馆当前挂载的所有角色
             const allCharsData = window.characters || (typeof SillyTavern !== 'undefined' ? SillyTavern.characters : []) || [];
             const totalChars = allCharsData.length;
             $sub.text(`0 / ${totalChars}`);
 
             const charMap = new Map();
-
             const batchSize = 10;
             for (let i = 0; i < totalChars; i += batchSize) {
                 const chunk = allCharsData.slice(i, i + batchSize);
@@ -422,55 +426,37 @@ $menuBtn.on('click', async () => {
                         if (!avatar) return;
 
                         let charData = charItem;
-
                         if (charItem.shallow) {
                             try {
-                                charData = await $.ajax({
-                                    url: '/api/characters/get',
-                                    type: 'POST',
-                                    contentType: 'application/json',
-                                    data: JSON.stringify({ avatar_url: avatar })
-                                });
-                            } catch (apiErr) {
-                                console.warn(`无法深层拉取角色 [${avatar}]，将使用浅层数据继续...`, apiErr);
-                            }
+                                charData = await $.ajax({ url: '/api/characters/get', type: 'POST', contentType: 'application/json', data: JSON.stringify({ avatar_url: avatar }) });
+                            } catch (apiErr) { console.warn(`拉取极简数据继续...`, apiErr); }
                         }
 
                         const charName = charData.name || charItem.name || '未知名称';
                         const checkList = new Set();
                         const dataFields = charData.data || charData;
 
-                        // 精准捞取该卡片上的【主世界书】
                         if (dataFields.extensions?.world) checkList.add(dataFields.extensions.world);
                         if (dataFields.world) checkList.add(dataFields.world);
                         if (dataFields.world_info) checkList.add(dataFields.world_info);
                         if (dataFields.lorebook) checkList.add(dataFields.lorebook);
                         if (typeof dataFields.character_book === 'string') checkList.add(dataFields.character_book);
                         if (dataFields.worldbook) checkList.add(dataFields.worldbook);
-                        if (Array.isArray(dataFields.extensions?.worldbooks)) {
-                            dataFields.extensions.worldbooks.forEach(w => checkList.add(w));
-                        }
+                        if (Array.isArray(dataFields.extensions?.worldbooks)) dataFields.extensions.worldbooks.forEach(w => checkList.add(w));
 
-                        // 将找出来的主世界书与它真正的主人（精确到 avatar）登记造册
                         checkList.forEach(wbName => {
                             if (wbName && typeof wbName === 'string') {
                                 if (!wb2Chars[wbName]) wb2Chars[wbName] = [];
-                                if (!wb2Chars[wbName].some(c => c.avatar === avatar)) {
-                                    wb2Chars[wbName].push({ name: charName, avatar: avatar });
-                                }
+                                if (!wb2Chars[wbName].some(c => c.avatar === avatar)) wb2Chars[wbName].push({ name: charName, avatar: avatar });
                             }
                         });
 
-                        // 登记给下一步查找【附加世界书】作对照
                         const safeCharObj = { name: charName, avatar: avatar };
                         charMap.set(avatar, safeCharObj);
-                        // 兼容各种图包后缀的模糊匹配
                         const avatarBase = avatar.replace(/\.(png|webp|jpeg)$/i, '');
                         if (avatar !== avatarBase) charMap.set(avatarBase, safeCharObj);
 
-                    } catch (e) {
-                        console.error(`处理角色 [${charItem.name}] 发生小错误:`, e);
-                    }
+                    } catch (e) {}
                 }));
                 $sub.text(`${Math.min(i + batchSize, totalChars)} / ${totalChars}`);
             }
@@ -478,42 +464,30 @@ $menuBtn.on('click', async () => {
             try {
                 let charLoreArray = [];
                 const ctx = typeof getContext === 'function' ? getContext() : {};
-                if (ctx.chatWorldInfoSettings && Array.isArray(ctx.chatWorldInfoSettings.charLore)) {
-                    charLoreArray = ctx.chatWorldInfoSettings.charLore;
-                } else if (window.chatWorldInfoSettings && Array.isArray(window.chatWorldInfoSettings.charLore)) {
-                    charLoreArray = window.chatWorldInfoSettings.charLore;
-                }
+                if (ctx.chatWorldInfoSettings && Array.isArray(ctx.chatWorldInfoSettings.charLore)) charLoreArray = ctx.chatWorldInfoSettings.charLore;
+                else if (window.chatWorldInfoSettings && Array.isArray(window.chatWorldInfoSettings.charLore)) charLoreArray = window.chatWorldInfoSettings.charLore;
 
                 if (charLoreArray.length > 0) {
                     charLoreArray.forEach(charLoreEntry => {
                         const charFilename = charLoreEntry.name;
                         if (!charFilename) return;
-
                         const filenameBase = charFilename.replace(/\.(png|webp|jpeg)$/i, '');
                         const mappedChar = charMap.get(charFilename) || charMap.get(filenameBase);
-
                         if (mappedChar && Array.isArray(charLoreEntry.extraBooks)) {
                             charLoreEntry.extraBooks.forEach(wbName => {
                                 if (wbName && typeof wbName === 'string') {
                                     if (!wb2Chars[wbName]) wb2Chars[wbName] = [];
-                                    if (!wb2Chars[wbName].some(c => c.avatar === mappedChar.avatar)) {
-                                        wb2Chars[wbName].push({ name: mappedChar.name, avatar: mappedChar.avatar });
-                                    }
+                                    if (!wb2Chars[wbName].some(c => c.avatar === mappedChar.avatar)) wb2Chars[wbName].push({ name: mappedChar.name, avatar: mappedChar.avatar });
                                 }
                             });
                         }
                     });
                 }
-            } catch (e) {
-                console.error("安全提取附加世界书失败，略过此步骤：", e);
-            }
+            } catch (e) { console.error("扩展拉取跳过", e); }
 
             globalBindingMapCache = wb2Chars;
-            console.log("【全局世界书管理】映射大成功！对应完整！", globalBindingMapCache);
-
         } catch (error) {
-            console.error("遇到了出乎意料的状况呢：", error);
-            if (typeof toastr !== 'undefined') toastr.error("读取操作中断了，请查看控制台的提示。");
+            console.error(error); if (typeof toastr !== 'undefined') toastr.error("读取中断");
         } finally {
             $overlay.fadeOut('slow');
             if (typeof renderData === 'function') renderData();
@@ -521,13 +495,7 @@ $menuBtn.on('click', async () => {
     };
 
 
-    const popup = new SillyTavern.Popup($ui, SillyTavern.POPUP_TYPE.TEXT, '', {
-        allowVerticalScrolling: true,
-        okButton: "关闭面板",
-        onOpen: async () => {
-            await initiateDeepScan();
-        }
-    });
+    const popup = new SillyTavern.Popup($ui, SillyTavern.POPUP_TYPE.TEXT, '', { allowVerticalScrolling: true, okButton: "关闭面板", onOpen: async () => { await initiateDeepScan(); } });
     $(popup.dlg).addClass('wb-manager-dialog');
 
     const attemptCreateWb = async (defaultName = "") => {
@@ -551,18 +519,14 @@ $menuBtn.on('click', async () => {
     $ui.find('#wb-btn-create-wb').on('click', () => attemptCreateWb());
 
     const attemptRenameWb = async (oldName, isBound, bindings, defaultNewName = "") => {
-        if (isBound) {
-            const bNames = bindings.map(c => c.name);
-            SillyTavern.callGenericPopup(`❌ 无法重命名：\n[${oldName}] 已牢牢绑定在 ${bindings.length} 张角色卡上（如 ${bNames.slice(0,3).join(', ')}）。\n暴力重命名会导致它们失去世界书连接，请先分别进卡片取消关联再试。`, SillyTavern.POPUP_TYPE.TEXT);
-            return;
-        }
-        let newName = await SillyTavern.callGenericPopup(`正在重命名 [${oldName}]：\n请输入新名称：`, SillyTavern.POPUP_TYPE.INPUT, defaultNewName || oldName);
+        if (isBound) return SillyTavern.callGenericPopup(`❌ 无法重命名：\n[${oldName}] 已绑定其他卡片，强行修改会导致掉档。`, SillyTavern.POPUP_TYPE.TEXT);
+        let newName = await SillyTavern.callGenericPopup(`请输入新名称：`, SillyTavern.POPUP_TYPE.INPUT, defaultNewName || oldName);
         if (!newName || typeof newName !== 'string' || newName.trim() === '' || newName.trim() === oldName) return;
         newName = newName.trim();
 
         if (getWorldbookNames().includes(newName)) {
             const btnRes = await SillyTavern.callGenericPopup(`世界书 [${newName}] 已经存在，您希望作何处理？`, SillyTavern.POPUP_TYPE.TEXT, "", {
-                customButtons: [ {text: "暴力合并覆盖", result: 1, classes: ["btn-danger"]}, {text: "重新输入名称", result: 2, classes: ["btn-primary"]}, {text: "取消操作", result: 0} ]
+                customButtons: [ {text: "覆盖", result: 1, classes: ["btn-danger"]}, {text: "重试", result: 2, classes: ["btn-primary"]}, {text: "取消", result: 0} ]
             });
             if (btnRes !== 1) return (btnRes === 2) ? attemptRenameWb(oldName, isBound, bindings, newName + "_1") : null;
         }
@@ -570,15 +534,11 @@ $menuBtn.on('click', async () => {
             const entries = await getWorldbook(oldName);
             await createWorldbook(newName, entries);
             await deleteWorldbook(oldName);
-            delete globalBindingMapCache[oldName];
-            globalBindingMapCache[newName] = [];
-
+            delete globalBindingMapCache[oldName]; globalBindingMapCache[newName] = [];
             const globals = getGlobalWorldbookNames();
             if (globals.includes(oldName)) await rebindGlobalWorldbooks(globals.map(w => w === oldName ? newName : w));
-
-            toastr.success(`名称已更新为：${newName}`);
-            renderData(newName);
-        }, "正在重命名并迁移数据...");
+            toastr.success(`名称已更新`); renderData(newName);
+        }, "正在重命名迁移...");
     };
 
     let isBatchMode = false;
@@ -602,51 +562,34 @@ $menuBtn.on('click', async () => {
 
     $ui.find('#wb-btn-select-all').on('click', async () => {
         if (currentVisibleWbs.length === 0) return;
-        if (isBatchMode) {
-            currentVisibleWbs.forEach(wb => batchSelected.add(wb));
-            renderData();
-        } else {
+        if (isBatchMode) { currentVisibleWbs.forEach(wb => batchSelected.add(wb)); renderData(); }
+        else {
             let currentActive = getGlobalWorldbookNames();
             currentVisibleWbs.forEach(wb => { if(!currentActive.includes(wb)) currentActive.push(wb); });
-            await withLoadingOverlay(async () => await rebindGlobalWorldbooks(currentActive), "正在应用全局设置...");
-            renderData();
+            await withLoadingOverlay(async () => await rebindGlobalWorldbooks(currentActive), "应用中..."); renderData();
         }
     });
 
     $ui.find('#wb-btn-deselect-all').on('click', async () => {
         if (currentVisibleWbs.length === 0) return;
-        if (isBatchMode) {
-            currentVisibleWbs.forEach(wb => batchSelected.delete(wb));
-            renderData();
-        } else {
-            let currentActive = getGlobalWorldbookNames();
-            currentActive = currentActive.filter(wb => !currentVisibleWbs.includes(wb));
-             await withLoadingOverlay(async () => await rebindGlobalWorldbooks(currentActive), "正在应用全局设置...");
-            renderData();
+        if (isBatchMode) { currentVisibleWbs.forEach(wb => batchSelected.delete(wb)); renderData(); }
+        else {
+            let currentActive = getGlobalWorldbookNames().filter(wb => !currentVisibleWbs.includes(wb));
+            await withLoadingOverlay(async () => await rebindGlobalWorldbooks(currentActive), "应用中..."); renderData();
         }
     });
 
     $ui.find('#wb-btn-clear').on('click', async () => {
-       await withLoadingOverlay(async () => {
-            await rebindGlobalWorldbooks([]);
-            toastr.success('已清空所有当前已启用的全局世界书。');
-            renderData();
-       }, "正在清空设置...");
+       await withLoadingOverlay(async () => { await rebindGlobalWorldbooks([]); renderData(); }, "清空设定...");
     });
 
     $ui.find('#wb-btn-confirm-delete').on('click', async () => {
-        if(batchSelected.size === 0) return toastr.warning("请先勾选需要删除项。");
-        const confirm = await SillyTavern.callGenericPopup(`🚨 永久删除确认 🚨\n真的要销毁这 ${batchSelected.size} 本世界书吗？此操作无法还原。`, SillyTavern.POPUP_TYPE.CONFIRM);
-        if (confirm === SillyTavern.POPUP_RESULT.AFFIRMATIVE) {
+        if(batchSelected.size === 0) return toastr.warning("请先勾选");
+        if (await SillyTavern.callGenericPopup(`确认永久销毁这 ${batchSelected.size} 本世界书？`, SillyTavern.POPUP_TYPE.CONFIRM) === SillyTavern.POPUP_RESULT.AFFIRMATIVE) {
              await withLoadingOverlay(async () => {
-                for (let wb of batchSelected) {
-                    await deleteWorldbook(wb);
-                    delete globalBindingMapCache[wb];
-                }
-                toastr.success(`成功移除了 ${batchSelected.size} 项。`);
-                batchSelected.clear();
-                renderData();
-             }, `正在删除 ${batchSelected.size} 项...`);
+                for (let wb of batchSelected) { await deleteWorldbook(wb); delete globalBindingMapCache[wb]; }
+                batchSelected.clear(); renderData();
+             }, `删除中...`);
         }
     });
 
@@ -658,16 +601,11 @@ $menuBtn.on('click', async () => {
 
         const allWbs = getWorldbookNames();
         const activeWbs = getGlobalWorldbookNames();
-        const vars = getVariables({ type: 'global' });
-        const snapshots = vars.wb_snapshots || {};
+        const snapshots = getVariables({ type: 'global' }).wb_snapshots || {};
 
         currentVisibleWbs = [...allWbs].filter(wb => {
             const bindings = globalBindingMapCache[wb] || [];
-            if (keyword) {
-                const boundNamesMatch = bindings.map(c => c.name).join(" ");
-                const searchScope = (wb + " " + boundNamesMatch).toLowerCase();
-                if (!searchScope.includes(keyword)) return false;
-            }
+            if (keyword && !((wb + " " + bindings.map(c => c.name).join(" ")).toLowerCase().includes(keyword))) return false;
             if (showUnboundOnly && bindings.length > 0) return false;
             if (stateFilter === 'enabled' && !activeWbs.includes(wb)) return false;
             if (stateFilter === 'disabled' && activeWbs.includes(wb)) return false;
@@ -675,26 +613,19 @@ $menuBtn.on('click', async () => {
         }).sort((a, b) => {
             if (sortMode === 'az') return a.localeCompare(b, 'zh-CN');
             if (sortMode === 'za') return b.localeCompare(a, 'zh-CN');
-            const aActive = activeWbs.includes(a);
-            const bActive = activeWbs.includes(b);
-            if (aActive === bActive) return a.localeCompare(b, 'zh-CN');
-            return aActive ? -1 : 1;
+            const aA = activeWbs.includes(a), bA = activeWbs.includes(b);
+            if (aA === bA) return a.localeCompare(b, 'zh-CN');
+            return aA ? -1 : 1;
         });
 
         const $wbContainer = $ui.find('#wb-container').empty();
-        if (currentVisibleWbs.length === 0) $wbContainer.html('<div style="color: gray; padding: 10px;">列表空空如也~ 换个词搜搜看？</div>');
-
         $ui.find('#wb-batch-count').text(batchSelected.size);
         const $batchList = $ui.find('#wb-batch-selected-list').empty();
-        if (batchSelected.size > 0) {
-            batchSelected.forEach(wb => $batchList.append(`<span style="background:rgba(255, 107, 107,0.2);color:#ff6b6b;padding:3px 6px;border-radius:4px;font-size:12px;white-space:nowrap;border:1px solid #ff6b6b;"><i class="fa-solid fa-xmark"></i> ${wb}</span>`));
-        } else {
-             $batchList.html('<span style="color:gray; font-size:12px;">暂未选中任何项目</span>');
-        }
+        if (batchSelected.size > 0) batchSelected.forEach(wb => $batchList.append(`<span style="background:rgba(255,107,107,0.2);color:#ff6b6b;padding:3px 6px;border-radius:4px;font-size:12px;white-space:nowrap;border:1px solid #ff6b6b;"><i class="fa-solid fa-xmark"></i> ${wb}</span>`));
+        else $batchList.html('<span style="color:gray; font-size:12px;">暂未选中</span>');
 
         currentVisibleWbs.forEach(wb => {
             const bindings = globalBindingMapCache[wb] || [];
-            const isBound = bindings.length > 0;
             const $wrapper = $('<div class="wb-item-wrapper"></div>').attr('data-wb-name', wb);
             const $header = $('<div class="wb-item-header"></div>');
             const $titleArea = $('<label class="wb-item-title-area" style="cursor:pointer;"></label>');
@@ -702,16 +633,15 @@ $menuBtn.on('click', async () => {
 
             if(isBatchMode) {
                 $chk = $('<input type="checkbox" style="transform: scale(1.2); margin-top:2px;">').prop('checked', batchSelected.has(wb));
-                $titleArea.on('click', (e) => { e.preventDefault(); if(batchSelected.has(wb)) batchSelected.delete(wb); else batchSelected.add(wb); renderData(); });
+                $titleArea.on('click', (e) => { e.preventDefault(); batchSelected.has(wb) ? batchSelected.delete(wb) : batchSelected.add(wb); renderData(); });
             } else {
                 $chk = $('<input type="checkbox" style="transform: scale(1.2); margin-top:2px;">').prop('checked', activeWbs.includes(wb));
                 $chk.on('change', async function() {
                     await withLoadingOverlay(async () => {
                         let current = getGlobalWorldbookNames();
-                        if ($(this).is(':checked')) current.push(wb); else current = current.filter(n => n !== wb);
-                        await rebindGlobalWorldbooks(current);
-                        renderData();
-                    }, "正在应用设定...");
+                        $(this).is(':checked') ? current.push(wb) : current = current.filter(n => n !== wb);
+                        await rebindGlobalWorldbooks(current); renderData();
+                    }, "应用中...");
                 });
             }
             $titleArea.append($chk);
@@ -721,179 +651,113 @@ $menuBtn.on('click', async () => {
 
             if (!isBatchMode) {
                 const $actions = $('<div class="wb-item-actions"></div>');
-                const $delBtn = $('<div class="wb-icon-btn hover-red" title="彻底删除"><i class="fa-solid fa-trash"></i></div>').on('click', async () => {
-                    const confirm = await SillyTavern.callGenericPopup(`删除确认：您要丢弃 [${wb}] 吗？`, SillyTavern.POPUP_TYPE.CONFIRM);
-                    if (confirm === SillyTavern.POPUP_RESULT.AFFIRMATIVE) {
-                        await withLoadingOverlay(async () => {
-                            await deleteWorldbook(wb); delete globalBindingMapCache[wb];
-                            toastr.success(`已删除。`); renderData();
-                        }, `正在删除 ${wb}...`);
-                    }
-                });
                 $actions.append($('<div class="wb-icon-btn" title="整理条目"><i class="fa-solid fa-list"></i></div>').on('click', () => openEntryTuneView(wb)))
-                        .append($('<div class="wb-icon-btn" title="重命名名称"><i class="fa-solid fa-pen"></i></div>').on('click', () => attemptRenameWb(wb, isBound, bindings)))
-                        .append($delBtn);
+                        .append($('<div class="wb-icon-btn" title="重命名名称"><i class="fa-solid fa-pen"></i></div>').on('click', () => attemptRenameWb(wb, bindings.length > 0, bindings)))
+                        .append($('<div class="wb-icon-btn hover-red" title="彻底删除"><i class="fa-solid fa-trash"></i></div>').on('click', async () => {
+                             if (await SillyTavern.callGenericPopup(`删除确认：丢失 [${wb}] ？`, SillyTavern.POPUP_TYPE.CONFIRM) === SillyTavern.POPUP_RESULT.AFFIRMATIVE) {
+                                  await withLoadingOverlay(async () => { await deleteWorldbook(wb); delete globalBindingMapCache[wb]; renderData(); }, `删除中...`);
+                             }
+                        }));
                 $header.append($actions);
             }
             $wrapper.append($header);
 
-            const $tagRow = $('<div style="padding: 0 4px;"></div>');
-            const boundNames = bindings.map(c => c.name);
-            const bindText = isBound ? `📌 已关联 ${bindings.length} 名角色` : `⚪ 暂未被任何卡片关联`;
-            const $tag = $(`<div class="wb-bind-tag" style="background: ${isBound ? 'var(--SmartThemeQuoteColor)' : '#888'}1A; border: 1px solid ${isBound ? 'var(--SmartThemeQuoteColor)' : '#888'}; color: ${isBound ? 'var(--SmartThemeQuoteColor)' : '#888'};" title="${isBound ? boundNames.slice(0, 10).join(', ') + (boundNames.length > 10 ? ' ...等' : '') : '未检测到记录'}">${bindText}</div>`);
+            const isBound = bindings.length > 0;
+            const $tag = $(`<div class="wb-bind-tag" style="background: ${isBound?'var(--SmartThemeQuoteColor)':'#888'}1A; border: 1px solid ${isBound?'var(--SmartThemeQuoteColor)':'#888'}; color: ${isBound?'var(--SmartThemeQuoteColor)':'#888'};">${isBound ? `📌 已关联 ${bindings.length} 名角色` : `⚪ 暂无关联`}</div>`);
             if (isBound) $tag.on('click', () => openBindView(wb));
-            $wrapper.append($tagRow.append($tag));
+            $wrapper.append($('<div style="padding: 0 4px;"></div>').append($tag));
             $wbContainer.append($wrapper);
         });
 
         if (highlightName) {
             setTimeout(() => {
                 const $highlightItem = $wbContainer.find(`[data-wb-name="${highlightName}"]`);
-                if ($highlightItem.length) {
-                    $highlightItem[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    $highlightItem.addClass('wb-highlight');
-                    setTimeout(() => $highlightItem.removeClass('wb-highlight'), 1000);
-                }
+                if ($highlightItem.length) { $highlightItem[0].scrollIntoView({ behavior: 'smooth', block: 'center' }); $highlightItem.addClass('wb-highlight'); setTimeout(() => $highlightItem.removeClass('wb-highlight'), 1000); }
             }, 100);
         }
 
         const $snapContainer = $ui.find('#wb-snapshot-container').empty();
         Object.entries(snapshots).forEach(([name, snapData]) => {
-            const isLegacy = Array.isArray(snapData);
-            const isDetailed = !isLegacy && snapData.type === 'detailed';
-            const wbs = isLegacy ? snapData : (isDetailed ? Object.keys(snapData.data) : snapData.wbs);
-            const icon = isDetailed ? 'fa-puzzle-piece' : 'fa-box-archive';
-
-            const safeWbs = wbs || [];
-            const countText = isDetailed ? `含 ${Object.values(snapData.data).reduce((acc, uids) => acc + uids.length, 0)} 条目` : `含 ${safeWbs.length} 项设定`;
-
+            const isDetailed = !Array.isArray(snapData) && snapData.type === 'detailed';
+            const wbs = isDetailed ? Object.keys(snapData.data) : (Array.isArray(snapData) ? snapData : snapData.wbs);
             const $item = $(`<div style="display:flex; justify-content:space-between; align-items:center; padding:10px; background:var(--SmartThemeBotMesColor); border-radius:6px; border:1px solid var(--SmartThemeBorderColor); flex-wrap:wrap; gap:8px;"></div>`);
-            $item.append(`<div style="flex:1; min-width: 150px;"><div style="font-weight:bold;font-size:14px;"><i class="fa-solid ${icon}" style="color:var(--SmartThemeQuoteColor);"></i> ${name}</div><div style="font-size:12px;color:gray;">${countText}</div></div>`);
+            $item.append(`<div style="flex:1; min-width: 150px;"><div style="font-weight:bold;font-size:14px;"><i class="fa-solid ${isDetailed?'fa-puzzle-piece':'fa-box-archive'}" style="color:var(--SmartThemeQuoteColor);"></i> ${name}</div><div style="font-size:12px;color:gray;">${isDetailed?`含 ${Object.values(snapData.data).reduce((a,c)=>a+c.length,0)} 个内容微调`:`含 ${(wbs||[]).length} 项设定`}</div></div>`);
             const $act = $('<div style="display:flex; gap:6px; flex-wrap: wrap;"></div>');
             $act.append($('<button class="menu_button interactable btn-success wb-nowrap-btn" style="margin:0; padding:6px 12px; font-size:12px; border:none;">应用该组合</button>').on('click', async () => {
-                if(isDetailed) await applyDetailedSnapshot(snapData.data);
-                else {
-                    await withLoadingOverlay(async() => await rebindGlobalWorldbooks(wbs), `正在应用快照 ${name}...`);
-                }
+                if(isDetailed) await applyDetailedSnapshot(snapData.data); else await withLoadingOverlay(async() => await rebindGlobalWorldbooks(wbs), `应用中...`);
                 toastr.success("组合已应用。"); renderData();
             }));
-
-            if(isDetailed) $act.append($('<button class="menu_button interactable wb-nowrap-btn" style="margin:0; padding:6px 10px;" title="编辑项"><i class="fa fa-pen"></i></button>').on('click', () => openDetailedSnapView(name, snapData.data)));
-            else $act.append($('<button class="menu_button interactable wb-nowrap-btn" style="margin:0; padding:6px 10px;" title="编辑项"><i class="fa fa-pen"></i></button>').on('click', () => openEditSnapView(name, wbs)));
-
+            $act.append($('<button class="menu_button interactable wb-nowrap-btn" style="margin:0; padding:6px 10px;" title="编辑项"><i class="fa fa-pen"></i></button>').on('click', () => isDetailed ? openDetailedSnapView(name, snapData.data) : openEditSnapView(name, wbs)));
             $act.append($('<button class="menu_button interactable btn-danger wb-nowrap-btn" style="margin:0; padding:6px 10px; border:none;" title="删除快照"><i class="fa fa-trash"></i></button>').on('click', async () => {
-                if (await SillyTavern.callGenericPopup(`确认删除快照 [${name}]？`, SillyTavern.POPUP_TYPE.CONFIRM) === SillyTavern.POPUP_RESULT.AFFIRMATIVE) {
-                    updateVariablesWith(v => { delete v.wb_snapshots[name]; return v; }, { type: 'global' }); renderData();
-                }
+                if (await SillyTavern.callGenericPopup(`确认删除快照？`, SillyTavern.POPUP_TYPE.CONFIRM) === SillyTavern.POPUP_RESULT.AFFIRMATIVE) { updateVariablesWith(v => { delete v.wb_snapshots[name]; return v; }, { type: 'global' }); renderData(); }
             }));
-            $item.append($act);
-            $snapContainer.append($item);
+            $item.append($act); $snapContainer.append($item);
         });
     };
 
     let activeBindWb = "";
     const openBindView = (wbName) => {
-        activeBindWb = wbName;
-        $ui.find('#wb-bind-title').text(wbName);
-        $ui.find('#wb-main-view').hide();
-        $ui.find('#wb-bind-view').fadeIn();
-        renderBindList();
+        activeBindWb = wbName; $ui.find('#wb-bind-title').text(wbName);
+        $ui.find('#wb-main-view').hide(); $ui.find('#wb-bind-view').fadeIn(); renderBindList();
     };
 
     const renderBindList = () => {
         const kw = $ui.find('#wb-bind-search').val().toLowerCase();
         const $cont = $ui.find('#wb-bind-container').empty();
-        const boundChars = globalBindingMapCache[activeBindWb] || [];
-        let targetChars = kw ? boundChars.filter(c => c.name.toLowerCase().includes(kw)) : boundChars;
-
-        targetChars.forEach(char => {
-            const avaUrl = SillyTavern.getThumbnailUrl('avatar', char.avatar) || '';
-            const $card = $(`<div style="display:flex; justify-content:space-between; align-items:center; background: var(--SmartThemeBotMesColor); border: 1px solid var(--SmartThemeBorderColor); border-radius:6px; padding: 10px;">
+        const bChars = globalBindingMapCache[activeBindWb] || [];
+        (kw ? bChars.filter(c => c.name.toLowerCase().includes(kw)) : bChars).forEach(char => {
+            $cont.append(`<div style="display:flex; justify-content:space-between; align-items:center; background: var(--SmartThemeBotMesColor); border: 1px solid var(--SmartThemeBorderColor); border-radius:6px; padding: 10px;">
                                <div style="display:flex; align-items:center; gap:12px;">
-                                 <img src="${avaUrl}" style="width:38px; height:38px; border-radius:50%; object-fit:cover; border:2px solid var(--SmartThemeQuoteColor);">
-                                 <div style="display:flex; flex-direction:column;">
-                                   <span style="font-weight:bold; font-size:14px; margin-bottom:2px;">${char.name}</span>
-                                   <div style="font-size:11px;color:gray;" title="底层唯一ID文件名">(${char.avatar})</div>
-                                 </div>
+                                 <img src="${SillyTavern.getThumbnailUrl('avatar', char.avatar) || ''}" style="width:38px; height:38px; border-radius:50%; object-fit:cover; border:2px solid var(--SmartThemeQuoteColor);">
+                                 <div style="display:flex; flex-direction:column;"><span style="font-weight:bold; font-size:14px; margin-bottom:2px;">${char.name}</span><div style="font-size:11px;color:gray;">(${char.avatar})</div></div>
                                </div>
                              </div>`);
-            $cont.append($card);
         });
-
-        if (boundChars.length === 0) $cont.html('<div style="padding:15px; color:gray; text-align:center;">这本书目前可以说是非常地清闲，没有任何绑定呢~</div>');
-        else if (targetChars.length === 0) $cont.html('<div style="padding:15px; color:gray; text-align:center;">没有搜到名字对得上的角色哦。</div>');
+        if (bChars.length === 0) $cont.html('<div style="padding:15px; color:gray; text-align:center;">这本书目前可以说是非常地清闲，没有任何绑定呢~</div>');
     };
     $ui.find('#wb-bind-search').on('input', renderBindList);
-
     $ui.find('#wb-btn-bind-cancel').on('click', () => { $ui.find('#wb-bind-view').hide(); $ui.find('#wb-main-view').fadeIn(); });
 
     $ui.find('#wb-btn-save-snap').on('click', async () => {
          let name = await SillyTavern.callGenericPopup("创建新快照组合名称：", SillyTavern.POPUP_TYPE.INPUT, "新备份组合");
-         if (!name || typeof name !== 'string' || name.trim() === '') return;
-         name = name.trim();
-
-         let vars = getVariables({ type: 'global' });
-         if (vars.wb_snapshots && vars.wb_snapshots[name]) {
-             if(await SillyTavern.callGenericPopup(`快照 [${name}] 已存在，是否强制覆盖？`, SillyTavern.POPUP_TYPE.CONFIRM) !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
-         }
-         updateVariablesWith(v => {
-             if (!v.wb_snapshots) v.wb_snapshots = {};
-             v.wb_snapshots[name] = { type: 'simple', wbs: getGlobalWorldbookNames() };
-             return v;
-         }, { type: 'global' });
+         if (!name || !(name=name.trim())) return;
+         updateVariablesWith(v => { if (!v.wb_snapshots) v.wb_snapshots = {}; v.wb_snapshots[name] = { type: 'simple', wbs: getGlobalWorldbookNames() }; return v; }, { type: 'global' });
          toastr.success("组合保存完毕。"); renderData();
     });
 
     let snapOldName = "", snapTempList = [];
     const openEditSnapView = (name, list) => {
-        snapOldName = name; snapTempList = [...list];
-        $ui.find('#wb-edit-snap-name').val(name);
-
+        snapOldName = name; snapTempList = [...list]; $ui.find('#wb-edit-snap-name').val(name);
         const buildList = () => {
             const kw = $ui.find('#wb-edit-snap-search').val().toLowerCase();
             const $c = $ui.find('#wb-edit-snap-container').empty();
-            [...getWorldbookNames()].sort((a,b) => { const ac = snapTempList.includes(a); const bc = snapTempList.includes(b); if(ac === bc) return a.localeCompare(b, 'zh-CN'); return ac ? -1 : 1; }).forEach(w => {
+            [...getWorldbookNames()].sort((a,b) => { const ac = snapTempList.includes(a), bc = snapTempList.includes(b); return ac===bc ? a.localeCompare(b,'zh-CN') : (ac?-1:1); }).forEach(w => {
                 if (kw && !w.toLowerCase().includes(kw)) return;
                 const isChk = snapTempList.includes(w);
                 const $wHolder = $(`<div class="wb-item-wrapper" style="flex-direction:row; align-items:center; cursor:pointer;"></div>`);
                 const $chkBox = $(`<input type="checkbox" style="transform:scale(1.2); flex-shrink:0;">`).prop('checked', isChk);
-                const $title = $(`<span class="wb-name-text" style="${isChk?'font-weight:bold;color:var(--SmartThemeQuoteColor)':''}">${w}</span>`);
-                $wHolder.append($chkBox, $title).on('click', () => $chkBox.prop('checked', !$chkBox.is(':checked')).trigger('change'));
-                $chkBox.on('change', function() {
-                    const c = $(this).is(':checked');
-                    if(c && !snapTempList.includes(w)) snapTempList.push(w);
-                    if(!c) snapTempList = snapTempList.filter(n=>n!==w);
-                    buildList();
-                });
+                $wHolder.append($chkBox, `<span class="wb-name-text" style="${isChk?'font-weight:bold;color:var(--SmartThemeQuoteColor)':''}">${w}</span>`).on('click', () => $chkBox.prop('checked', !$chkBox.is(':checked')).trigger('change'));
+                $chkBox.on('change', function() { $(this).is(':checked') ? (snapTempList.includes(w)||snapTempList.push(w)) : (snapTempList=snapTempList.filter(n=>n!==w)); buildList(); });
                 $c.append($wHolder);
             });
         };
-        $ui.find('#wb-edit-snap-search').off('input').on('input', buildList).val('');
-        buildList();
+        $ui.find('#wb-edit-snap-search').off('input').on('input', buildList).val(''); buildList();
         $ui.find('#wb-main-view').hide(); $ui.find('#wb-edit-snap-view').fadeIn(200);
     };
 
     $ui.find('#wb-btn-edit-save').on('click', async () => {
         const nName = $ui.find('#wb-edit-snap-name').val().trim();
         if(!nName) return toastr.warning("名称不能为空哦。");
-
-        let vars = getVariables({ type: 'global' });
-        if (nName !== snapOldName && vars.wb_snapshots && vars.wb_snapshots[nName]) {
-            if (await SillyTavern.callGenericPopup(`快照 [${nName}] 名称冲突，确定覆盖？`, SillyTavern.POPUP_TYPE.CONFIRM) !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
-        }
-
         updateVariablesWith(v => {
             if (!v.wb_snapshots) v.wb_snapshots = {};
             if (nName !== snapOldName) delete v.wb_snapshots[snapOldName];
             v.wb_snapshots[nName] = { type: 'simple', wbs: snapTempList }; return v;
         }, { type: 'global' });
-        toastr.success("快照已成功更新！");
-        $ui.find('#wb-edit-snap-view').hide(); $ui.find('#wb-main-view').fadeIn(); renderData();
+        toastr.success("快照已成功更新！"); $ui.find('#wb-edit-snap-view').hide(); $ui.find('#wb-main-view').fadeIn(); renderData();
     });
     $ui.find('#wb-btn-edit-cancel').on('click', () => { $ui.find('#wb-edit-snap-view').hide(); $ui.find('#wb-main-view').fadeIn(); });
 
-    let detailedSnapData = {};
-    let detailedSnapOldName = "";
+    let detailedSnapData = {}; let detailedSnapOldName = ""; let currentOpenedDsWb = "";
 
     const openDetailedSnapView = (name = "", existingData = {}) => {
         detailedSnapOldName = name;
@@ -909,116 +773,112 @@ $menuBtn.on('click', async () => {
             const hideBound = $ui.find('#dsnap-filter-unbound').is(':checked');
             $wbList.empty();
 
-            const filteredWbs = allWbs.filter(wb => {
-                const visible = wb.toLowerCase().includes(keyword);
-                // 核心逻辑：过滤已绑定的世界书
-                if (hideBound && (globalBindingMapCache[wb] || []).length > 0) return false;
-                return visible;
-            });
-
+            const filteredWbs = allWbs.filter(wb => (wb.toLowerCase().includes(keyword) && (!hideBound || (globalBindingMapCache[wb] || []).length === 0)));
             filteredWbs.forEach(wbName => {
                 const selectedCount = (detailedSnapData[wbName] || []).length;
                 const $item = $(`<div class="dsnap-wb-item" data-wbname="${wbName}">${wbName} <b style="color:var(--okGreen); display:${selectedCount>0?'inline':'none'};">(${selectedCount})</b></div>`);
                 $item.on('click', async () => {
                     if ($item.hasClass('active')) return;
-                    $wbList.find('.active').removeClass('active');
-                    $item.addClass('active');
+                    $wbList.find('.active').removeClass('active'); $item.addClass('active');
+                    currentOpenedDsWb = wbName;
                     await renderEntryListFor(wbName);
                 });
                 $wbList.append($item);
             });
 
-            if ($wbList.find('.active').length === 0 && filteredWbs.length > 0) {
-                 $wbList.children().first().trigger('click');
-            } else if (filteredWbs.length === 0) {
-                 $entryList.html('<div style="color:gray;text-align:center;padding:20px;">未找到匹配的世界书</div>');
-            }
+            if ($wbList.find('.active').length === 0 && filteredWbs.length > 0) $wbList.children().first().trigger('click');
+            else if (filteredWbs.length === 0) $entryList.html('<div style="color:gray;text-align:center;padding:20px;">未找到匹配的世界书</div>');
         };
 
         $ui.find('#dsnap-wb-search, #dsnap-filter-unbound').off('input change').on('input change', renderWbList);
-        // 初始化重置搜索框和筛选
         $ui.find('#dsnap-wb-search').val('');
-        // $ui.find('#dsnap-filter-unbound').prop('checked', false);
 
         const renderEntryListFor = async (wbName) => {
-            $entryList.html('<i class="fa-solid fa-spinner fa-spin"></i> 正在加载条目...');
+            $entryList.html('<div style="padding:20px;text-align:center;"><i class="fa-solid fa-spinner fa-spin"></i> 正在加载条目...</div>');
             try {
                 const entries = await getWorldbook(wbName);
-                $entryList.empty();
-                if (entries.length === 0) {
-                    $entryList.html('<div style="color:gray; text-align:center;">这本书是空的...</div>');
-                    return;
-                }
-                entries.forEach(entry => {
-                    const isChecked = (detailedSnapData[wbName] || []).includes(entry.uid);
-                    const $item = $(`<div class="dsnap-entry-item"><input type="checkbox" style="transform:scale(1.2); flex-shrink:0;"><span></span></div>`);
-                    const $label = $item.find('span');
-                    $label.text(entry.name || `(未命名条目 UID: ${entry.uid})`);
-
-                    // 核心优化：点击勾选不再刷新左侧列表，而是平滑更新计数
-                    $item.find('input').prop('checked', isChecked).on('change', function() {
-                        const checked = $(this).is(':checked');
-                        if (!detailedSnapData[wbName]) detailedSnapData[wbName] = [];
-
-                        if (checked) {
-                            if (!detailedSnapData[wbName].includes(entry.uid)) detailedSnapData[wbName].push(entry.uid);
-                        } else {
-                            detailedSnapData[wbName] = detailedSnapData[wbName].filter(uid => uid !== entry.uid);
-                        }
-
-                        if (detailedSnapData[wbName].length === 0) delete detailedSnapData[wbName];
-
-                        // 平滑更新左侧计数，不触发重绘
-                        const newCount = (detailedSnapData[wbName] || []).length;
-                        const $wbItem = $wbList.find(`.dsnap-wb-item.active[data-wbname="${wbName}"]`);
-                        const $counter = $wbItem.find('b');
-
-                        $counter.text(`(${newCount})`);
-                        if(newCount > 0) $counter.show(); else $counter.hide();
-                    });
-
-                    $entryList.append($item);
-                });
-            } catch (e) {
-                $entryList.html('<div style="color:red; text-align:center;">加载条目失败！</div>');
-                console.error(e);
-            }
+                if (entries.length === 0) { $entryList.html('<div style="color:gray; text-align:center; padding:15px;">这本书是空的...</div>'); return; }
+                renderDsEntryItems(entries, wbName);
+            } catch (e) { $entryList.html('<div style="color:red; text-align:center;">加载条目失败！</div>'); }
         };
 
+        const renderDsEntryItems = (entries, wbName) => {
+            $entryList.empty();
+            let displayEntries = [...entries];
+            const sortMode = $ui.find('#dsnap-entry-sort').val() || 'default';
+            if (sortMode === 'order_asc') displayEntries.sort((a, b) => (a.position?.order ?? 100) - (b.position?.order ?? 100));
+            else if (sortMode === 'order_desc') displayEntries.sort((a, b) => (b.position?.order ?? 100) - (a.position?.order ?? 100));
+            else if (sortMode === 'depth_asc') displayEntries.sort((a, b) => (a.position?.depth ?? 0) - (b.position?.depth ?? 0));
+            else if (sortMode === 'depth_desc') displayEntries.sort((a, b) => (b.position?.depth ?? 0) - (a.position?.depth ?? 0));
+            else if (sortMode === 'az') displayEntries.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'zh-CN'));
+            else if (sortMode === 'za') displayEntries.sort((a, b) => (b.name || '').localeCompare(a.name || '', 'zh-CN'));
+
+            displayEntries.forEach(entry => {
+                const isChecked = (detailedSnapData[wbName] || []).includes(entry.uid);
+
+                // 灯颜色渲染
+                const rawStateColor = entry.enabled ? 'var(--okGreen)' : 'gray';
+                const sType = entry.strategy?.type;
+                const StrategyTxt = sType === 'selective' ? '🟩 匹配' : '🟦 常驻';
+
+                const posBadge = formatPositionBadge(entry.position);
+
+                const $item = $(`<div class="dsnap-entry-item" style="border-left: 3px solid ${rawStateColor};">
+                    <input type="checkbox" style="transform:scale(1.2); margin-top:3px; flex-shrink:0;">
+                    <div class="dsnap-entry-body">
+                        <div class="dsnap-entry-title">${entry.name || `(未命名条目)`}</div>
+                        <div class="dsnap-entry-meta">
+                            <span class="${entry.enabled?'badge-green':'badge-grey'}">${entry.enabled?'原始已启':'原始关闭'}</span>
+                            <span class="badge-blue">${StrategyTxt}</span>
+                            <span class="badge-grey" style="color:var(--SmartThemeQuoteColor); border-color:var(--SmartThemeBorderColor); background:none;">${posBadge}</span>
+                        </div>
+                    </div>
+                </div>`);
+
+                $item.find('input').prop('checked', isChecked).on('change', function() {
+                    const checked = $(this).is(':checked');
+                    if (!detailedSnapData[wbName]) detailedSnapData[wbName] = [];
+                    if (checked) { if (!detailedSnapData[wbName].includes(entry.uid)) detailedSnapData[wbName].push(entry.uid); }
+                    else { detailedSnapData[wbName] = detailedSnapData[wbName].filter(uid => uid !== entry.uid); }
+                    if (detailedSnapData[wbName].length === 0) delete detailedSnapData[wbName];
+
+                    const newCount = (detailedSnapData[wbName] || []).length;
+                    const $counter = $wbList.find(`.dsnap-wb-item.active[data-wbname="${wbName}"] b`);
+                    $counter.text(`(${newCount})`); newCount > 0 ? $counter.show() : $counter.hide();
+                });
+                $entryList.append($item);
+            });
+        };
+
+        // 绑定下拉排序重新渲染
+        $ui.find('#dsnap-entry-sort').off('change').on('change', async () => {
+             if (currentOpenedDsWb) {
+                 const entries = await getWorldbook(currentOpenedDsWb);
+                 renderDsEntryItems(entries, currentOpenedDsWb);
+             }
+        });
+
         renderWbList();
-        $ui.find('#wb-main-view, #wb-edit-snap-view').hide();
-        $ui.find('#wb-detailed-snap-view').fadeIn(200);
+        $ui.find('#wb-main-view, #wb-edit-snap-view').hide(); $ui.find('#wb-detailed-snap-view').fadeIn(200);
     };
 
     const applyDetailedSnapshot = async (data) => {
         await withLoadingOverlay(async () => {
             const allWbNames = getWorldbookNames();
             const targetWbNames = Object.keys(data);
-
             for (const wbName of allWbNames) {
                 let wbEntries = await getWorldbook(wbName);
                 let changed = false;
-
                 if (targetWbNames.includes(wbName)) {
                     const enabledUIDs = data[wbName];
                     wbEntries.forEach(entry => {
                         const shouldBeEnabled = enabledUIDs.includes(entry.uid);
-                        if(entry.enabled !== shouldBeEnabled) {
-                            entry.enabled = shouldBeEnabled;
-                            changed = true;
-                        }
+                        if(entry.enabled !== shouldBeEnabled) { entry.enabled = shouldBeEnabled; changed = true; }
                     });
                 } else {
-                    wbEntries.forEach(entry => {
-                        if(entry.enabled) {
-                            entry.enabled = false;
-                            changed = true;
-                        }
-                    });
+                    wbEntries.forEach(entry => { if(entry.enabled) { entry.enabled = false; changed = true; } });
                 }
-                if (changed) {
-                    await replaceWorldbook(wbName, wbEntries);
-                }
+                if (changed) await replaceWorldbook(wbName, wbEntries);
             }
             await rebindGlobalWorldbooks(targetWbNames);
         }, "正在应用复合场景...");
@@ -1028,84 +888,78 @@ $menuBtn.on('click', async () => {
 
     $ui.find('#dsnap-save').on('click', () => {
         const name = $ui.find('#dsnap-name').val().trim();
-        if (!name) return toastr.warning("复合快照也需要一个名字哦！");
-
+        if (!name) return toastr.warning("也要留下好听的名字啊！");
         updateVariablesWith(v => {
             if (!v.wb_snapshots) v.wb_snapshots = {};
             if(name !== detailedSnapOldName) delete v.wb_snapshots[detailedSnapOldName];
-            v.wb_snapshots[name] = { type: 'detailed', data: detailedSnapData };
-            return v;
+            v.wb_snapshots[name] = { type: 'detailed', data: detailedSnapData }; return v;
         }, { type: 'global' });
-
-        toastr.success(`复合快照 [${name}] 已保存！`);
-        $ui.find('#wb-detailed-snap-view').hide();
-        $ui.find('#wb-main-view').fadeIn(200);
-        renderData();
+        toastr.success(`快照保存好啦。`);
+        $ui.find('#wb-detailed-snap-view').hide(); $ui.find('#wb-main-view').fadeIn(200); renderData();
     });
-     $ui.find('#dsnap-cancel').on('click', () => {
-         $ui.find('#wb-detailed-snap-view').hide();
-         $ui.find('#wb-main-view').fadeIn(200);
-    });
+     $ui.find('#dsnap-cancel').on('click', () => { $ui.find('#wb-detailed-snap-view').hide(); $ui.find('#wb-main-view').fadeIn(200); });
 
-    let tuneWbName = "";
-    let tuneEntries = [];
+    let tuneWbName = ""; let tuneEntries = [];
 
     const openEntryTuneView = async (wbName) => {
-        tuneWbName = wbName;
-        $ui.find('#wb-entry-title').text(wbName);
-        $ui.find('#wb-entry-search').val('');
-        await withLoadingOverlay(async () => {
-            tuneEntries = JSON.parse(JSON.stringify(await getWorldbook(wbName)));
-        }, `正在读取 ${wbName} 的条目...`);
+        tuneWbName = wbName; $ui.find('#wb-entry-title').text(wbName); $ui.find('#wb-entry-search').val(''); $ui.find('#wb-entry-sort').val('default');
+        await withLoadingOverlay(async () => { tuneEntries = JSON.parse(JSON.stringify(await getWorldbook(wbName))); }, `提取内容...`);
         renderEntryList();
-        $ui.find('#wb-main-view, #wb-detail-view').hide();
-        $ui.find('#wb-entry-view').fadeIn(200);
+        $ui.find('#wb-main-view, #wb-detail-view').hide(); $ui.find('#wb-entry-view').fadeIn(200);
     };
 
     const renderEntryList = () => {
         const keyword = $ui.find('#wb-entry-search').val().toLowerCase();
+        const sortMode = $ui.find('#wb-entry-sort').val() || 'default';
         const $container = $ui.find('#wb-entry-container').empty();
+
+        // 1. 先过滤
         const filteredEntries = tuneEntries.filter(entry => {
             const searchStr = `${entry.name||''} ${(entry.strategy?.keys||[]).join(',')}`.toLowerCase();
             return !keyword || searchStr.includes(keyword);
         });
 
-        filteredEntries.forEach((entry) => {
-            const index = tuneEntries.indexOf(entry);
+        // 2. 再排序显示数组
+        let sortedEntries = [...filteredEntries];
+        if (sortMode === 'order_asc') sortedEntries.sort((a, b) => (a.position?.order ?? 100) - (b.position?.order ?? 100));
+        else if (sortMode === 'order_desc') sortedEntries.sort((a, b) => (b.position?.order ?? 100) - (a.position?.order ?? 100));
+        else if (sortMode === 'depth_asc') sortedEntries.sort((a, b) => (a.position?.depth ?? 0) - (b.position?.depth ?? 0));
+        else if (sortMode === 'depth_desc') sortedEntries.sort((a, b) => (b.position?.depth ?? 0) - (a.position?.depth ?? 0));
+        else if (sortMode === 'az') sortedEntries.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'zh-CN'));
+        else if (sortMode === 'za') sortedEntries.sort((a, b) => (b.name || '').localeCompare(a.name || '', 'zh-CN'));
+
+        sortedEntries.forEach((entry) => {
+            const index = tuneEntries.indexOf(entry); // 依然指向最原始的安全索引
             const strategy = entry.strategy || { type: 'constant', keys: [] };
-            const keysInfo = strategy.type !== 'selective' ? `<span style="color:gray;">[常驻无触发词]</span>` : `🔑 ${(strategy.keys||[]).join(', ')||'<span style="color:#d63384">未设置触发词汇</span>'}`;
-            const $item = $(`<div style="display:flex; align-items:center; gap:12px; padding:10px; border-left: 4px solid ${entry.enabled ? 'var(--okGreen)' : 'gray'};"></div>`);
-            const $chk = $(`<input type="checkbox" style="transform: scale(1.2); flex-shrink:0;">`).prop('checked', entry.enabled).on('change', function() { entry.enabled = $(this).is(':checked'); renderEntryList(); });
-            const $info = $(`<div><div style="font-weight:bold; margin-bottom: 4px; font-size:14px;">${entry.name || '未定义模块'}</div><div style="font-size:12px;color:gray;display:flex;align-items:center;">${strategy.type !== 'selective' ? '<span class="badge-blue">常驻</span>' : '<span class="badge-green">匹配</span>'} ${keysInfo}</div></div>`);
-            const $right = $('<div style="display:flex; gap:8px; margin-left:auto;"></div>');
+            const keysInfo = strategy.type !== 'selective' ? `<span style="color:gray;">[常驻无触发词]</span>` : `🔑 ${(strategy.keys||[]).join(', ')||'<span style="color:#d63384">未设置词汇</span>'}`;
+
+            const posBadgeHtml = `<span class="badge-grey" style="color:var(--SmartThemeBodyColor); background:none; border-color:var(--SmartThemeBorderColor);">${formatPositionBadge(entry.position)}</span>`;
+
+            const $item = $(`<div style="display:flex; align-items:flex-start; gap:12px; padding:10px; border-left: 4px solid ${entry.enabled ? 'var(--okGreen)' : 'gray'};"></div>`);
+            const $chk = $(`<input type="checkbox" style="transform: scale(1.2); flex-shrink:0; margin-top:2px;">`).prop('checked', entry.enabled).on('change', function() { entry.enabled = $(this).is(':checked'); renderEntryList(); });
+            const $info = $(`<div style="flex:1; min-width:0;"><div style="font-weight:bold; margin-bottom: 5px; font-size:14px; word-break:break-all;">${entry.name || '未定义模块'}</div><div style="font-size:11px;color:gray;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${strategy.type !== 'selective' ? '<span class="badge-blue">常驻</span>' : '<span class="badge-green">匹配</span>'}${posBadgeHtml} <span style="margin-left:5px;">${keysInfo}</span></div></div>`);
+            const $right = $('<div style="display:flex; gap:8px; margin-left:auto; flex-shrink:0;"></div>');
             $right.append($('<button class="menu_button interactable wb-nowrap-btn" style="color:var(--SmartThemeQuoteColor); margin:0;" title="修改内容"><i class="fa fa-pen-nib"></i></button>').on('click', () => openDetailEditView(index)));
             $right.append($('<button class="menu_button interactable wb-nowrap-btn" style="color:#ff6b6b; margin:0;" title="删除条目"><i class="fa fa-trash"></i></button>').on('click', async () => {
-                if(await SillyTavern.callGenericPopup(`确认删除条目 [${entry.name || '未命名'}]？`, SillyTavern.POPUP_TYPE.CONFIRM) === SillyTavern.POPUP_RESULT.AFFIRMATIVE) { tuneEntries.splice(index, 1); renderEntryList(); }
+                if(await SillyTavern.callGenericPopup(`确认删除 [${entry.name || '未命名'}]？`, SillyTavern.POPUP_TYPE.CONFIRM) === SillyTavern.POPUP_RESULT.AFFIRMATIVE) { tuneEntries.splice(index, 1); renderEntryList(); }
             }));
             $item.append($chk, $info, $right);
             $container.append($item);
         });
-        if (filteredEntries.length === 0) $container.html(`<div style="color: gray; padding: 10px; text-align: center;">${tuneEntries.length > 0 ? '没有匹配的条目。': '目前书里还没有内容哦。'}</div>`);
+        if (sortedEntries.length === 0) $container.html(`<div style="color: gray; padding: 10px; text-align: center;">${tuneEntries.length > 0 ? '搜查不到匹配内容呢。': '完全是一本空壳书呀。'}</div>`);
     };
 
     $ui.find('#wb-entry-search').off('input').on('input', renderEntryList);
+    $ui.find('#wb-entry-sort').off('change').on('change', renderEntryList);
     $ui.find('#wb-btn-entry-all').off('click').on('click', () => { tuneEntries.forEach(e => e.enabled = true); renderEntryList(); });
     $ui.find('#wb-btn-entry-none').off('click').on('click', () => { tuneEntries.forEach(e => e.enabled = false); renderEntryList(); });
     $ui.find('#wb-btn-entry-add').off('click').on('click', () => {
-        const newEntry = {
-            uid: Date.now() + Math.random(), name: "新增编辑条目", enabled: true, content: "",
-            strategy: { type: 'constant', keys: [] },
-            position: { type: 'at_depth', role: 'system', depth: 0, order: 100 }
-        };
-        tuneEntries.unshift(newEntry);
+        tuneEntries.unshift({ uid: Date.now() + Math.random(), name: "新增编辑条目", enabled: true, content: "", strategy: { type: 'constant', keys: [] }, position: { type: 'at_depth', role: 'system', depth: 0, order: 100 } });
         renderEntryList(); openDetailEditView(0);
     });
 
     $ui.find('#wb-btn-entry-save').on('click', async () => {
-        await withLoadingOverlay(async () => {
-            await replaceWorldbook(tuneWbName, tuneEntries);
-            toastr.success(`数据写入完成。`);
-        }, `正在保存 ${tuneWbName}...`);
+        await withLoadingOverlay(async () => { await replaceWorldbook(tuneWbName, tuneEntries); }, `写入中...`);
         $ui.find('#wb-entry-view').hide(); $ui.find('#wb-main-view').fadeIn(200); renderData();
     });
     $ui.find('#wb-btn-entry-cancel').on('click', () => { $ui.find('#wb-entry-view').hide(); $ui.find('#wb-main-view').fadeIn(200); });
@@ -1114,13 +968,10 @@ $menuBtn.on('click', async () => {
     $ui.find('#wb-det-position').on('change', function() { $ui.find('#wb-det-depth-container').toggle($(this).val().startsWith('at_depth_')); });
 
     const openDetailEditView = (index) => {
-        tuneDetailIndex = index;
-        const e = tuneEntries[index];
+        tuneDetailIndex = index; const e = tuneEntries[index];
         $ui.find('#wb-detail-title').text(e.name || '空参数');
-        $ui.find('#wb-det-name').val(e.name || '');
-        $ui.find('#wb-det-content').val(e.content || '');
-        $ui.find('#wb-det-keys').val((e.strategy?.keys||[]).join(', '));
-        $ui.find('#wb-det-strategy').val(e.strategy?.type || 'constant');
+        $ui.find('#wb-det-name').val(e.name || ''); $ui.find('#wb-det-content').val(e.content || '');
+        $ui.find('#wb-det-keys').val((e.strategy?.keys||[]).join(', ')); $ui.find('#wb-det-strategy').val(e.strategy?.type || 'constant');
 
         let p = e.position?.type || 'at_depth';
         if (p === 'at_depth' || p === 'outlet') p = `at_depth_${e.position?.role || 'system'}`;
@@ -1132,20 +983,14 @@ $menuBtn.on('click', async () => {
 
     $ui.find('#wb-btn-det-save').on('click', () => {
         if(tuneDetailIndex === -1) return;
-        const e = tuneEntries[tuneDetailIndex];
+        const e = tuneEntries[tuneDetailIndex], pos = $ui.find('#wb-det-position').val(), order = parseInt($ui.find('#wb-det-order').val()) || 100;
         e.name = $ui.find('#wb-det-name').val(); e.content = $ui.find('#wb-det-content').val();
         e.strategy = { type: $ui.find('#wb-det-strategy').val(), keys: $ui.find('#wb-det-keys').val().split(',').map(s=>s.trim()).filter(Boolean) };
-        const pos = $ui.find('#wb-det-position').val();
-        const order = parseInt($ui.find('#wb-det-order').val()) || 100;
         if (pos.startsWith('at_depth_')) e.position = { type: 'at_depth', role: pos.replace('at_depth_',''), depth: parseInt($ui.find('#wb-det-depth').val())||0, order: order };
         else e.position = { type: pos, order: order };
-
-        $ui.find('#wb-detail-view').hide(); $ui.find('#wb-entry-view').fadeIn(200);
-        renderEntryList();
+        $ui.find('#wb-detail-view').hide(); $ui.find('#wb-entry-view').fadeIn(200); renderEntryList();
     });
-    $ui.find('#wb-btn-det-cancel').on('click', () => {
-        $ui.find('#wb-detail-view').hide(); $ui.find('#wb-entry-view').fadeIn(200);
-    });
+    $ui.find('#wb-btn-det-cancel').on('click', () => { $ui.find('#wb-detail-view').hide(); $ui.find('#wb-entry-view').fadeIn(200); });
 
     await popup.show();
 });
