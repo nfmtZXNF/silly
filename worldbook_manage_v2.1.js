@@ -362,6 +362,19 @@ $menuBtn.on('click', async () => {
                             <label style="font-size: 13px; font-weight: bold; margin-bottom: 4px; color: var(--SmartThemeQuoteColor);">🔢 顺序</label>
                             <input type="number" id="wb-det-order" class="wb-input-dt" value="100">
                         </div>
+
+                        <!-- 鹿酱为主人添加的递归控制选项 -->
+                        <div style="display: flex; flex-direction: column; justify-content: center; gap: 6px; margin-bottom: 4px; min-width: 160px;">
+                            <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 12px; margin: 0; white-space: nowrap;" title="对应酒馆原生的【不可递归（不会被其他条目激活）】">
+                                <input type="checkbox" id="wb-det-exclude-recursion" style="accent-color: var(--SmartThemeQuoteColor); transform: scale(1.1);">
+                                <span><strong style="color: var(--SmartThemeBodyColor);">不可递归</strong> <span style="color:gray;">(不被激活)</span></span>
+                            </label>
+                            <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 12px; margin: 0; white-space: nowrap;" title="对应酒馆原生的【防止进一步递归】">
+                                <input type="checkbox" id="wb-det-prevent-recursion" style="accent-color: var(--SmartThemeQuoteColor); transform: scale(1.1);">
+                                <span><strong style="color: var(--SmartThemeBodyColor);">防止进一步递归</strong></span>
+                            </label>
+                        </div>
+
                     </div>
 
                     <div class="wb-form-group" style="flex: 1; display: flex; flex-direction: column; margin-bottom: 0;">
@@ -954,7 +967,18 @@ $menuBtn.on('click', async () => {
     $ui.find('#wb-btn-entry-all').off('click').on('click', () => { tuneEntries.forEach(e => e.enabled = true); renderEntryList(); });
     $ui.find('#wb-btn-entry-none').off('click').on('click', () => { tuneEntries.forEach(e => e.enabled = false); renderEntryList(); });
     $ui.find('#wb-btn-entry-add').off('click').on('click', () => {
-        tuneEntries.unshift({ uid: Date.now() + Math.random(), name: "新增编辑条目", enabled: true, content: "", strategy: { type: 'constant', keys: [] }, position: { type: 'at_depth', role: 'system', depth: 0, order: 100 } });
+        tuneEntries.unshift({
+            uid: Date.now() + Math.random(),
+            name: "新增编辑条目",
+            enabled: true,
+            content: "",
+            strategy: { type: 'constant', keys: [] },
+            position: { type: 'at_depth', role: 'system', depth: 0, order: 100 },
+            // 鹿酱修改：同时初始化助手标准的数据解构和底层数据，确保无论调用哪个都不会缺失
+            recursion: { prevent_incoming: false, prevent_outgoing: false, delay_until: null },
+            exclude_recursion: false,
+            prevent_recursion: false
+        });
         renderEntryList(); openDetailEditView(0);
     });
 
@@ -978,6 +1002,12 @@ $menuBtn.on('click', async () => {
         $ui.find('#wb-det-position').val(p).trigger('change');
         $ui.find('#wb-det-depth').val(e.position?.depth ?? 0); $ui.find('#wb-det-order').val(e.position?.order ?? 100);
 
+        // 鹿酱新增：读取条目现有的递归状态 (兼容底层数据和酒馆助手格式)
+        const isExclude = e.recursion?.prevent_incoming ?? e.exclude_recursion ?? e.excludeRecursion ?? false;
+        const isPrevent = e.recursion?.prevent_outgoing ?? e.prevent_recursion ?? e.preventRecursion ?? false;
+        $ui.find('#wb-det-exclude-recursion').prop('checked', !!isExclude);
+        $ui.find('#wb-det-prevent-recursion').prop('checked', !!isPrevent);
+
         $ui.find('#wb-entry-view').hide(); $ui.find('#wb-detail-view').fadeIn(200);
     };
 
@@ -988,6 +1018,19 @@ $menuBtn.on('click', async () => {
         e.strategy = { type: $ui.find('#wb-det-strategy').val(), keys: $ui.find('#wb-det-keys').val().split(',').map(s=>s.trim()).filter(Boolean) };
         if (pos.startsWith('at_depth_')) e.position = { type: 'at_depth', role: pos.replace('at_depth_',''), depth: parseInt($ui.find('#wb-det-depth').val())||0, order: order };
         else e.position = { type: pos, order: order };
+
+        // 鹿酱新增：保存复选框的值写回内存 (同时写进助手标准字段和旧版兼容字段)
+        const checkExclude = $ui.find('#wb-det-exclude-recursion').is(':checked');
+        const checkPrevent = $ui.find('#wb-det-prevent-recursion').is(':checked');
+
+        if (!e.recursion) e.recursion = { prevent_incoming: false, prevent_outgoing: false, delay_until: null };
+        e.recursion.prevent_incoming = checkExclude; // “不可递归” 在助手里对应叫防入（prevent_incoming）
+        e.recursion.prevent_outgoing = checkPrevent; // “防进一步递归”在助手里对应叫防出（prevent_outgoing）
+
+        // 为了万无一失，直接向对象根部也写入一下原生的兼容字段
+        e.exclude_recursion = checkExclude;
+        e.prevent_recursion = checkPrevent;
+
         $ui.find('#wb-detail-view').hide(); $ui.find('#wb-entry-view').fadeIn(200); renderEntryList();
     });
     $ui.find('#wb-btn-det-cancel').on('click', () => { $ui.find('#wb-detail-view').hide(); $ui.find('#wb-entry-view').fadeIn(200); });
