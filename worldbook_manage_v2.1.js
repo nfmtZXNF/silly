@@ -134,9 +134,9 @@ $menuBtn.on('click', async () => {
                 #wb-detail-view .scrollableInnerFull > div:first-child > .wb-form-group { width: 100% !important; }
 
                 /* 移动端排版修正：复合快照独立滑动 */
-                #dsnap-container { flex-direction: column; height: 60vh; max-height: unset;}
-                #dsnap-wb-list-wrapper { max-width: 100%; border-right: none; border-bottom: 2px solid var(--SmartThemeBorderColor); padding-right: 0; padding-bottom: 10px; margin-bottom: 10px; flex: 0 0 35%;}
-                #dsnap-entry-list-wrapper { padding-left: 0; flex: 1; }
+                #dsnap-container { flex-direction: column; height: 75vh; max-height: unset;}
+                #dsnap-wb-list-wrapper { max-width: 100%; border-right: none; border-bottom: 2px solid var(--SmartThemeBorderColor); padding-right: 0; padding-bottom: 10px; margin-bottom: 10px; flex: 0 0 45%; min-height: 180px; }
+                #dsnap-entry-list-wrapper { padding-left: 0; flex: 1; min-height: 200px; }
                 .wb-name-text { white-space: normal; overflow: visible; text-overflow: initial; word-break: break-word; line-height: 1.4; }
 
                 /* 移动端把复合快照顶部的按钮组调整好顺序 */
