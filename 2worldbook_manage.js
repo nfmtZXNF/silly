@@ -396,62 +396,130 @@ $menuBtn.on('click', async () => {
 
     const initiateDeepScan = async () => {
         const $overlay = $ui.find('#wb-loading-overlay');
-        const $text = $ui.find('#wb-loading-text');
         const $sub = $ui.find('#wb-loading-sub');
-        const $sec = $ui.find('#wb-loading-secondary-text');
-
-        $text.text("正在深入检索读取...");
-        $sub.show(); $sec.show();
+        $ui.find('#wb-loading-text').text("正在深入检索读取...");
+        $sub.show(); $ui.find('#wb-loading-secondary-text').show();
         $overlay.show();
 
         try {
             const wb2Chars = {};
-            getWorldbookNames().forEach(wb => wb2Chars[wb] = []);
+            // 安全获取所有世界书名称
+            (typeof getWorldbookNames === 'function' ? getWorldbookNames() : []).forEach(wb => wb2Chars[wb] = []);
 
-            const allCharsData = SillyTavern.characters || [];
+            // 取出酒馆当前挂载的所有角色
+            const allCharsData = window.characters || (typeof SillyTavern !== 'undefined' ? SillyTavern.characters : []) || [];
             const totalChars = allCharsData.length;
-            const batchSize = 10;
             $sub.text(`0 / ${totalChars}`);
 
+            const charMap = new Map();
+
+            const batchSize = 10;
             for (let i = 0; i < totalChars; i += batchSize) {
                 const chunk = allCharsData.slice(i, i + batchSize);
                 await Promise.all(chunk.map(async (charItem) => {
                     try {
-                        const charData = await getCharacter(charItem.avatar);
-                        if (!charData) {
-                            return;
-                        }
-                        const charName = charItem.name;
-                        if (!charName) {
-                            return;
+                        const avatar = charItem.avatar;
+                        if (!avatar) return;
+
+                        let charData = charItem;
+
+                        if (charItem.shallow) {
+                            try {
+                                charData = await $.ajax({
+                                    url: '/api/characters/get',
+                                    type: 'POST',
+                                    contentType: 'application/json',
+                                    data: JSON.stringify({ avatar_url: avatar })
+                                });
+                            } catch (apiErr) {
+                                console.warn(`无法深层拉取角色 [${avatar}]，将使用浅层数据继续...`, apiErr);
+                            }
                         }
 
+                        const charName = charData.name || charItem.name || '未知名称';
                         const checkList = new Set();
-                        if (charData.worldbook) checkList.add(charData.worldbook);
-                        if (charData.extensions && Array.isArray(charData.extensions.worldbooks)) {
-                            charData.extensions.worldbooks.forEach(w => checkList.add(w));
+                        const dataFields = charData.data || charData;
+
+                        // 精准捞取该卡片上的【主世界书】
+                        if (dataFields.extensions?.world) checkList.add(dataFields.extensions.world);
+                        if (dataFields.world) checkList.add(dataFields.world);
+                        if (dataFields.world_info) checkList.add(dataFields.world_info);
+                        if (dataFields.lorebook) checkList.add(dataFields.lorebook);
+                        if (typeof dataFields.character_book === 'string') checkList.add(dataFields.character_book);
+                        if (dataFields.worldbook) checkList.add(dataFields.worldbook);
+                        if (Array.isArray(dataFields.extensions?.worldbooks)) {
+                            dataFields.extensions.worldbooks.forEach(w => checkList.add(w));
                         }
 
+                        // 将找出来的主世界书与它真正的主人（精确到 avatar）登记造册
                         checkList.forEach(wbName => {
-                            if (wb2Chars[wbName] && !wb2Chars[wbName].some(c => c.avatar === charItem.avatar)) {
-                                wb2Chars[wbName].push({ name: charName, avatar: charItem.avatar });
+                            if (wbName && typeof wbName === 'string') {
+                                if (!wb2Chars[wbName]) wb2Chars[wbName] = [];
+                                if (!wb2Chars[wbName].some(c => c.avatar === avatar)) {
+                                    wb2Chars[wbName].push({ name: charName, avatar: avatar });
+                                }
                             }
                         });
+
+                        // 登记给下一步查找【附加世界书】作对照
+                        const safeCharObj = { name: charName, avatar: avatar };
+                        charMap.set(avatar, safeCharObj);
+                        // 兼容各种图包后缀的模糊匹配
+                        const avatarBase = avatar.replace(/\.(png|webp|jpeg)$/i, '');
+                        if (avatar !== avatarBase) charMap.set(avatarBase, safeCharObj);
+
                     } catch (e) {
-                        console.error(`鹿酱在扫描角色 [${charItem.name || '未知名称'} (${charItem.avatar})] 时遇到了一个小小的麻烦：`, e);
+                        console.error(`处理角色 [${charItem.name}] 发生小错误:`, e);
                     }
                 }));
                 $sub.text(`${Math.min(i + batchSize, totalChars)} / ${totalChars}`);
             }
+
+            try {
+                let charLoreArray = [];
+                const ctx = typeof getContext === 'function' ? getContext() : {};
+                if (ctx.chatWorldInfoSettings && Array.isArray(ctx.chatWorldInfoSettings.charLore)) {
+                    charLoreArray = ctx.chatWorldInfoSettings.charLore;
+                } else if (window.chatWorldInfoSettings && Array.isArray(window.chatWorldInfoSettings.charLore)) {
+                    charLoreArray = window.chatWorldInfoSettings.charLore;
+                }
+
+                if (charLoreArray.length > 0) {
+                    charLoreArray.forEach(charLoreEntry => {
+                        const charFilename = charLoreEntry.name;
+                        if (!charFilename) return;
+
+                        const filenameBase = charFilename.replace(/\.(png|webp|jpeg)$/i, '');
+                        const mappedChar = charMap.get(charFilename) || charMap.get(filenameBase);
+
+                        if (mappedChar && Array.isArray(charLoreEntry.extraBooks)) {
+                            charLoreEntry.extraBooks.forEach(wbName => {
+                                if (wbName && typeof wbName === 'string') {
+                                    if (!wb2Chars[wbName]) wb2Chars[wbName] = [];
+                                    if (!wb2Chars[wbName].some(c => c.avatar === mappedChar.avatar)) {
+                                        wb2Chars[wbName].push({ name: mappedChar.name, avatar: mappedChar.avatar });
+                                    }
+                                }
+                            });
+                        }
+                    });
+                }
+            } catch (e) {
+                console.error("安全提取附加世界书失败，略过此步骤：", e);
+            }
+
             globalBindingMapCache = wb2Chars;
+            console.log("【全局世界书管理】映射大成功！对应完整！", globalBindingMapCache);
+
         } catch (error) {
-            console.error("后台扫描数据时发生严重错误，鹿酱感到很抱歉：", error);
-            toastr.error("扫描角色数据时发生严重错误，请检查控制台。");
+            console.error("遇到了出乎意料的状况呢：", error);
+            if (typeof toastr !== 'undefined') toastr.error("读取操作中断了，请查看控制台的提示。");
         } finally {
             $overlay.fadeOut('slow');
-            renderData();
+            if (typeof renderData === 'function') renderData();
         }
     };
+
 
     const popup = new SillyTavern.Popup($ui, SillyTavern.POPUP_TYPE.TEXT, '', {
         allowVerticalScrolling: true,
