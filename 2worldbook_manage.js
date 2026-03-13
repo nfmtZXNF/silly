@@ -85,57 +85,89 @@ const rebindPersonaWorldbook = async (newWbName, oldWbToUnbind = null) => {
     if (typeof $('#persona_lore_button').toggleClass === 'function') $('#persona_lore_button').toggleClass('world_set', !!newWbName);
 };
 
+// ================== ✨ 鹿酱特调加强版：贴心的主界面悬浮球控制逻辑 ==================
 const toggleFloatingButton = (show) => {
     if (!show) {
         $("#lulu-wb-floating-btn").remove();
+        $("#lulu-wb-floating-style").remove(); // 清理专属样式
         return;
     }
     if ($("#lulu-wb-floating-btn").length > 0) return; 
 
+    const styleHtml = `
+        <style id="lulu-wb-floating-style">
+            #lulu-wb-floating-btn {
+                position: fixed !important;
+                /* 避开手机底部的输入框和顶部的导航，直接降生在屏幕右侧的中间！ */
+                top: 45vh !important;
+                right: 15px !important;
+                /* 抹除干扰属性 */
+                bottom: auto !important;
+                left: auto !important;
+                width: 48px !important;
+                height: 48px !important;
+                background: var(--SmartThemeBotMesColor, #2a2e33) !important;
+                color: var(--SmartThemeQuoteColor, #70a1ff) !important;
+                border: 2px solid var(--SmartThemeQuoteColor, #70a1ff) !important;
+                border-radius: 50% !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                font-size: 22px !important;
+                cursor: pointer !important;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.6) !important;
+                z-index: 2147483647 !important; /* 最高维度的层级！ */
+                user-select: none !important;
+                touch-action: none !important; /* 彻底切断底层滑动阻击 */
+                -webkit-tap-highlight-color: transparent !important;
+                transition: transform 0.2s !important;
+            }
+            #lulu-wb-floating-btn:active {
+                transform: scale(0.9) !important;
+            }
+        </style>
+    `;
+    $("head").append(styleHtml);
+
     const $floatBtn = $("<div>", { id: "lulu-wb-floating-btn", title: "点击打开世界书管理面板\n(可以自由拖拽哦~)" })
         .append($("<i>", { class: "fa-solid fa-book-atlas" }))
-        .appendTo("body");
+        // 在酒馆中，app_container 是最稳固的实体容器
+        .appendTo("#app_container, body");
 
-    $floatBtn.css({
-        position: 'fixed', right: '30px', bottom: '100px', width: '48px', height: '48px',
-        background: 'var(--SmartThemeBotMesColor)', 
-        color: 'var(--SmartThemeQuoteColor)',       
-        border: '2px solid var(--SmartThemeQuoteColor)',
-        borderRadius: '50%',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px',
-        cursor: 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.4)', zIndex: 99999,
-        userSelect: 'none', touchAction: 'none', transition: 'transform 0.2s'
-    });
-
-    $floatBtn.hover(
-        function() { $(this).css('transform', 'scale(1.1)'); },
-        function() { $(this).css('transform', 'scale(1.0)'); }
-    );
-
+    // ✨ 终极拖拽魔法：深度治愈手机端的奇怪触控
     const btnNode = $floatBtn[0];
     let isDragging = false;
     let startX, startY, initX, initY;
 
     btnNode.addEventListener('pointerdown', (e) => {
-        btnNode.setPointerCapture(e.pointerId);
+        // 排除掉不该响应的右键
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+        try { btnNode.setPointerCapture(e.pointerId); } catch(err) {}
         isDragging = false;
 
-        startX = e.clientX;
-        startY = e.clientY;
+        // 兼容一些极端浏览器的坐标丢失问题
+        startX = e.clientX || 0;
+        startY = e.clientY || 0;
         const rect = btnNode.getBoundingClientRect();
         initX = rect.left;
         initY = rect.top;
 
         const onPointerMove = (ev) => {
-            const dx = ev.clientX - startX;
-            const dy = ev.clientY - startY;
-            if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+            const currentX = ev.clientX || 0;
+            const currentY = ev.clientY || 0;
+            const dx = currentX - startX;
+            const dy = currentY - startY;
+
+            // 手机端手指接触面大，滑动阈值放大至 5 像素
+            if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
                 isDragging = true;
-                btnNode.style.left = (initX + dx) + 'px';
-                btnNode.style.top = (initY + dy) + 'px';
-                btnNode.style.right = 'auto';
-                btnNode.style.bottom = 'auto';
-                btnNode.style.transition = 'none'; 
+                // 拖动时也必须使用 !important 覆写，确保雷打不动
+                btnNode.style.setProperty('left', (initX + dx) + 'px', 'important');
+                btnNode.style.setProperty('top', (initY + dy) + 'px', 'important');
+                btnNode.style.setProperty('right', 'auto', 'important');
+                btnNode.style.setProperty('bottom', 'auto', 'important');
+                btnNode.style.setProperty('transition', 'none', 'important');
             }
         };
 
@@ -143,8 +175,8 @@ const toggleFloatingButton = (show) => {
             btnNode.removeEventListener('pointermove', onPointerMove);
             btnNode.removeEventListener('pointerup', onPointerUp);
             btnNode.removeEventListener('pointercancel', onPointerUp);
-            btnNode.releasePointerCapture(ev.pointerId);
-            btnNode.style.transition = 'transform 0.2s'; 
+            try { btnNode.releasePointerCapture(ev.pointerId); } catch(err) {}
+            btnNode.style.setProperty('transition', 'transform 0.2s', 'important');
         };
 
         btnNode.addEventListener('pointermove', onPointerMove);
@@ -152,6 +184,7 @@ const toggleFloatingButton = (show) => {
         btnNode.addEventListener('pointercancel', onPointerUp);
     });
 
+    // ✨ 点击防误触鉴定
     btnNode.addEventListener('click', (e) => {
         if (isDragging) {
             e.preventDefault();
