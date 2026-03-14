@@ -30,9 +30,9 @@ const formatPositionBadge = (pos) => {
 
 const getCurrentPersonaId = (ctx, pus) => {
     if (!pus) return null;
-    if (ctx.chatMetadata && ctx.chatMetadata.persona) return ctx.chatMetadata.persona; 
-    if (pus.default_persona) return pus.default_persona; 
-    if (pus.personas && ctx.name1) { 
+    if (ctx.chatMetadata && ctx.chatMetadata.persona) return ctx.chatMetadata.persona;
+    if (pus.default_persona) return pus.default_persona;
+    if (pus.personas && ctx.name1) {
         for (let [id, name] of Object.entries(pus.personas)) {
             if (name === ctx.name1) return id;
         }
@@ -45,7 +45,7 @@ const getPersonaWbs = () => {
     try {
         const ctx = typeof SillyTavern !== 'undefined' ? SillyTavern.getContext() : (typeof getContext === 'function' ? getContext() : {});
         const pus = ctx.powerUserSettings || {};
-        
+
         if (pus.persona_description_lorebook) books.push(pus.persona_description_lorebook);
 
         const activeId = getCurrentPersonaId(ctx, pus);
@@ -85,23 +85,20 @@ const rebindPersonaWorldbook = async (newWbName, oldWbToUnbind = null) => {
     if (typeof $('#persona_lore_button').toggleClass === 'function') $('#persona_lore_button').toggleClass('world_set', !!newWbName);
 };
 
-// ================== ✨ 鹿酱特调加强版：贴心的主界面悬浮球控制逻辑 ==================
 const toggleFloatingButton = (show) => {
     if (!show) {
         $("#lulu-wb-floating-btn").remove();
         $("#lulu-wb-floating-style").remove(); // 清理专属样式
         return;
     }
-    if ($("#lulu-wb-floating-btn").length > 0) return; 
+    if ($("#lulu-wb-floating-btn").length > 0) return;
 
     const styleHtml = `
         <style id="lulu-wb-floating-style">
             #lulu-wb-floating-btn {
                 position: fixed !important;
-                /* 避开手机底部的输入框和顶部的导航，直接降生在屏幕右侧的中间！ */
                 top: 45vh !important;
                 right: 15px !important;
-                /* 抹除干扰属性 */
                 bottom: auto !important;
                 left: auto !important;
                 width: 48px !important;
@@ -116,9 +113,9 @@ const toggleFloatingButton = (show) => {
                 font-size: 22px !important;
                 cursor: pointer !important;
                 box-shadow: 0 4px 12px rgba(0,0,0,0.6) !important;
-                z-index: 2147483647 !important; /* 最高维度的层级！ */
+                z-index: 2147483647 !important;
                 user-select: none !important;
-                touch-action: none !important; /* 彻底切断底层滑动阻击 */
+                touch-action: none !important;
                 -webkit-tap-highlight-color: transparent !important;
                 transition: transform 0.2s !important;
             }
@@ -131,22 +128,18 @@ const toggleFloatingButton = (show) => {
 
     const $floatBtn = $("<div>", { id: "lulu-wb-floating-btn", title: "点击打开世界书管理面板\n(可以自由拖拽哦~)" })
         .append($("<i>", { class: "fa-solid fa-book-atlas" }))
-        // 在酒馆中，app_container 是最稳固的实体容器
         .appendTo("#app_container, body");
 
-    // ✨ 终极拖拽魔法：深度治愈手机端的奇怪触控
     const btnNode = $floatBtn[0];
     let isDragging = false;
     let startX, startY, initX, initY;
 
     btnNode.addEventListener('pointerdown', (e) => {
-        // 排除掉不该响应的右键
         if (e.pointerType === 'mouse' && e.button !== 0) return;
 
         try { btnNode.setPointerCapture(e.pointerId); } catch(err) {}
         isDragging = false;
 
-        // 兼容一些极端浏览器的坐标丢失问题
         startX = e.clientX || 0;
         startY = e.clientY || 0;
         const rect = btnNode.getBoundingClientRect();
@@ -159,10 +152,8 @@ const toggleFloatingButton = (show) => {
             const dx = currentX - startX;
             const dy = currentY - startY;
 
-            // 手机端手指接触面大，滑动阈值放大至 5 像素
             if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
                 isDragging = true;
-                // 拖动时也必须使用 !important 覆写，确保雷打不动
                 btnNode.style.setProperty('left', (initX + dx) + 'px', 'important');
                 btnNode.style.setProperty('top', (initY + dy) + 'px', 'important');
                 btnNode.style.setProperty('right', 'auto', 'important');
@@ -184,7 +175,6 @@ const toggleFloatingButton = (show) => {
         btnNode.addEventListener('pointercancel', onPointerUp);
     });
 
-    // ✨ 点击防误触鉴定
     btnNode.addEventListener('click', (e) => {
         if (isDragging) {
             e.preventDefault();
@@ -198,7 +188,6 @@ const toggleFloatingButton = (show) => {
 if (localStorage.getItem('lulu_wb_floating_enabled') === 'true') {
     toggleFloatingButton(true);
 }
-
 
 $menuBtn.on('click', async () => {
     $("#options").hide();
@@ -510,20 +499,27 @@ $menuBtn.on('click', async () => {
                     <div class="wb-action-btn wb-nowrap-btn" id="wb-btn-entry-all" style="padding: 6px;"><i class="fa-solid fa-check-double"></i> 启用全部</div>
                     <div class="wb-action-btn wb-nowrap-btn" id="wb-btn-entry-none" style="padding: 6px;"><i class="fa-regular fa-square"></i> 关闭全部</div>
                     <div class="wb-action-btn wb-nowrap-btn btn-success" id="wb-btn-entry-add" style="padding: 6px; border:none;"><i class="fa-solid fa-plus"></i> 新建条目</div>
-                    <div class="wb-action-btn wb-nowrap-btn btn-danger" id="wb-btn-entry-batch" style="padding: 6px; border:none;"><i class="fa-solid fa-trash-can"></i> 批量删除</div>
+                    <div class="wb-action-btn wb-nowrap-btn btn-danger" id="wb-btn-entry-batch" style="padding: 6px; border:none;"><i class="fa-solid fa-trash-can"></i> 批量操作</div>
                 </div>
 
                 <div id="wb-entry-batch-actions" style="display: none; background: rgba(255, 107, 107, 0.1); border: 1px dashed #ff6b6b; border-radius: 6px; padding: 10px; margin-bottom: 10px; flex-direction: column; gap: 10px;">
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap: wrap; gap: 10px;">
-                        <span style="color: #ff6b6b; font-weight: bold; font-size: 14px; margin-top: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> 待删除的条目：</span>
-                        <button class="menu_button interactable btn-danger wb-nowrap-btn" id="wb-btn-entry-confirm-delete" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-burst"></i> 暂存移除所选项 (<span id="wb-entry-batch-count">0</span>)</button>
+                        <div style="display:flex; align-items:center; gap: 8px; flex-wrap: wrap;">
+                             <span style="color: #ff6b6b; font-weight: bold; font-size: 14px;"><i class="fa-solid fa-triangle-exclamation"></i> 批量 (<span id="wb-entry-batch-count">0</span>)：</span>
+                             <button class="menu_button interactable wb-nowrap-btn" id="wb-btn-entry-batch-select-all" style="margin: 0; padding: 4px 10px; font-size: 12px; background: rgba(0,0,0,0.2); border: 1px solid var(--SmartThemeBorderColor);"><i class="fa-solid fa-check-double"></i> 勾选当前项</button>
+                             <button class="menu_button interactable wb-nowrap-btn" id="wb-btn-entry-batch-deselect-all" style="margin: 0; padding: 4px 10px; font-size: 12px; background: rgba(0,0,0,0.2); border: 1px solid var(--SmartThemeBorderColor);"><i class="fa-regular fa-square"></i> 撤销勾选</button>
+                        </div>
+                        <div style="display:flex; gap: 8px; flex-wrap: wrap;">
+                             <button class="menu_button interactable btn-warning wb-nowrap-btn" id="wb-btn-entry-batch-group" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px; background: rgba(252, 196, 25, 0.15); color: #fcc419;"><i class="fa-solid fa-folder-tree"></i> 批量改组</button>
+                             <button class="menu_button interactable btn-danger wb-nowrap-btn" id="wb-btn-entry-confirm-delete" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-burst"></i> 暂存移除</button>
+                        </div>
                     </div>
                 </div>
 
                 <div class="wb-snapshot-list scrollableInnerFull" id="wb-entry-container" style="display: flex; flex-direction: column; max-height: 38vh;"></div>
                 <div class="wb-btn-group" style="margin-top: 15px;">
                     <div class="wb-action-btn wb-nowrap-btn btn-success" id="wb-btn-entry-save" style="border:none;"><i class="fa-solid fa-floppy-disk"></i> 确认并覆盖源文件</div>
-                    <div class="wb-action-btn wb-nowrap-btn" id="wb-btn-entry-cancel" style="color:#888;"><i class="fa-solid fa-arrow-left"></i> 放弃更改并返回</div>
+                    <div class="wb-action-btn wb-nowrap-btn" id="wb-btn-entry-cancel" style="color:#888;"><i class="fa-solid fa-arrow-left"></i> 返回上一页</div>
                 </div>
             </div>
 
@@ -597,7 +593,7 @@ $menuBtn.on('click', async () => {
     `);
 
     const isFloatingEnabledNow = localStorage.getItem('lulu_wb_floating_enabled') === 'true';
-    $ui.find('#wb-toggle-floating').prop('checked', isFloatingEnabledNow); 
+    $ui.find('#wb-toggle-floating').prop('checked', isFloatingEnabledNow);
 
     $ui.find('#wb-toggle-floating').on('change', function() {
         const isEnable = $(this).is(':checked');
@@ -979,10 +975,17 @@ $menuBtn.on('click', async () => {
                 $cCont.append('<div style="color:gray; font-size:13px; padding:4px;">当前角色卡非常干净，一本世界书都没绑定呢。</div>');
             } else {
                 cBooks.forEach(wb => {
+                     const isPrimary = wb === charBooksObj.primary;
+                     const tagLabelHtml = isPrimary
+                         ? `<span style="font-size:10px; background:var(--SmartThemeQuoteColor); color:#fff; padding:2px 5px; border-radius:4px; margin-left:4px; margin-bottom:2px;">主</span>`
+                         : `<span style="font-size:10px; border:1px solid gray; color:gray; background:transparent; padding:1px 4px; border-radius:4px; margin-left:4px; margin-bottom:2px;">附</span>`;
+
                      const $item = $(`<div style="display:inline-flex; align-items:center; gap:8px; background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeQuoteColor); padding:6px 12px; border-radius:4px; transition:0.2s;">
-                        <span style="font-weight:bold; font-size:14px; color:var(--SmartThemeQuoteColor); cursor:pointer;" title="点击编辑内容" class="wb-assoc-entry-edit"><i class="fa-solid fa-robot"></i> ${wb}</span>
+                        <span style="font-weight:bold; font-size:14px; color:var(--SmartThemeQuoteColor); cursor:pointer; display:flex; align-items:center;" title="点击编辑内容" class="wb-assoc-entry-edit"><i class="fa-solid fa-robot" style="margin-right: 5px;"></i> ${wb} ${tagLabelHtml}</span>
                         <div class="hover-red" style="cursor:pointer; color:gray; margin-left: 4px;" title="解除绑定"><i class="fa-solid fa-xmark"></i></div>
                      </div>`);
+                     // ========== 升级完毕 ==========
+
                      $item.find('.wb-assoc-entry-edit').on('click', () => openEntryTuneView(wb, '#wb-assoc-view'));
                      $item.find('.hover-red').hover(function(){$(this).css('color','#ff6b6b')}, function(){$(this).css('color','gray')});
                      $item.find('.hover-red').on('click', async () => {
@@ -1429,7 +1432,7 @@ $menuBtn.on('click', async () => {
         tuneWbName = wbName; $ui.find('#wb-entry-title').text(wbName); $ui.find('#wb-entry-search').val(''); $ui.find('#wb-entry-sort').val('default');
         await withLoadingOverlay(async () => { tuneEntries = JSON.parse(JSON.stringify(await getWorldbook(wbName))); }, `提取内容...`);
         isEntryBatchMode = false; entryBatchSelected.clear();
-        $ui.find('#wb-btn-entry-batch').removeClass('btn-warning').addClass('btn-danger').html('<i class="fa-solid fa-trash-can"></i> 批量删除');
+        $ui.find('#wb-btn-entry-batch').removeClass('btn-warning').addClass('btn-danger').html('<i class="fa-solid fa-layer-group"></i> 批量操作');
         $ui.find('#wb-entry-batch-actions').hide();
         renderEntryList();
         $ui.find('#wb-main-view, #wb-detail-view, #wb-assoc-view').hide();
@@ -1441,7 +1444,7 @@ $menuBtn.on('click', async () => {
         if(isEntryBatchMode) {
             entryBatchSelected.clear(); $(this).removeClass('btn-danger').addClass('btn-warning').html('<i class="fa-solid fa-xmark"></i> 退出批量'); $ui.find('#wb-entry-batch-actions').css('display', 'flex');
         } else {
-            $(this).removeClass('btn-warning').addClass('btn-danger').html('<i class="fa-solid fa-trash-can"></i> 批量删除'); $ui.find('#wb-entry-batch-actions').hide();
+            $(this).removeClass('btn-warning').addClass('btn-danger').html('<i class="fa-solid fa-layer-group"></i> 批量操作'); $ui.find('#wb-entry-batch-actions').hide();
         }
         renderEntryList();
     });
@@ -1454,6 +1457,20 @@ $menuBtn.on('click', async () => {
              toastr.success("勾选的内容都暂存移除了，记得点确认保存把变更写入源文件哦！");
         }
     });
+
+    $ui.find('#wb-btn-entry-batch-group').on('click', async () => {
+        if(entryBatchSelected.size === 0) return toastr.warning("请先选中想要分类的条目哦~");
+        let newGroup = await SillyTavern.callGenericPopup("请输入这些条目想去的分组名称\\n(留空的话它们就会变回 '未分类' 哦):", SillyTavern.POPUP_TYPE.INPUT, "");
+        if (newGroup !== null) {
+            entryBatchSelected.forEach(idx => tuneEntries[idx].group = newGroup.trim());
+            entryBatchSelected.clear();
+            $ui.find('#wb-entry-batch-count').text("0");
+            renderEntryList();
+            toastr.success("批量改组完成！记得点绿色保存按钮才会生效哦~");
+        }
+    });
+
+    let wbEntryGroupState = {};
 
     const renderEntryList = () => {
         const keyword = $ui.find('#wb-entry-search').val().toLowerCase(), sortMode = $ui.find('#wb-entry-sort').val() || 'default', $container = $ui.find('#wb-entry-container').empty();
@@ -1469,35 +1486,142 @@ $menuBtn.on('click', async () => {
         else if (sortMode === 'az') sortedEntries.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'zh-CN'));
         else if (sortMode === 'za') sortedEntries.sort((a, b) => (b.name || '').localeCompare(a.name || '', 'zh-CN'));
 
-        sortedEntries.forEach((entry) => {
-            const index = tuneEntries.indexOf(entry), strategy = entry.strategy || { type: 'constant', keys:[] };
-            const keysInfo = strategy.type !== 'selective' ? `<span style="color:gray;">[常驻无触发词]</span>` : `🔑 ${(strategy.keys||[]).join(', ')||'<span style="color:#d63384">未设置词汇</span>'}`;
-            const posBadgeHtml = `<span class="badge-grey" style="color:var(--SmartThemeBodyColor); background:none; border-color:var(--SmartThemeBorderColor);">${formatPositionBadge(entry.position)}</span>`;
-
-            const $item = $(`<div style="display:flex; align-items:flex-start; gap:12px; padding:10px; border-left: 4px solid ${entry.enabled ? 'var(--okGreen)' : 'gray'};"></div>`);
-
-            let $chk;
-            if (isEntryBatchMode) {
-                $chk = $(`<input type="checkbox" style="transform: scale(1.2); flex-shrink:0; margin-top:2px; accent-color:#ff6b6b;">`).prop('checked', entryBatchSelected.has(index)).on('change', function() {
-                    $(this).is(':checked') ? entryBatchSelected.add(index) : entryBatchSelected.delete(index); $ui.find('#wb-entry-batch-count').text(entryBatchSelected.size);
-                });
-            } else {
-                $chk = $(`<input type="checkbox" style="transform: scale(1.2); flex-shrink:0; margin-top:2px;">`).prop('checked', entry.enabled).on('change', function() { entry.enabled = $(this).is(':checked'); renderEntryList(); });
-            }
-
-            const $info = $(`<div style="flex:1; min-width:0; cursor:${isEntryBatchMode?'pointer':'default'};"><div style="font-weight:bold; margin-bottom: 5px; font-size:14px; word-break:break-all;">${entry.name || '未定义模块'}</div><div style="font-size:11px;color:gray;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${strategy.type !== 'selective' ? '<span class="badge-blue">常驻</span>' : '<span class="badge-green">匹配</span>'}${posBadgeHtml} <span style="margin-left:5px;">${keysInfo}</span></div></div>`);
-            if (isEntryBatchMode) $info.on('click', () => { $chk.prop('checked', !$chk.is(':checked')).trigger('change'); });
-
-            const $right = $('<div style="display:flex; gap:8px; margin-left:auto; flex-shrink:0;"></div>');
-            $right.append($('<button class="menu_button interactable wb-nowrap-btn" style="color:var(--SmartThemeQuoteColor); margin:0;" title="修改内容"><i class="fa fa-pen-nib"></i></button>').on('click', () => openDetailEditView(index)));
-            $right.append($('<button class="menu_button interactable wb-nowrap-btn" style="color:#ff6b6b; margin:0;" title="删除条目"><i class="fa fa-trash"></i></button>').on('click', async () => {
-                if(await SillyTavern.callGenericPopup(`确认删除 [${entry.name || '未命名'}]？`, SillyTavern.POPUP_TYPE.CONFIRM) === SillyTavern.POPUP_RESULT.AFFIRMATIVE) { tuneEntries.splice(index, 1); renderEntryList(); }
-            }));
-
-            if(isEntryBatchMode) $right.hide();
-
-            $item.append($chk, $info, $right); $container.append($item);
+        $ui.find('#wb-btn-entry-batch-select-all').off('click').on('click', () => {
+            sortedEntries.forEach(entry => entryBatchSelected.add(tuneEntries.indexOf(entry)));
+            renderEntryList();
         });
+        $ui.find('#wb-btn-entry-batch-deselect-all').off('click').on('click', () => {
+            sortedEntries.forEach(entry => entryBatchSelected.delete(tuneEntries.indexOf(entry)));
+            renderEntryList();
+        });
+
+        const groupedEntries = {};
+        sortedEntries.forEach((entry) => {
+             let g = (entry.group && entry.group.trim() !== '') ? entry.group.trim() : "📁 未分类条目";
+             if (!groupedEntries[g]) groupedEntries[g] = [];
+             groupedEntries[g].push(entry);
+        });
+
+        for (const [groupName, gEntries] of Object.entries(groupedEntries)) {
+             const isCollapsed = wbEntryGroupState[groupName] === true;
+
+             const $gHeader = $(`<div style="background: rgba(0,0,0,0.15); padding:8px 12px; margin-top:8px; border-radius:6px; cursor:pointer; font-weight:bold; color:var(--SmartThemeBodyColor); border:1px solid var(--SmartThemeBorderColor); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                 <span><i class="fa-solid ${isCollapsed ? 'fa-chevron-right' : 'fa-chevron-down'}" style="margin-right:6px; color:var(--SmartThemeQuoteColor);"></i> ${groupName} <span style="font-size:12px; color:gray; font-weight:normal; margin-left:4px;">( ${gEntries.length} 项 )</span></span>
+                 <div style="display:flex; gap:6px;">
+                     <button class="menu_button interactable wb-nowrap-btn wb-group-enable-all" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(81, 207, 102, 0.15); color:#51cf66; border:1px solid rgba(81, 207, 102, 0.5);" title="开启该组所有条目"><i class="fa-solid fa-check"></i> 全开</button>
+                     <button class="menu_button interactable wb-nowrap-btn wb-group-disable-all" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(150, 150, 150, 0.15); color:gray; border:1px solid rgba(150, 150, 150, 0.5);" title="关闭该组所有条目"><i class="fa-solid fa-xmark"></i> 全关</button>
+                     ${groupName !== "📁 未分类条目" ? `<button class="menu_button interactable wb-nowrap-btn wb-group-delete" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(255, 107, 107, 0.15); color:#ff6b6b; border:1px solid rgba(255, 107, 107, 0.5);" title="删除分组或解散"><i class="fa-solid fa-trash"></i> 删除</button>` : ''}
+                 </div>
+             </div>`);
+
+             const $gContainer = $(`<div style="display:${isCollapsed ? 'none' : 'flex'}; flex-direction:column; padding-left:10px; margin-top:6px; border-left: 2px solid var(--SmartThemeBorderColor); gap: 4px;"></div>`);
+
+             $gHeader.on('click', (e) => {
+                 if ($(e.target).closest('button').length) return;
+                 wbEntryGroupState[groupName] = !isCollapsed;
+                 renderEntryList();
+             });
+
+             // 组内全开
+             $gHeader.find('.wb-group-enable-all').on('click', (e) => {
+                 e.stopPropagation();
+                 gEntries.forEach(entry => entry.enabled = true);
+                 renderEntryList();
+             });
+
+             // 组内全关
+             $gHeader.find('.wb-group-disable-all').on('click', (e) => {
+                 e.stopPropagation();
+                 gEntries.forEach(entry => entry.enabled = false);
+                 renderEntryList();
+             });
+
+             // ============ ✨ 修复误删 Bug 的安全验证逻辑 ============
+             $gHeader.find('.wb-group-delete').on('click', async (e) => {
+                e.stopPropagation();
+
+                const magicMsg = `<div style="margin-bottom:8px;">想要对【<strong style="color:var(--SmartThemeQuoteColor);">${groupName}</strong>】做什么呢？</div>
+                                  <span style="font-size:12px; color:gray;">(当前组内包含 ${gEntries.length} 个条目)</span>`;
+
+                const btnRes = await SillyTavern.callGenericPopup(
+                    magicMsg,
+                    SillyTavern.POPUP_TYPE.TEXT,
+                    "",
+                    {
+                        okButton: "点错了取消", 
+                        customButtons: [
+                            {text: "彻底清空分组与条目", result: 888, classes: ["btn-danger"]},
+                            {text: "仅解散分组(条目回未分类)", result: 999, classes: ["btn-warning"]}
+                        ] 
+                    }
+                );
+
+                if (btnRes === 888) {
+                    const uidsToRemove = gEntries.map(entry => entry.uid);
+                    tuneEntries = tuneEntries.filter(entry => !uidsToRemove.includes(entry.uid));
+                    delete wbEntryGroupState[groupName];
+                    renderEntryList();
+                    toastr.success(`【${groupName}】内容已被彻底扫除干净啦！记得按绿色保存按钮哦~`);
+                } else if (btnRes === 999) {
+                    gEntries.forEach(entry => entry.group = "");
+                    delete wbEntryGroupState[groupName];
+                    renderEntryList();
+                    toastr.success(`【${groupName}】已解散，里面的内容已经安全返回未分类区啦。`);
+                }
+            });
+
+             gEntries.forEach((entry) => {
+                const index = tuneEntries.indexOf(entry);
+                const strategy = entry.strategy || { type: 'constant', keys:[] };
+                const keysInfo = strategy.type !== 'selective' ? `<span style="color:gray;">[常驻无触发词]</span>` : `🔑 ${(strategy.keys||[]).join(', ')||'<span style="color:#d63384">未设置词汇</span>'}`;
+                const posBadgeHtml = `<span class="badge-grey" style="color:var(--SmartThemeBodyColor); background:none; border-color:var(--SmartThemeBorderColor);">${formatPositionBadge(entry.position)}</span>`;
+
+                const isEn = entry.enabled;
+                const dynamicBg = isEn ? 'var(--SmartThemeBotMesColor)' : 'rgba(125,125,125,0.08)'; // 没开启时蒙上一层灰黑
+                const dynamicOpacity = isEn ? '1' : '0.55'; // 没开启时变透明
+                const $item = $(`<div class="lulu-wb-entry-item" style="display:flex; align-items:flex-start; gap:12px; padding:10px; border-left: 4px solid ${isEn ? 'var(--okGreen)' : 'gray'}; background:${dynamicBg}; border-radius:4px; opacity:${dynamicOpacity}; transition: 0.2s;"></div>`);
+
+                // 停留在上面时略微恢复透明度方便查看
+                $item.hover(
+                    function() { if (!isEn) $(this).css('opacity', '1'); },
+                    function() { if (!isEn) $(this).css('opacity', '0.55'); }
+                );
+
+                let $chk;
+                if (isEntryBatchMode) {
+                    $chk = $(`<input type="checkbox" style="transform: scale(1.2); flex-shrink:0; margin-top:2px; accent-color:#ff6b6b;">`).prop('checked', entryBatchSelected.has(index)).on('change', function() {
+                        $(this).is(':checked') ? entryBatchSelected.add(index) : entryBatchSelected.delete(index); $ui.find('#wb-entry-batch-count').text(entryBatchSelected.size);
+                    });
+                } else {
+                    $chk = $(`<input type="checkbox" style="transform: scale(1.2); flex-shrink:0; margin-top:2px;">`).prop('checked', entry.enabled).on('change', function() { entry.enabled = $(this).is(':checked'); renderEntryList(); });
+                }
+
+                const $info = $(`<div style="flex:1; min-width:0; cursor:${isEntryBatchMode?'pointer':'default'};"><div style="font-weight:bold; margin-bottom: 5px; font-size:14px; word-break:break-all;">${entry.name || '未定义模块'}</div><div style="font-size:11px;color:gray;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${strategy.type !== 'selective' ? '<span class="badge-blue">常驻</span>' : '<span class="badge-green">匹配</span>'}${posBadgeHtml} <span style="margin-left:5px;">${keysInfo}</span></div></div>`);
+                if (isEntryBatchMode) $info.on('click', () => { $chk.prop('checked', !$chk.is(':checked')).trigger('change'); });
+
+                const $right = $('<div style="display:flex; gap:8px; margin-left:auto; flex-shrink:0;"></div>');
+
+                if(!isEntryBatchMode) {
+                     $right.append($('<button class="menu_button interactable wb-nowrap-btn" style="color:#fcc419; margin:0;" title="设置此条目的分组"><i class="fa fa-folder-tree"></i></button>').on('click', async () => {
+                         let res = await SillyTavern.callGenericPopup(`设置 [${entry.name||'未命名'}] 的分组名称\\n(同一个世界书内，名字相同就会归为一组，留空代表未分类):`, SillyTavern.POPUP_TYPE.INPUT, entry.group || "");
+                         if(res !== null) { entry.group = res.trim(); renderEntryList(); }
+                     }));
+                }
+
+                $right.append($('<button class="menu_button interactable wb-nowrap-btn" style="color:var(--SmartThemeQuoteColor); margin:0;" title="修改内容"><i class="fa fa-pen-nib"></i></button>').on('click', () => openDetailEditView(index)));
+                $right.append($('<button class="menu_button interactable wb-nowrap-btn" style="color:#ff6b6b; margin:0;" title="删除条目"><i class="fa fa-trash"></i></button>').on('click', async () => {
+                    if(await SillyTavern.callGenericPopup(`确认删除 [${entry.name || '未命名'}]？`, SillyTavern.POPUP_TYPE.CONFIRM) === SillyTavern.POPUP_RESULT.AFFIRMATIVE) { tuneEntries.splice(index, 1); renderEntryList(); }
+                }));
+
+                if(isEntryBatchMode) $right.hide();
+
+                $item.append($chk, $info, $right);
+                $gContainer.append($item);
+             });
+
+             $container.append($gHeader).append($gContainer);
+        }
+
         if (sortedEntries.length === 0) $container.html(`<div style="color: gray; padding: 10px; text-align: center;">${tuneEntries.length > 0 ? '搜查不到匹配内容呢。': '完全是一本空壳书呀。'}</div>`);
     };
 
@@ -1505,16 +1629,16 @@ $menuBtn.on('click', async () => {
     $ui.find('#wb-btn-entry-all').off('click').on('click', () => { tuneEntries.forEach(e => e.enabled = true); renderEntryList(); });
     $ui.find('#wb-btn-entry-none').off('click').on('click', () => { tuneEntries.forEach(e => e.enabled = false); renderEntryList(); });
     $ui.find('#wb-btn-entry-add').off('click').on('click', () => {
-        tuneEntries.unshift({ uid: Date.now() + Math.random(), name: "新增编辑条目", enabled: true, content: "", strategy: { type: 'constant', keys:[] }, position: { type: 'at_depth', role: 'system', depth: 0, order: 100 }, recursion: { prevent_incoming: false, prevent_outgoing: false, delay_until: null }, exclude_recursion: false, prevent_recursion: false });
+        tuneEntries.unshift({ uid: Date.now() + Math.random(), name: "新增编辑条目", enabled: true, content: "", group: "", strategy: { type: 'constant', keys:[] }, position: { type: 'at_depth', role: 'system', depth: 0, order: 100 }, recursion: { prevent_incoming: false, prevent_outgoing: false, delay_until: null }, exclude_recursion: false, prevent_recursion: false });
         renderEntryList(); openDetailEditView(0);
     });
 
     $ui.find('#wb-btn-entry-save').on('click', async () => {
         await withLoadingOverlay(async () => { await replaceWorldbook(tuneWbName, tuneEntries); }, `写入中...`);
-        $ui.find('#wb-entry-view').hide();
-        $ui.find(tuneReturnView).fadeIn(200);
+        toastr.success(`[${tuneWbName}] 的修改已经成功保存啦！`); 
         if(tuneReturnView === '#wb-main-view') renderData();
     });
+
     $ui.find('#wb-btn-entry-cancel').on('click', () => {
         $ui.find('#wb-entry-view').hide();
         $ui.find(tuneReturnView).fadeIn(200);
@@ -1533,7 +1657,6 @@ $menuBtn.on('click', async () => {
         $ui.find('#wb-det-exclude-recursion').prop('checked', !!isExclude); $ui.find('#wb-det-prevent-recursion').prop('checked', !!isPrevent);
         $ui.find('#wb-entry-view').hide(); $ui.find('#wb-detail-view').fadeIn(200);
     };
-
     $ui.find('#wb-btn-det-save').on('click', () => {
         if(tuneDetailIndex === -1) return;
         const e = tuneEntries[tuneDetailIndex], pos = $ui.find('#wb-det-position').val(), order = parseInt($ui.find('#wb-det-order').val()) || 100;
@@ -1553,3 +1676,4 @@ $menuBtn.on('click', async () => {
 
     await popup.show();
 });
+   
