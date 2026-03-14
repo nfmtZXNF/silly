@@ -85,10 +85,12 @@ const rebindPersonaWorldbook = async (newWbName, oldWbToUnbind = null) => {
     if (typeof $('#persona_lore_button').toggleClass === 'function') $('#persona_lore_button').toggleClass('world_set', !!newWbName);
 };
 
+window.luluWbInitTabType = 'global';
+
 const toggleFloatingButton = (show) => {
     if (!show) {
         $("#lulu-wb-floating-btn").remove();
-        $("#lulu-wb-floating-style").remove(); // 清理专属样式
+        $("#lulu-wb-floating-style").remove();
         return;
     }
     if ($("#lulu-wb-floating-btn").length > 0) return;
@@ -99,8 +101,6 @@ const toggleFloatingButton = (show) => {
                 position: fixed !important;
                 top: 45vh !important;
                 right: 15px !important;
-                bottom: auto !important;
-                left: auto !important;
                 width: 48px !important;
                 height: 48px !important;
                 background: var(--SmartThemeBotMesColor, #2a2e33) !important;
@@ -122,65 +122,69 @@ const toggleFloatingButton = (show) => {
             #lulu-wb-floating-btn:active {
                 transform: scale(0.9) !important;
             }
+            .lulu-float-menu-opts {
+                position: absolute; right: 55px; top: 50%; transform: translateY(-50%); display: flex; gap: 8px;
+                background: var(--SmartThemeBlurTintColor); padding: 8px; border-radius: 8px; border: 1px solid var(--SmartThemeBorderColor);
+                box-shadow: 0 4px 8px rgba(0,0,0,0.4); opacity: 0; pointer-events: none; transition: 0.2s; white-space: nowrap;
+            }
+            .lulu-float-menu-opts.show { opacity: 1; pointer-events: auto; }
+            .lulu-float-btn-opt { cursor: pointer; padding: 6px 12px; font-size: 13px; font-weight: bold; color: var(--SmartThemeBodyColor); background: var(--SmartThemeBotMesColor); border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px; }
+            .lulu-float-btn-opt:hover { background: var(--SmartThemeQuoteColor); color: #fff; }
         </style>
     `;
     $("head").append(styleHtml);
 
-    const $floatBtn = $("<div>", { id: "lulu-wb-floating-btn", title: "点击打开世界书管理面板\n(可以自由拖拽哦~)" })
+    const $floatBtn = $("<div>", { id: "lulu-wb-floating-btn" })
         .append($("<i>", { class: "fa-solid fa-book-atlas" }))
+        .append($("<div>", { class: "lulu-float-menu-opts" })
+            .append($("<button>", { class: "lulu-float-btn-opt", html: '<i class="fa-solid fa-earth-asia"></i> 全局' }).on('click', (e) => { e.stopPropagation(); window.luluWbInitTabType = 'global'; $("#option_lulu_wb_manager").click(); }))
+            .append($("<button>", { class: "lulu-float-btn-opt", html: '<i class="fa-solid fa-user-astronaut"></i> 角色' }).on('click', (e) => { e.stopPropagation(); window.luluWbInitTabType = 'char'; $("#option_lulu_wb_manager").click(); }))
+        )
         .appendTo("#app_container, body");
 
     const btnNode = $floatBtn[0];
     let isDragging = false;
-    let startX, startY, initX, initY;
+    let startX, startY, initX, initY, clickTimer;
 
     btnNode.addEventListener('pointerdown', (e) => {
+        if ($(e.target).closest('.lulu-float-menu-opts').length) return;
         if (e.pointerType === 'mouse' && e.button !== 0) return;
-
         try { btnNode.setPointerCapture(e.pointerId); } catch(err) {}
         isDragging = false;
-
-        startX = e.clientX || 0;
-        startY = e.clientY || 0;
-        const rect = btnNode.getBoundingClientRect();
-        initX = rect.left;
-        initY = rect.top;
+        startX = e.clientX || 0; startY = e.clientY || 0;
+        const rect = btnNode.getBoundingClientRect(); initX = rect.left; initY = rect.top;
 
         const onPointerMove = (ev) => {
-            const currentX = ev.clientX || 0;
-            const currentY = ev.clientY || 0;
-            const dx = currentX - startX;
-            const dy = currentY - startY;
-
+            const dx = (ev.clientX || 0) - startX; const dy = (ev.clientY || 0) - startY;
             if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
                 isDragging = true;
+                $floatBtn.find('.lulu-float-menu-opts').removeClass('show');
                 btnNode.style.setProperty('left', (initX + dx) + 'px', 'important');
                 btnNode.style.setProperty('top', (initY + dy) + 'px', 'important');
                 btnNode.style.setProperty('right', 'auto', 'important');
-                btnNode.style.setProperty('bottom', 'auto', 'important');
                 btnNode.style.setProperty('transition', 'none', 'important');
             }
         };
 
         const onPointerUp = (ev) => {
-            btnNode.removeEventListener('pointermove', onPointerMove);
-            btnNode.removeEventListener('pointerup', onPointerUp);
-            btnNode.removeEventListener('pointercancel', onPointerUp);
+            btnNode.removeEventListener('pointermove', onPointerMove); btnNode.removeEventListener('pointerup', onPointerUp); btnNode.removeEventListener('pointercancel', onPointerUp);
             try { btnNode.releasePointerCapture(ev.pointerId); } catch(err) {}
             btnNode.style.setProperty('transition', 'transform 0.2s', 'important');
         };
 
-        btnNode.addEventListener('pointermove', onPointerMove);
-        btnNode.addEventListener('pointerup', onPointerUp);
-        btnNode.addEventListener('pointercancel', onPointerUp);
+        btnNode.addEventListener('pointermove', onPointerMove); btnNode.addEventListener('pointerup', onPointerUp); btnNode.addEventListener('pointercancel', onPointerUp);
     });
 
     btnNode.addEventListener('click', (e) => {
-        if (isDragging) {
-            e.preventDefault();
-            e.stopPropagation();
-        } else {
-            $("#option_lulu_wb_manager").click();
+        if ($(e.target).closest('.lulu-float-menu-opts').length) return;
+        if (isDragging) { e.preventDefault(); e.stopPropagation(); }
+        else {
+            const $menu = $floatBtn.find('.lulu-float-menu-opts');
+            $menu.toggleClass('show');
+            clearTimeout(clickTimer);
+            if ($menu.hasClass('show')) {
+                clickTimer = setTimeout(() => $menu.removeClass('show'), 4000);
+            }
         }
     });
 };
@@ -189,6 +193,14 @@ if (localStorage.getItem('lulu_wb_floating_enabled') === 'true') {
     toggleFloatingButton(true);
 }
 
+const loadBindingCache = () => {
+    let vars = getVariables({ type: 'global' });
+    return vars.lulu_wb_binding_cache || null;
+};
+const saveBindingCache = (cacheObj) => {
+    updateVariablesWith(v => { v.lulu_wb_binding_cache = cacheObj; return v; }, { type: 'global' });
+};
+
 $menuBtn.on('click', async () => {
     $("#options").hide();
 
@@ -196,6 +208,11 @@ $menuBtn.on('click', async () => {
         <style>
             dialog.wb-manager-dialog { width: 92vw !important; max-width: 1600px !important; transition: zoom 0.2s ease-out; overflow: hidden; font-family: sans-serif; }
             #wb-manager-panel h3 { font-size: 15px; margin: 10px 0 8px 0; border-bottom: 2px solid var(--SmartThemeBorderColor); padding-bottom: 5px; color: var(--SmartThemeQuoteColor); }
+
+            .wb-tab-strip { display: flex; width: 100%; border-bottom: 2px solid var(--SmartThemeBorderColor); margin-bottom: 12px; gap: 4px; }
+            .wb-tab-btn { flex: 1; padding: 12px; text-align: center; cursor: pointer; border-radius: 6px 6px 0 0; background: rgba(0,0,0,0.1); color: gray; font-size: 15px; font-weight: bold; transition: 0.2s; border: 1px solid transparent; border-bottom: none; }
+            .wb-tab-btn:hover { background: rgba(0,0,0,0.2); color: var(--SmartThemeBodyColor); }
+            .wb-tab-btn.active { background: var(--SmartThemeBotMesColor); color: var(--SmartThemeQuoteColor); border-color: var(--SmartThemeBorderColor); box-shadow: 0 -2px 5px rgba(0,0,0,0.1); }
 
             .wb-list-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; align-content: start; max-height: 55vh; overflow-y: auto; background: var(--SmartThemeBlurTintColor); border-radius: 8px; border: 1px solid var(--SmartThemeBorderColor); padding: 10px; position: relative; }
             .wb-snapshot-list { display: flex; flex-direction: column; gap: 8px; max-height: 35vh; overflow-y: auto; background: var(--SmartThemeBlurTintColor); border-radius: 8px; border: 1px solid var(--SmartThemeBorderColor); padding: 10px; }
@@ -298,14 +315,18 @@ $menuBtn.on('click', async () => {
                 <div id="wb-loading-secondary-text" style="font-size: 13px; color: gray; margin-top: 10px;">检索耗时取决于懒加载卡片数量，请稍候</div>
             </div>
 
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--SmartThemeBorderColor); margin-bottom: 12px; padding-bottom: 8px; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 8px; flex-wrap: wrap; gap: 10px;">
                 <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                    <h2 style="margin: 0; font-size: 18px; color: var(--SmartThemeQuoteColor); font-weight: bold; white-space: nowrap;"><i class="fa-solid fa-book-journal-whills"></i> 世界书管理面板</h2>
+                    <h2 style="margin: 0; font-size: 18px; color: var(--SmartThemeQuoteColor); font-weight: bold; white-space: nowrap;"><i class="fa-solid fa-book-journal-whills"></i> 世界书综合管理中枢</h2>
 
                     <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px; margin: 0; white-space: nowrap; background: rgba(125,125,125,0.1); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--SmartThemeBorderColor);">
                         <input type="checkbox" id="wb-toggle-floating" style="accent-color: var(--SmartThemeQuoteColor); transform: scale(1.1);">
-                        <span style="font-weight: bold; color: var(--SmartThemeQuoteColor);">🔮 开启呼唤悬浮球</span>
+                        <span style="font-weight: bold; color: var(--SmartThemeQuoteColor);">🔮 开启悬浮球</span>
                     </label>
+
+                    <button id="wb-theme-quick-toggle" class="menu_button interactable" style="margin: 0; padding: 4px 10px; min-width: unset; font-size: 13px; border-radius: 6px; background: rgba(125,125,125,0.1); border: 1px solid var(--SmartThemeBorderColor); flex-shrink: 0; white-space: nowrap;" title="一键切换深色/浅色护眼模式"><i class="fa-solid fa-circle-half-stroke"></i></button>
+
+                    <button id="wb-theme-toggle-btn" class="menu_button interactable" style="margin: 0; padding: 4px 10px; min-width: unset; font-size: 13px; border-radius: 6px; background: rgba(125,125,125,0.1); border: 1px solid var(--SmartThemeBorderColor); flex-shrink: 0; white-space: nowrap;"><i class="fa-solid fa-palette"></i> 色彩微调</button>
                 </div>
 
                 <div style="display: flex; gap: 5px; align-items: center; background: var(--SmartThemeBlurTintColor); padding: 3px; border-radius: 6px; border: 1px solid var(--SmartThemeBorderColor); flex-shrink: 0;">
@@ -313,6 +334,44 @@ $menuBtn.on('click', async () => {
                     <span id="wb-zoom-val" style="font-size: 13.5px; font-weight: bold; min-width: 50px; text-align: center;">100%</span>
                     <button id="wb-zoom-in" class="menu_button interactable" style="margin:0; padding: 4px 10px; min-width: unset;" title="放大"><i class="fa-solid fa-plus"></i></button>
                 </div>
+            </div>
+
+            <!-- ✨ 皮肤设定的下拉内容区域 -->
+            <div id="wb-theme-config-panel" style="display:none; margin-bottom: 12px; border-radius: 8px; border: 1px dashed var(--SmartThemeQuoteColor); background: rgba(0,0,0,0.1); padding: 12px;">
+                <div style="font-weight: bold; margin-bottom: 10px; color: var(--SmartThemeQuoteColor); display:flex; align-items:center; gap:6px;">
+                    <i class="fa-solid fa-paint-roller"></i> 魔法皮肤调色板
+                    <span style="font-weight:normal; font-size:12px; color:gray;">(独立于酒馆全局，随意调整，妈妈再也不用担心我看不清字啦)</span>
+                </div>
+                <div style="display:flex; gap:12px; align-items: center; flex-wrap: wrap;">
+                    <label style="font-size: 13px; font-weight: bold; margin-bottom: 0;">当前模式：</label>
+                    <select id="wb-theme-select" class="wb-input-dt" style="width: auto; padding: 6px; margin-bottom:0; min-width: 200px;">
+                        <option value="default">✨ 自动融合 (跟随酒馆默认)</option>
+                        <option value="dark">🌙 深色护眼 (彻底不透明)</option>
+                        <option value="light">☀️ 浅色阅读 (彻底不透明)</option>
+                        <option value="custom">🎨 自定义色彩与透明度</option>
+                    </select>
+
+                    <div id="wb-theme-custom-opts" style="display:none; align-items:center; gap:10px; flex-wrap: wrap; background:var(--SmartThemeBotMesColor); padding:6px 12px; border-radius:6px; border:1px solid var(--SmartThemeBorderColor);">
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <label style="font-size:12px; font-weight:bold;">底色:</label>
+                            <input type="color" id="wb-theme-cp-bg" value="#2a2e33" style="width:32px; height:28px; border:none; padding:0; cursor:pointer;" title="主背景色">
+                        </div>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <label style="font-size:12px; font-weight:bold;">文字色:</label>
+                            <input type="color" id="wb-theme-cp-text" value="#ffffff" style="width:32px; height:28px; border:none; padding:0; cursor:pointer;" title="文字及部分边框色">
+                        </div>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <label style="font-size:12px; font-weight:bold;">整体背景透明度:</label>
+                            <input type="range" id="wb-theme-cp-alpha" min="0" max="100" value="95" style="width:100px; cursor:pointer;">
+                            <span id="wb-theme-cp-alpha-val" style="font-size:12px; min-width:30px;">95%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="wb-tab-strip" class="wb-tab-strip">
+                 <div id="tab-global-btn" class="wb-tab-btn active"><i class="fa-solid fa-earth-asia"></i> 全局库大厅</div>
+                 <div id="tab-char-btn" class="wb-tab-btn"><i class="fa-solid fa-user-astronaut"></i> 当前聊天角色</div>
             </div>
 
             <div id="wb-main-view">
@@ -343,6 +402,7 @@ $menuBtn.on('click', async () => {
                     </div>
 
                     <div class="wb-controls-group">
+                        <button id="wb-btn-force-scan" class="menu_button interactable wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px; background: rgba(51, 154, 240, 0.1); color: #339af0; border: 1px solid #339af0;" title="在面板外部修改了其他没加载卡片的绑定状态？点这里重新翻一遍记忆哦！"><i class="fa-solid fa-rotate-right"></i> 深度重扫</button>
                         <button id="wb-btn-select-all" class="menu_button interactable wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px;"><i class="fa-solid fa-check-double"></i> 全选当前项</button>
                         <button id="wb-btn-deselect-all" class="menu_button interactable wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px;"><i class="fa-regular fa-square"></i> 撤销当前全选</button>
                         <button id="wb-btn-create-wb" class="menu_button interactable btn-success wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px; border:none;"><i class="fa-solid fa-plus"></i> 新建</button>
@@ -351,9 +411,8 @@ $menuBtn.on('click', async () => {
 
                 <div class="wb-btn-group">
                     <div class="wb-action-btn wb-nowrap-btn" id="wb-btn-clear" style="color: #888;"><i class="fa-solid fa-power-off"></i> 关闭当前所有全局启用</div>
-                    <div class="wb-action-btn wb-nowrap-btn btn-primary" id="wb-btn-save-snap"><i class="fa-solid fa-box-archive"></i> 将当前勾选存为快照</div>
-                    <div class="wb-action-btn wb-nowrap-btn btn-primary" id="wb-btn-create-detail-snap"><i class="fa-solid fa-puzzle-piece"></i> 创建复合快照</div>
-                    <div class="wb-action-btn wb-nowrap-btn" id="wb-btn-open-assoc" style="color: #c92a2a; border-color: #c92a2a; background: rgba(201,42,42,0.05);"><i class="fa-solid fa-id-card-clip"></i> 关联角色与用户</div>
+                    <div class="wb-action-btn wb-nowrap-btn btn-primary" id="wb-btn-save-snap"><i class="fa-solid fa-box-archive"></i> 分组状态快照 (全局)</div>
+                    <div class="wb-action-btn wb-nowrap-btn btn-primary" id="wb-btn-create-detail-snap"><i class="fa-solid fa-puzzle-piece"></i> 条目复用组合快照 (全局)</div>
                     <div class="wb-action-btn wb-nowrap-btn btn-danger" id="wb-btn-batch-toggle"><i class="fa-solid fa-trash-can"></i> 批量删除模式</div>
                 </div>
 
@@ -367,17 +426,33 @@ $menuBtn.on('click', async () => {
 
                 <div class="wb-list-grid scrollableInnerFull" id="wb-container"></div>
 
-                <h3>📸 预设组合快照列表</h3>
+                <h3>📸 库预设组合快照列表</h3>
                 <div class="wb-snapshot-list scrollableInnerFull" id="wb-snapshot-container"></div>
+            </div>
+
+            <div id="wb-char-view" style="display: none; flex-direction: column; height: 100%;">
+                <div class="wb-btn-group" style="margin-top: 0;">
+                    <div class="wb-action-btn wb-nowrap-btn" id="wb-btn-open-assoc" style="color: #c92a2a; border-color: #c92a2a; background: rgba(201,42,42,0.05);"><i class="fa-solid fa-id-card-clip"></i> 管理绑定世界书</div>
+                    <div class="wb-action-btn wb-nowrap-btn btn-primary" id="wb-btn-save-char-snap"><i class="fa-solid fa-camera-retro"></i> 保存当前配置为专属组合</div>
+                </div>
+
+                <h3>📚 当前聊天角色绑定的世界书</h3>
+                <div style="font-size: 12px; color: gray; margin-bottom: 10px; margin-top: -6px;">* 点击对应卡片即可单独设置角色专用的开关状态逻辑哦，与全局互不干扰哒。</div>
+                <div id="wb-char-books-container" class="wb-list-grid scrollableInnerFull" style="margin-bottom: 15px; max-height: 25vh;"></div>
+
+                <div style="display:flex; align-items:center; justify-content:space-between;">
+                     <h3 style="margin:0;">📸 当前聊天角色场景快照</h3>
+                </div>
+                <div style="font-size: 12px; color: gray; margin-bottom: 10px; margin-top: 6px;">* 保存为专属快照后，只需点选“应用该组合”，就能完美复原绑定在此角色身上所有世界书当时的开关状态。</div>
+                <div id="wb-char-snap-container" class="wb-snapshot-list scrollableInnerFull"></div>
             </div>
 
             <div id="wb-assoc-view" style="display: none; height: 100%; flex-direction: column;">
                 <div style="font-weight: bold; font-size: 16px; margin-bottom: 10px; color: var(--SmartThemeQuoteColor);">
-                    <i class="fa-solid fa-id-card-clip"></i> 管理当前角色卡与用户 (Persona) 的世界书
+                    <i class="fa-solid fa-link"></i> 分配卡片/用户档案 的绑定书籍
                 </div>
 
                 <div style="display: flex; flex-direction: column; gap: 15px; overflow-y: auto; padding-right: 5px;" class="scrollableInnerFull">
-
                     <div style="background: rgba(0,0,0,0.1); border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px; padding: 12px;">
                         <h3 style="margin-top:0; font-size:14px;"><i class="fa-solid fa-user" style="color:#339af0;"></i> 👤 当前用户 (Persona) 已绑定的世界书</h3>
                         <div style="font-size:12px; color:gray; margin-bottom:10px;">* ✨ 现在在这里可以给当前的 Persona 选择并绑定世界书啦。Persona 一般仅支持绑定一本哦。</div>
@@ -405,11 +480,10 @@ $menuBtn.on('click', async () => {
 
                         <div id="wb-assoc-char-list" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
                     </div>
-
                 </div>
 
                 <div class="wb-btn-group" style="margin-top: 15px; flex-shrink: 0;">
-                    <div class="wb-action-btn wb-nowrap-btn" id="wb-btn-assoc-cancel" style="color:#888;"><i class="fa-solid fa-arrow-left"></i> 返回上一页</div>
+                    <div class="wb-action-btn wb-nowrap-btn" id="wb-btn-assoc-cancel" style="color:#888;"><i class="fa-solid fa-arrow-left"></i> 返回角色调度专区</div>
                 </div>
             </div>
 
@@ -523,7 +597,7 @@ $menuBtn.on('click', async () => {
                 </div>
             </div>
 
-             <div id="wb-detail-view" style="display: none; height: 100%; flex-direction: column;">
+            <div id="wb-detail-view" style="display: none; height: 100%; flex-direction: column;">
                 <div style="font-weight: bold; font-size: 16px; margin-bottom: 10px; color: var(--SmartThemeQuoteColor); flex-shrink: 0;">
                     <i class="fa-solid fa-pen-nib"></i> 编辑参数细节：<span id="wb-detail-title"></span>
                 </div>
@@ -592,6 +666,121 @@ $menuBtn.on('click', async () => {
         </div>
     `);
 
+    // --- ✨ 鹿酱精心制作的主题换肤魔法核心 ---
+    const hexToRgba = (hex, alpha) => {
+        let r=0, g=0, b=0;
+        if(hex.length === 7){
+            r = parseInt(hex.substring(1,3), 16);
+            g = parseInt(hex.substring(3,5), 16);
+            b = parseInt(hex.substring(5,7), 16);
+        }
+        return `rgba(${r},${g},${b},${alpha/100})`;
+    };
+
+    const applyTheme = (mode, customConfig) => {
+        $('#lulu-theme-override-style').remove();
+        let overrideCSS = '';
+        const $quickIcon = $ui.find('#wb-theme-quick-toggle i');
+        if (mode === 'light') {
+            $quickIcon.removeClass('fa-moon fa-circle-half-stroke').addClass('fa-sun').css('color', '#ff9f43');
+        } else if (mode === 'dark') {
+            $quickIcon.removeClass('fa-sun fa-circle-half-stroke').addClass('fa-moon').css('color', '#70a1ff');
+        } else {
+            $quickIcon.removeClass('fa-sun fa-moon').addClass('fa-circle-half-stroke').css('color', 'var(--SmartThemeBodyColor)');
+        }
+
+        if (mode === 'dark') {
+            overrideCSS = `
+                dialog.wb-manager-dialog { background: rgba(22, 24, 28, 1) !important; border: 1px solid #d1c5a1 !important; }
+                dialog.wb-manager-dialog, #wb-manager-panel {
+                    --SmartThemeBlurTintColor: rgba(22, 24, 28, 1) !important;
+                    --SmartThemeBotMesColor: rgba(32, 35, 40, 1) !important;
+                    --SmartThemeBodyColor: #c0c2c8 !important;
+                    --SmartThemeQuoteColor: #d1c5a1 !important; /* 护眼的枯黄色/黯金 */
+                    --SmartThemeBorderColor: #3d414d !important;
+                    color: #c0c2c8 !important;
+                }
+            `;
+        } else if (mode === 'light') {
+            overrideCSS = `
+                dialog.wb-manager-dialog { background: rgba(253, 246, 227, 1) !important; border: 1px solid #8b5d33 !important; }
+                dialog.wb-manager-dialog, #wb-manager-panel {
+                    --SmartThemeBlurTintColor: rgba(253, 246, 227, 1) !important;
+                    --SmartThemeBotMesColor: rgba(255, 251, 240, 1) !important;
+                    --SmartThemeBodyColor: #4a3b32 !important;
+                    --SmartThemeQuoteColor: #8b5d33 !important;
+                    --SmartThemeBorderColor: #e0d0b8 !important;
+                    color: #4a3b32 !important;
+                }
+                dialog.wb-manager-dialog *, #wb-manager-panel * {
+                    text-shadow: none !important;
+                }
+            `;
+        } else if (mode === 'custom') {
+            const bgRgba = hexToRgba(customConfig.bg, customConfig.alpha);
+            overrideCSS = `
+                dialog.wb-manager-dialog { background: ${bgRgba} !important; border: 1px solid var(--SmartThemeQuoteColor) !important; }
+                dialog.wb-manager-dialog, #wb-manager-panel {
+                    --SmartThemeBlurTintColor: ${bgRgba} !important;
+                    --SmartThemeBotMesColor: ${customConfig.bg} !important;
+                    --SmartThemeBodyColor: ${customConfig.text} !important;
+                    color: ${customConfig.text} !important;
+                }
+            `;
+            $ui.find('#wb-theme-custom-opts').css('display', 'flex');
+        }
+
+        if (mode !== 'custom') {
+            $ui.find('#wb-theme-custom-opts').hide();
+        }
+
+        if (overrideCSS) {
+            $ui.append(`<style id="lulu-theme-override-style">${overrideCSS}</style>`);
+        }
+    };
+
+    const loadThemeSettings = () => {
+        const savedMode = localStorage.getItem('lulu_wb_panel_theme') || 'default';
+        const savedCustom = JSON.parse(localStorage.getItem('lulu_wb_panel_custom_colors') || '{"bg":"#2a2e33", "text":"#ffffff", "alpha":95}');
+        $ui.find('#wb-theme-select').val(savedMode);
+        $ui.find('#wb-theme-cp-bg').val(savedCustom.bg);
+        $ui.find('#wb-theme-cp-text').val(savedCustom.text);
+        $ui.find('#wb-theme-cp-alpha').val(savedCustom.alpha);
+        $ui.find('#wb-theme-cp-alpha-val').text(savedCustom.alpha + '%');
+        applyTheme(savedMode, savedCustom);
+    };
+
+    const updateThemeAndSave = () => {
+        const mode = $ui.find('#wb-theme-select').val();
+        const cBg = $ui.find('#wb-theme-cp-bg').val();
+        const cText = $ui.find('#wb-theme-cp-text').val();
+        const cAlpha = parseInt($ui.find('#wb-theme-cp-alpha').val());
+        $ui.find('#wb-theme-cp-alpha-val').text(cAlpha + '%');
+
+        const cConf = {bg: cBg, text: cText, alpha: cAlpha};
+        localStorage.setItem('lulu_wb_panel_theme', mode);
+        localStorage.setItem('lulu_wb_panel_custom_colors', JSON.stringify(cConf));
+        applyTheme(mode, cConf);
+    };
+
+    $ui.find('#wb-theme-toggle-btn').on('click', () => $ui.find('#wb-theme-config-panel').slideToggle('fast'));
+    $ui.find('#wb-theme-select, #wb-theme-cp-bg, #wb-theme-cp-text, #wb-theme-cp-alpha').on('input change', updateThemeAndSave);
+    $ui.find('#wb-theme-quick-toggle').on('click', () => {
+        let currentMode = $ui.find('#wb-theme-select').val();
+        if (currentMode === 'default' || currentMode === 'dark' || currentMode === 'custom') {
+            $ui.find('#wb-theme-select').val('light').trigger('change');
+            if(typeof toastr !== 'undefined') toastr.success("已为您开启：浅色柔和阅读模式 ☀️");
+        }
+        else if (currentMode === 'light') {
+            $ui.find('#wb-theme-select').val('dark').trigger('change');
+            if(typeof toastr !== 'undefined') toastr.success("已为您开启：深色寂静护眼模式 🌙");
+        }
+    });
+
+    loadThemeSettings(); 
+    // --- 主题换肤魔法核心结束 ---
+
+
     const isFloatingEnabledNow = localStorage.getItem('lulu_wb_floating_enabled') === 'true';
     $ui.find('#wb-toggle-floating').prop('checked', isFloatingEnabledNow);
 
@@ -600,7 +789,7 @@ $menuBtn.on('click', async () => {
         localStorage.setItem('lulu_wb_floating_enabled', isEnable);
         toggleFloatingButton(isEnable);
         if (typeof toastr !== 'undefined') {
-            toastr.success(isEnable ? "✨ 悬浮魔法球已经召唤出来了！您可以点击或者按住鼠标/手指拖动它哦。" : "🪄 悬浮魔法球已经安静地收回去了~");
+            toastr.success(isEnable ? "✨ 悬浮魔法球已经召唤出来了！您可以点击展开小抽屉，或者拖动它哦。" : "🪄 悬浮魔法球已经安静地收回去了~");
         }
     });
 
@@ -613,13 +802,32 @@ $menuBtn.on('click', async () => {
     $ui.find('#wb-zoom-in').on('click', () => updateZoom(currentScale + 0.1));
     $ui.find('#wb-zoom-out').on('click', () => updateZoom(currentScale - 0.1));
 
+    const showTab = (tabName) => {
+        $ui.find('.wb-tab-btn').removeClass('active');
+        $ui.find('#wb-main-view, #wb-char-view, #wb-assoc-view, #wb-edit-snap-view, #wb-detailed-snap-view, #wb-bind-view, #wb-entry-view, #wb-detail-view').hide();
+        $ui.find('#wb-tab-strip').show();
+
+        if (tabName === 'global') {
+            $ui.find('#tab-global-btn').addClass('active');
+            $ui.find('#wb-main-view').fadeIn(200);
+            renderData();
+        } else if (tabName === 'char') {
+            $ui.find('#tab-char-btn').addClass('active');
+            $ui.find('#wb-char-view').fadeIn(200);
+            renderCharView();
+        }
+    };
+
+    $ui.find('#tab-global-btn').on('click', () => showTab('global'));
+    $ui.find('#tab-char-btn').on('click', () => showTab('char'));
+
     const withLoadingOverlay = async (asyncFunction, message = "正在处理中，请稍候...") => {
         const $overlay = $ui.find('#wb-loading-overlay');
         const $text = $ui.find('#wb-loading-text');
         const $sub = $ui.find('#wb-loading-sub');
         const $sec = $ui.find('#wb-loading-secondary-text');
 
-        $text.text(message);
+        $text.html(message);
         $sub.hide(); $sec.hide();
         $overlay.fadeIn('fast');
 
@@ -640,26 +848,39 @@ $menuBtn.on('click', async () => {
         updateVariablesWith(v => { v.wb_categories = catObj; return v; }, { type: 'global' });
     };
 
-    const initiateDeepScan = async (isFastSync = false) => {
+    const initiateDeepScan = async (isFastSync = false, forceScan = false) => {
         const $overlay = $ui.find('#wb-loading-overlay');
         const $sub = $ui.find('#wb-loading-sub');
         const $sec = $ui.find('#wb-loading-secondary-text');
 
         if (isFastSync) {
-            $ui.find('#wb-loading-text').html('✨ <span style="color: var(--SmartThemeQuoteColor);">正在同步配置状态...</span>');
+            $ui.find('#wb-loading-text').html('✨ <span style="color: var(--SmartThemeQuoteColor);">正在飞速读取当前卡片状态...</span>');
             $sub.hide(); $sec.hide();
         } else {
-            $ui.find('#wb-loading-text').html('正在深入检索读取...');
+            $ui.find('#wb-loading-text').html('正在请求深入检索...');
             $sub.show(); $sec.show();
         }
         $overlay.show();
 
         try {
-            const wb2Chars = {};
-            (typeof getWorldbookNames === 'function' ? getWorldbookNames() : []).forEach(wb => wb2Chars[wb] =[]);
+            let wb2Chars = {};
+            const allWbNames = typeof getWorldbookNames === 'function' ? getWorldbookNames() : [];
+            allWbNames.forEach(wb => wb2Chars[wb] = []);
+
+            const existingCache = loadBindingCache();
+            const needHeavyScan = forceScan || !existingCache || Object.keys(existingCache).length === 0;
+
+            if (!needHeavyScan) {
+                for (let wb of allWbNames) {
+                    wb2Chars[wb] = existingCache[wb] || [];
+                }
+            }
 
             const ctx = typeof SillyTavern !== 'undefined' ? SillyTavern.getContext() : (typeof getContext === 'function' ? getContext() : {});
             if (ctx.powerUserSettings && ctx.powerUserSettings.persona_descriptions) {
+                Object.keys(wb2Chars).forEach(wb => {
+                    wb2Chars[wb] = wb2Chars[wb].filter(c => !c.name.startsWith('👤用户: '));
+                });
                 const pDescs = ctx.powerUserSettings.persona_descriptions;
                 const pNames = ctx.powerUserSettings.personas || {};
                 Object.keys(pDescs).forEach(avatarId => {
@@ -674,123 +895,160 @@ $menuBtn.on('click', async () => {
                 });
             }
 
-            const allCharsData = window.characters || (typeof SillyTavern !== 'undefined' ? SillyTavern.characters : []) || [];
-            let combinedData = [...allCharsData];
-
-            const totalChars = combinedData.length;
-            $sub.text(`0 / ${totalChars}`);
-
-            const charMap = new Map();
-            const batchSize = 10;
-            for (let i = 0; i < totalChars; i += batchSize) {
-                const chunk = combinedData.slice(i, i + batchSize);
-                await Promise.all(chunk.map(async (charItem) => {
-                    if(!charItem) return;
-                    try {
-                        const avatar = charItem.avatar;
-                        if (!avatar) return;
-
-                        let charData = charItem;
-                        if (charItem.shallow) {
-                            try { charData = await $.ajax({ url: '/api/characters/get', type: 'POST', contentType: 'application/json', data: JSON.stringify({ avatar_url: avatar }) }); } catch (e) {}
-                        }
-
-                        const charName = charData.name || charItem.name || '未知名称';
-                        const checkList = new Set();
-
-                        try {
-                            if (typeof getCharWorldbookNames === 'function') {
-                                const cb = getCharWorldbookNames(charName);
-                                if (cb) {
-                                    if (cb.primary) checkList.add(cb.primary);
-                                    if (Array.isArray(cb.additional)) cb.additional.forEach(w => checkList.add(w));
-                                }
-                                const curCharAct = typeof getCurrentCharacterName === 'function' ? getCurrentCharacterName() : null;
-                                if (curCharAct === charName || curCharAct === avatar) {
-                                     const cbCur = getCharWorldbookNames('current');
-                                     if (cbCur) {
-                                          if (cbCur.primary) checkList.add(cbCur.primary);
-                                          if (Array.isArray(cbCur.additional)) cbCur.additional.forEach(w => checkList.add(w));
-                                     }
-                                }
-                            }
-                        } catch (e) {}
-
-                        const dataFields = charData.data || charData;
-
-                        if (dataFields.extensions?.world) checkList.add(dataFields.extensions.world);
-                        if (dataFields.world) checkList.add(dataFields.world);
-                        if (dataFields.world_info) checkList.add(dataFields.world_info);
-                        if (dataFields.lorebook) checkList.add(dataFields.lorebook);
-
-                        if (dataFields.character_book && typeof dataFields.character_book.name === 'string') {
-                            checkList.add(dataFields.character_book.name);
-                        } else if (typeof dataFields.character_book === 'string') {
-                            checkList.add(dataFields.character_book);
-                        }
-
-                        if (dataFields.worldbook) checkList.add(dataFields.worldbook);
-                        if (Array.isArray(dataFields.extensions?.worldbooks)) dataFields.extensions.worldbooks.forEach(w => checkList.add(w));
-                        if (Array.isArray(charData.extensions?.worldbooks)) charData.extensions.worldbooks.forEach(w => checkList.add(w));
-
-                        checkList.forEach(wbRaw => {
-                            let wbArr =[];
-                            if (typeof wbRaw === 'string') {
-                                if (wbRaw.startsWith('[') && wbRaw.endsWith(']')) { try{ wbArr = JSON.parse(wbRaw); } catch(e){ wbArr=[wbRaw]; } }
-                                else wbArr = [wbRaw];
-                            } else wbArr = [wbRaw];
-
-                            wbArr.forEach(wbName => {
-                                if (wbName && typeof wbName === 'string') {
-                                    if (!wb2Chars[wbName]) wb2Chars[wbName] =[];
-                                    if (!wb2Chars[wbName].some(c => c.avatar === avatar)) wb2Chars[wbName].push({ name: charName, avatar: avatar });
-                                }
-                            });
-                        });
-
-                        const safeCharObj = { name: charName, avatar: avatar };
-                        charMap.set(avatar, safeCharObj);
-                        const avatarBase = avatar.replace(/\.(png|webp|jpeg)$/i, '');
-                        if (avatar !== avatarBase) charMap.set(avatarBase, safeCharObj);
-                    } catch (e) {}
-                }));
-                $sub.text(`${Math.min(i + batchSize, totalChars)} / ${totalChars}`);
-            }
+            let charName = typeof getCurrentCharacterName === 'function' ? getCurrentCharacterName() : null;
+            let currentAvatar = ctx.chatMetadata ? ctx.chatMetadata.avatar : (ctx.avatar_url || null);
+            let currentCharWbs = new Set();
 
             try {
-                let charLoreArray =[];
-                if (ctx.chatWorldInfoSettings && Array.isArray(ctx.chatWorldInfoSettings.charLore)) charLoreArray = ctx.chatWorldInfoSettings.charLore;
-                else if (window.chatWorldInfoSettings && Array.isArray(window.chatWorldInfoSettings.charLore)) charLoreArray = window.chatWorldInfoSettings.charLore;
-
-                if (charLoreArray.length > 0) {
-                    charLoreArray.forEach(charLoreEntry => {
-                        const charFilename = charLoreEntry.name;
-                        if (!charFilename) return;
-                        const filenameBase = charFilename.replace(/\.(png|webp|jpeg)$/i, '');
-                        const mappedChar = charMap.get(charFilename) || charMap.get(filenameBase);
-                        if (mappedChar && Array.isArray(charLoreEntry.extraBooks)) {
-                            charLoreEntry.extraBooks.forEach(wbName => {
-                                if (wbName && typeof wbName === 'string') {
-                                    if (!wb2Chars[wbName]) wb2Chars[wbName] =[];
-                                    if (!wb2Chars[wbName].some(c => c.avatar === mappedChar.avatar)) wb2Chars[wbName].push({ name: mappedChar.name, avatar: mappedChar.avatar });
-                                }
-                            });
-                        }
-                    });
+                if (charName && typeof getCharWorldbookNames === 'function') {
+                    const cbCur = getCharWorldbookNames('current');
+                    if (cbCur) {
+                        if (cbCur.primary) currentCharWbs.add(cbCur.primary);
+                        if (Array.isArray(cbCur.additional)) cbCur.additional.forEach(w => currentCharWbs.add(w));
+                    }
                 }
-            } catch (e) {}
+            } catch(e){}
+
+            if (charName && currentAvatar) {
+                 Object.keys(wb2Chars).forEach(wb => {
+                    wb2Chars[wb] = wb2Chars[wb].filter(c => c.avatar !== currentAvatar);
+                 });
+                 currentCharWbs.forEach(wbName => {
+                     if (wbName && typeof wbName === 'string') {
+                         if (!wb2Chars[wbName]) wb2Chars[wbName] = [];
+                         wb2Chars[wbName].push({ name: charName, avatar: currentAvatar });
+                     }
+                 });
+            }
+
+            if (needHeavyScan) {
+                const allCharsData = window.characters || (typeof SillyTavern !== 'undefined' ? SillyTavern.characters : []) || [];
+                let combinedData = [...allCharsData];
+                const totalChars = combinedData.length;
+
+                $ui.find('#wb-loading-text').html('发现大量角色数据，正在执行重型深度扫描...');
+                $sub.text(`0 / ${totalChars}`).show();
+
+                const charMap = new Map();
+                const batchSize = 10;
+                for (let i = 0; i < totalChars; i += batchSize) {
+                    const chunk = combinedData.slice(i, i + batchSize);
+                    await Promise.all(chunk.map(async (charItem) => {
+                        if(!charItem) return;
+                        try {
+                            const avatar = charItem.avatar;
+                            if (!avatar) return;
+                            if (avatar === currentAvatar) return;
+
+                            let charData = charItem;
+                            if (charItem.shallow) {
+                                try { charData = await $.ajax({ url: '/api/characters/get', type: 'POST', contentType: 'application/json', data: JSON.stringify({ avatar_url: avatar }) }); } catch (e) {}
+                            }
+
+                            const curCharName = charData.name || charItem.name || '未知名称';
+                            const checkList = new Set();
+
+                            try {
+                                if (typeof getCharWorldbookNames === 'function') {
+                                    const cb = getCharWorldbookNames(curCharName);
+                                    if (cb) {
+                                        if (cb.primary) checkList.add(cb.primary);
+                                        if (Array.isArray(cb.additional)) cb.additional.forEach(w => checkList.add(w));
+                                    }
+                                }
+                            } catch (e) {}
+
+                            const dataFields = charData.data || charData;
+
+                            if (dataFields.extensions?.world) checkList.add(dataFields.extensions.world);
+                            if (dataFields.world) checkList.add(dataFields.world);
+                            if (dataFields.world_info) checkList.add(dataFields.world_info);
+                            if (dataFields.lorebook) checkList.add(dataFields.lorebook);
+                            if (dataFields.character_book && typeof dataFields.character_book.name === 'string') {
+                                checkList.add(dataFields.character_book.name);
+                            } else if (typeof dataFields.character_book === 'string') {
+                                checkList.add(dataFields.character_book);
+                            }
+                            if (dataFields.worldbook) checkList.add(dataFields.worldbook);
+                            if (Array.isArray(dataFields.extensions?.worldbooks)) dataFields.extensions.worldbooks.forEach(w => checkList.add(w));
+                            if (Array.isArray(charData.extensions?.worldbooks)) charData.extensions.worldbooks.forEach(w => checkList.add(w));
+
+                            checkList.forEach(wbRaw => {
+                                let wbArr =[];
+                                if (typeof wbRaw === 'string') {
+                                    if (wbRaw.startsWith('[') && wbRaw.endsWith(']')) { try{ wbArr = JSON.parse(wbRaw); } catch(e){ wbArr=[wbRaw]; } }
+                                    else wbArr = [wbRaw];
+                                } else wbArr = [wbRaw];
+
+                                wbArr.forEach(wbName => {
+                                    if (wbName && typeof wbName === 'string') {
+                                        if (!wb2Chars[wbName]) wb2Chars[wbName] =[];
+                                        if (!wb2Chars[wbName].some(c => c.avatar === avatar)) wb2Chars[wbName].push({ name: curCharName, avatar: avatar });
+                                    }
+                                });
+                            });
+
+                            const safeCharObj = { name: curCharName, avatar: avatar };
+                            charMap.set(avatar, safeCharObj);
+                            const avatarBase = avatar.replace(/\.(png|webp|jpeg)$/i, '');
+                            if (avatar !== avatarBase) charMap.set(avatarBase, safeCharObj);
+                        } catch (e) {}
+                    }));
+                    $sub.text(`${Math.min(i + batchSize, totalChars)} / ${totalChars}`);
+                }
+
+                try {
+                    let charLoreArray =[];
+                    if (ctx.chatWorldInfoSettings && Array.isArray(ctx.chatWorldInfoSettings.charLore)) charLoreArray = ctx.chatWorldInfoSettings.charLore;
+                    else if (window.chatWorldInfoSettings && Array.isArray(window.chatWorldInfoSettings.charLore)) charLoreArray = window.chatWorldInfoSettings.charLore;
+
+                    if (charLoreArray.length > 0) {
+                        charLoreArray.forEach(charLoreEntry => {
+                            const charFilename = charLoreEntry.name;
+                            if (!charFilename) return;
+                            const filenameBase = charFilename.replace(/\.(png|webp|jpeg)$/i, '');
+                            const mappedChar = charMap.get(charFilename) || charMap.get(filenameBase);
+                            if (mappedChar && Array.isArray(charLoreEntry.extraBooks)) {
+                                charLoreEntry.extraBooks.forEach(wbName => {
+                                    if (wbName && typeof wbName === 'string') {
+                                        if (!wb2Chars[wbName]) wb2Chars[wbName] =[];
+                                        if (!wb2Chars[wbName].some(c => c.avatar === mappedChar.avatar)) wb2Chars[wbName].push({ name: mappedChar.name, avatar: mappedChar.avatar });
+                                    }
+                                });
+                            }
+                        });
+                    }
+                } catch (e) {}
+            }
 
             globalBindingMapCache = wb2Chars;
+            saveBindingCache(wb2Chars);
+
         } catch (error) {
             console.error(error); if (typeof toastr !== 'undefined') toastr.error("读取中断");
         } finally {
             $overlay.fadeOut('slow');
-            if (typeof renderData === 'function') renderData();
+            if ($ui.find('#wb-main-view').is(':visible')) renderData();
+            if ($ui.find('#wb-char-view').is(':visible')) renderCharView();
         }
     };
 
-    const popup = new SillyTavern.Popup($ui, SillyTavern.POPUP_TYPE.TEXT, '', { allowVerticalScrolling: true, okButton: "关闭面板", onOpen: async () => { await initiateDeepScan(); } });
-    $(popup.dlg).addClass('wb-manager-dialog');
+    $ui.find('#wb-btn-force-scan').on('click', async () => {
+        await initiateDeepScan(false, true);
+        toastr.success("已经把当前所有的角色卡羁绊重新温习了一遍，记忆库已达最新哦！");
+    });
+
+    const popup = new SillyTavern.Popup($ui, SillyTavern.POPUP_TYPE.TEXT, '', {
+        allowVerticalScrolling: true, okButton: "关闭面板",
+        onOpen: async () => {
+            $(popup.dlg).addClass('wb-manager-dialog'); // 为对话框加上专属称号以便受膜法控制~
+            showTab(window.luluWbInitTabType || 'global');
+            await initiateDeepScan();
+        }
+    });
+
+    // Fallback if dialog lacks class instantly
+    setTimeout(() => $(popup.dlg).addClass('wb-manager-dialog'), 50);
 
     const attemptCreateWb = async (defaultName = "") => {
         let name = await SillyTavern.callGenericPopup("为新建的世界书设定一个名称：", SillyTavern.POPUP_TYPE.INPUT, defaultName);
@@ -804,6 +1062,7 @@ $menuBtn.on('click', async () => {
         await withLoadingOverlay(async () => {
              await createWorldbook(name, []);
              globalBindingMapCache[name] =[];
+             const c = loadBindingCache() || {}; c[name] = []; saveBindingCache(c);
              toastr.success(`已创建：${name}`);
              renderData(name);
         }, "正在创建世界书...");
@@ -823,6 +1082,8 @@ $menuBtn.on('click', async () => {
         await withLoadingOverlay(async () => {
             const entries = await getWorldbook(oldName); await createWorldbook(newName, entries); await deleteWorldbook(oldName);
             delete globalBindingMapCache[oldName]; globalBindingMapCache[newName] =[];
+
+            const c = loadBindingCache(); if(c){ delete c[oldName]; c[newName] = []; saveBindingCache(c); }
 
             let cData = getCategories();
             Object.keys(cData).forEach(k => { if(cData[k].includes(oldName)) { cData[k] = cData[k].filter(n=>n!==oldName); cData[k].push(newName); } });
@@ -894,16 +1155,206 @@ $menuBtn.on('click', async () => {
         if(batchSelected.size === 0) return toastr.warning("请先勾选");
         if (await SillyTavern.callGenericPopup(`确认永久销毁这 ${batchSelected.size} 本世界书？`, SillyTavern.POPUP_TYPE.CONFIRM) === SillyTavern.POPUP_RESULT.AFFIRMATIVE) {
              await withLoadingOverlay(async () => {
+                const c = loadBindingCache() || {};
                 for (let wb of batchSelected) {
                     await deleteWorldbook(wb);
                     delete globalBindingMapCache[wb];
+                    delete c[wb];
                     let cData = getCategories();
                     Object.keys(cData).forEach(k => { cData[k] = cData[k].filter(n=>n!==wb); });
                     saveCategories(cData);
                 }
+                saveBindingCache(c);
                 batchSelected.clear(); renderData();
              }, `删除中...`);
         }
+    });
+
+    const renderCharView = () => {
+        const charName = typeof getCurrentCharacterName === 'function' ? getCurrentCharacterName() : (typeof SillyTavern !== 'undefined' ? SillyTavern.getContext().name2 : null);
+        const $bCont = $ui.find('#wb-char-books-container').empty();
+        const $sCont = $ui.find('#wb-char-snap-container').empty();
+
+        if (!charName) {
+            $bCont.html('<div style="color:#ff6b6b; font-size:14px; font-weight:bold; padding:10px; width: 100%;">当前好像没有打开任何角色卡的对话呢，必须要先进入聊天界面，才能为角色配置专属世界书和组合哦~</div>');
+            $sCont.html('<div style="color:gray; padding:10px;">暂无可用的角色快照呢~</div>');
+            return;
+        }
+
+        let charBooksObj = {primary: null, additional:[]};
+        try { if (typeof getCharWorldbookNames === 'function') charBooksObj = getCharWorldbookNames('current') || charBooksObj; } catch(e){}
+        const cBooks = [];
+        if(charBooksObj.primary) cBooks.push(charBooksObj.primary);
+        if(charBooksObj.additional) cBooks.push(...charBooksObj.additional);
+
+        if (cBooks.length === 0) {
+            $bCont.html('<div style="color:gray; font-size:14px; padding:10px; width: 100%;">这名角色目前一本世界书都还没有绑定。请点击上面的管理按钮去绑定吧~</div>');
+        } else {
+            cBooks.forEach(wb => {
+                const isPrimary = wb === charBooksObj.primary;
+                const tagLabelHtml = isPrimary
+                    ? `<span style="font-size:10px; background:var(--SmartThemeQuoteColor); color:#fff; padding:2px 5px; border-radius:4px; margin-left:4px; margin-bottom:2px;">主</span>`
+                    : `<span style="font-size:10px; border:1px solid gray; color:gray; background:transparent; padding:1px 4px; border-radius:4px; margin-left:4px; margin-bottom:2px;">附</span>`;
+
+                const $wrapper = $('<div class="wb-item-wrapper" style="cursor: pointer;"></div>');
+                const $titleArea = $(`<div class="wb-item-header"><span class="wb-name-text" style="color:var(--SmartThemeQuoteColor); display:flex; align-items:center;">${wb} ${tagLabelHtml}</span></div>`);
+                const $bottomArea = $(`<div class="wb-item-bottom" style="justify-content:flex-end;"><div class="wb-bind-tag" style="background:var(--SmartThemeBlurTintColor); border:1px solid var(--SmartThemeBorderColor);"><i class="fa fa-sliders"></i> 点击配置此书条目开关</div></div>`);
+
+                $wrapper.append($titleArea, $bottomArea).on('click', () => {
+                     openEntryTuneView(wb, '#wb-char-view');
+                });
+                $bCont.append($wrapper);
+            });
+        }
+
+        let vars = getVariables({ type: 'global' });
+        if (!vars.wb_char_snapshots) {
+            vars.wb_char_snapshots = {};
+            updateVariablesWith(v => { v.wb_char_snapshots = vars.wb_char_snapshots; return v; }, { type: 'global' });
+        }
+        const mySnaps = vars.wb_char_snapshots[charName] || {};
+
+        if (Object.keys(mySnaps).length === 0) {
+             $sCont.html('<div style="color:gray; padding:10px; text-align:center;">这名角色还没有存过专属搭配组合呢，快点上方按钮留个纪念吧~</div>');
+        } else {
+             Object.entries(mySnaps).forEach(([snapName, snapData]) => {
+                 const totalEntries = Object.values(snapData).reduce((a, arr) => a + arr.length, 0);
+                 const includedBooks = Object.keys(snapData).length;
+                 const $item = $(`<div style="display:flex; justify-content:space-between; align-items:center; padding:10px; background:var(--SmartThemeBotMesColor); border-radius:6px; border:1px solid var(--SmartThemeBorderColor); flex-wrap:wrap; gap:8px;"></div>`);
+                 $item.append(`<div style="flex:1; min-width: 150px;"><div style="font-weight:bold;font-size:14px;"><i class="fa-solid fa-camera-retro" style="color:var(--SmartThemeQuoteColor);"></i> ${snapName}</div><div style="font-size:12px;color:gray;">牵涉 ${includedBooks} 本世界书，共开启 ${totalEntries} 项条目</div></div>`);
+                 const $act = $('<div style="display:flex; gap:6px; flex-wrap: wrap;"></div>');
+
+                 $act.append($('<button class="menu_button interactable btn-success wb-nowrap-btn" style="margin:0; padding:6px 12px; font-size:12px; border:none;">应用该组合</button>').on('click', async () => {
+                    const curBound = getCharBoundBooks();
+                    const snapWbNames = Object.keys(snapData);
+                    const missingWbs = snapWbNames.filter(wb => !curBound.includes(wb));
+
+                    if (missingWbs.length > 0) {
+                        toastr.warning(`注意哦，快照中的 [${missingWbs.join(', ')}] 目前没有绑定在这个角色身上啦，这几本书的状态无法复原呢。`, '温馨提示');
+                        if (missingWbs.length === snapWbNames.length) {
+                            return toastr.error(`当前角色没有绑定快照里的任何世界书啦，应用失败噜(＞﹏＜)`);
+                        }
+                    }
+
+                    await withLoadingOverlay(async () => {
+
+                          for (const wb of curBound) {
+                              let wbEntries = await getWorldbook(wb);
+                              let changed = false;
+                              let targetEnabledUIDs = snapData[wb] || [];
+                              wbEntries.forEach(entry => {
+                                  const shouldBeEnabled = targetEnabledUIDs.includes(entry.uid);
+                                  if (entry.enabled !== shouldBeEnabled) { entry.enabled = shouldBeEnabled; changed = true; }
+                              });
+                              if (changed) await replaceWorldbook(wb, wbEntries);
+                          }
+                     }, "正在为您贴心复核并应用角色专享组合...");
+                     toastr.success(`角色场景组合 ${snapName} 已为您完美就绪！`);
+                     renderCharView();
+                 }));
+
+                 $act.append($('<button class="menu_button interactable btn-danger wb-nowrap-btn" style="margin:0; padding:6px 10px; border:none;" title="抛掉这个快照"><i class="fa fa-trash"></i></button>').on('click', async () => {
+                     if (await SillyTavern.callGenericPopup(`确认跟快照说拜拜？`, SillyTavern.POPUP_TYPE.CONFIRM) === SillyTavern.POPUP_RESULT.AFFIRMATIVE) {
+                          updateVariablesWith(v => { delete v.wb_char_snapshots[charName][snapName]; return v; }, { type: 'global' });
+                          renderCharView();
+                     }
+                 }));
+                 $item.append($act); $sCont.append($item);
+             });
+        }
+    };
+
+    const getCharBoundBooks = () => {
+         let charBooksObj = {primary: null, additional:[]};
+         try { if (typeof getCharWorldbookNames === 'function') charBooksObj = getCharWorldbookNames('current') || charBooksObj; } catch(e){}
+         const cBooks = [];
+         if(charBooksObj.primary) cBooks.push(charBooksObj.primary);
+         if(charBooksObj.additional) cBooks.push(...charBooksObj.additional);
+         return cBooks;
+    };
+
+    $ui.find('#wb-btn-save-char-snap').on('click', async () => {
+        const charName = typeof getCurrentCharacterName === 'function' ? getCurrentCharacterName() : (typeof SillyTavern !== 'undefined' ? SillyTavern.getContext().name2 : null);
+        if (!charName) return toastr.warning("主人，您还未开启与任何角色的聊天哦。");
+
+        const boundBooks = getCharBoundBooks();
+        if (boundBooks.length === 0) return toastr.warning("当前角色没有绑定任何世界书，不能创建“空气”快照哦~");
+        let newSnapData = {};
+        await withLoadingOverlay(async () => {
+            for (const wb of boundBooks) {
+                let entries = await getWorldbook(wb);
+                newSnapData[wb] = entries.filter(e => e.enabled).map(e => e.uid);
+            }
+        }, "正在读取现在的条目配置...");
+
+        let vars = getVariables({ type: 'global' });
+        let existingSnaps = (vars.wb_char_snapshots && vars.wb_char_snapshots[charName]) ? vars.wb_char_snapshots[charName] : {};
+        let duplicateSnapName = null;
+        for (const [eName, eData] of Object.entries(existingSnaps)) {
+            let isSame = true;
+            const eKeys = Object.keys(eData);
+            const nKeys = Object.keys(newSnapData);
+            if (eKeys.length !== nKeys.length) continue;
+
+            for (let k of nKeys) {
+                if (!eData[k] || !Array.isArray(eData[k]) || eData[k].length !== newSnapData[k].length) { isSame = false; break; }
+                const arr1 = [...eData[k]].sort();
+                const arr2 = [...newSnapData[k]].sort();
+                for (let i = 0; i < arr1.length; i++) {
+                    if (arr1[i] !== arr2[i]) { isSame = false; break; }
+                }
+                if (!isSame) break;
+            }
+            if (isSame) {
+                duplicateSnapName = eName;
+                break;
+            }
+        }
+
+        let snapName = "";
+
+        if (duplicateSnapName) {
+            const btnRes = await SillyTavern.callGenericPopup(
+                `哎呀，现在的状态和之前存过的快照【 ${duplicateSnapName} 】一模一样呢！\n想要怎么整理呢？`,
+                SillyTavern.POPUP_TYPE.TEXT, "",
+                {
+                    okButton: "不用存了",
+                    customButtons: [
+                        {text: "不管，我要存个新名字", result: 888, classes: ["btn-primary"]},
+                        {text: "借此机会给旧快照改个名", result: 999, classes: ["btn-warning"]}
+                    ]
+                }
+            );
+            if (btnRes !== 888 && btnRes !== 999) return;
+
+            snapName = await SillyTavern.callGenericPopup(`请为这个组合起个响亮的名字吧：`, SillyTavern.POPUP_TYPE.INPUT, btnRes === 999 ? duplicateSnapName : "新情境随笔");
+            if (!snapName || !(snapName = snapName.trim())) return;
+
+            if (btnRes === 999 && snapName !== duplicateSnapName) {
+                updateVariablesWith(v => { delete v.wb_char_snapshots[charName][duplicateSnapName]; return v; }, { type: 'global' });
+            }
+        } else {
+            snapName = await SillyTavern.callGenericPopup("请给当前的组合状态起个名字吧：", SillyTavern.POPUP_TYPE.INPUT, "新情境");
+            if (!snapName || !(snapName = snapName.trim())) return;
+        }
+
+        if (existingSnaps[snapName] && duplicateSnapName !== snapName) {
+             const overRes = await SillyTavern.callGenericPopup(
+                `名字【${snapName}】已经被占用了哦！要用新配置把它覆盖掉吗？`,
+                SillyTavern.POPUP_TYPE.CONFIRM
+            );
+            if (overRes !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+        }
+
+        updateVariablesWith(v => {
+            if (!v.wb_char_snapshots) v.wb_char_snapshots = {};
+            if (!v.wb_char_snapshots[charName]) v.wb_char_snapshots[charName] = {};
+            v.wb_char_snapshots[charName][snapName] = newSnapData;
+            return v;
+        }, { type: 'global' });
+
+        toastr.success("角色的当前条目状态已经完美收纳进相册啦！");
+        renderCharView();
     });
 
     const renderAssocView = () => {
@@ -923,10 +1374,10 @@ $menuBtn.on('click', async () => {
                 $item.find('.hover-red').on('click', async () => {
                     await withLoadingOverlay(async () => {
                         await rebindPersonaWorldbook(null, wb);
-                        await initiateDeepScan(true);
+                        await initiateDeepScan(true, false);
                     }, "正在为你解除 Persona 的绑定...");
                     renderAssocView();
-                    toastr.success(`已经帮您解解除旧世界书的束缚啦。`);
+                    toastr.success(`已经为您解除了旧世界书的束缚啦。`);
                });
                 $item.hover(function(){ $(this).css('box-shadow', '0 2px 5px rgba(0,0,0,0.2)') }, function(){ $(this).css('box-shadow', 'none') });
                 $uCont.append($item);
@@ -963,17 +1414,14 @@ $menuBtn.on('click', async () => {
             $ui.find('#wb-assoc-char-add-area').hide();
         } else {
             $ui.find('#wb-assoc-char-add-area').show();
-
-            let charBooksObj = {primary: null, additional:[]};
-            try { if (typeof getCharWorldbookNames === 'function') charBooksObj = getCharWorldbookNames('current') || charBooksObj; } catch(e){}
-
-            const cBooks =[];
-            if(charBooksObj.primary) cBooks.push(charBooksObj.primary);
-            if(charBooksObj.additional) cBooks.push(...charBooksObj.additional);
+            const cBooks = getCharBoundBooks();
 
             if (cBooks.length === 0) {
                 $cCont.append('<div style="color:gray; font-size:13px; padding:4px;">当前角色卡非常干净，一本世界书都没绑定呢。</div>');
             } else {
+                 let charBooksObj = {primary: null, additional:[]};
+                 try { if (typeof getCharWorldbookNames === 'function') charBooksObj = getCharWorldbookNames('current') || charBooksObj; } catch(e){}
+
                 cBooks.forEach(wb => {
                      const isPrimary = wb === charBooksObj.primary;
                      const tagLabelHtml = isPrimary
@@ -984,7 +1432,6 @@ $menuBtn.on('click', async () => {
                         <span style="font-weight:bold; font-size:14px; color:var(--SmartThemeQuoteColor); cursor:pointer; display:flex; align-items:center;" title="点击编辑内容" class="wb-assoc-entry-edit"><i class="fa-solid fa-robot" style="margin-right: 5px;"></i> ${wb} ${tagLabelHtml}</span>
                         <div class="hover-red" style="cursor:pointer; color:gray; margin-left: 4px;" title="解除绑定"><i class="fa-solid fa-xmark"></i></div>
                      </div>`);
-                     // ========== 升级完毕 ==========
 
                      $item.find('.wb-assoc-entry-edit').on('click', () => openEntryTuneView(wb, '#wb-assoc-view'));
                      $item.find('.hover-red').hover(function(){$(this).css('color','#ff6b6b')}, function(){$(this).css('color','gray')});
@@ -994,7 +1441,7 @@ $menuBtn.on('click', async () => {
                          await withLoadingOverlay(async () => {
                              if (typeof rebindCharWorldbooks === 'function') {
                                  await rebindCharWorldbooks('current', { primary: primary, additional: newAdd });
-                                 await initiateDeepScan(true);
+                                 await initiateDeepScan(true, false);
                              }
                          }, "正在为角色卡解除绑定...");
                          renderAssocView();
@@ -1028,7 +1475,7 @@ $menuBtn.on('click', async () => {
 
     $ui.find('#wb-btn-open-assoc').on('click', () => {
         renderAssocView();
-        $ui.find('#wb-main-view').hide();
+        $ui.find('#wb-char-view, #wb-tab-strip').hide();
         $ui.find('#wb-assoc-view').fadeIn(200);
     });
 
@@ -1042,7 +1489,7 @@ $menuBtn.on('click', async () => {
 
         await withLoadingOverlay(async () => {
             await rebindPersonaWorldbook(wb);
-            await initiateDeepScan(true);
+            await initiateDeepScan(true, false);
         }, "正在努力为你的 Persona 建立羁绊...");
 
         toastr.success(`成功把[${wb}] 绑定给当前的 Persona 啦！`);
@@ -1067,7 +1514,7 @@ $menuBtn.on('click', async () => {
         await withLoadingOverlay(async () => {
             if (typeof rebindCharWorldbooks === 'function') {
                 await rebindCharWorldbooks('current', { primary: newPrimary, additional: newAdd });
-                await initiateDeepScan(true);
+                await initiateDeepScan(true, false);
             }
         }, "正在努力为你当前的角色卡绑定世界书...");
 
@@ -1078,7 +1525,8 @@ $menuBtn.on('click', async () => {
 
     $ui.find('#wb-btn-assoc-cancel').on('click', () => {
         $ui.find('#wb-assoc-view').hide();
-        $ui.find('#wb-main-view').fadeIn(200);
+        $ui.find('#wb-tab-strip, #wb-char-view').fadeIn(200);
+        renderCharView();
     });
 
     const renderData = (highlightName = null) => {
@@ -1231,7 +1679,10 @@ $menuBtn.on('click', async () => {
                         .append($('<div class="wb-icon-btn" title="重命名名称"><i class="fa-solid fa-pen"></i></div>').on('click', () => attemptRenameWb(wb, bindings.length > 0, bindings)))
                         .append($('<div class="wb-icon-btn hover-red" title="彻底删除"><i class="fa-solid fa-trash"></i></div>').on('click', async () => {
                              if (await SillyTavern.callGenericPopup(`删除确认：丢失 [${wb}] ？`, SillyTavern.POPUP_TYPE.CONFIRM) === SillyTavern.POPUP_RESULT.AFFIRMATIVE) {
-                                  await withLoadingOverlay(async () => { await deleteWorldbook(wb); delete globalBindingMapCache[wb];
+                                  await withLoadingOverlay(async () => {
+                                      await deleteWorldbook(wb);
+                                      delete globalBindingMapCache[wb];
+                                      const c = loadBindingCache(); if(c){ delete c[wb]; saveBindingCache(c);}
                                       let d = getCategories(); Object.keys(d).forEach(k => d[k] = d[k].filter(n=>n!==wb)); saveCategories(d);
                                       renderData();
                                   }, `删除中...`);
@@ -1273,7 +1724,9 @@ $menuBtn.on('click', async () => {
     let activeBindWb = "";
     const openBindView = (wbName) => {
         activeBindWb = wbName; $ui.find('#wb-bind-title').text(wbName);
-        $ui.find('#wb-main-view').hide(); $ui.find('#wb-bind-view').fadeIn(); renderBindList();
+        $ui.find('#wb-main-view, #wb-tab-strip').hide();
+        $ui.find('#wb-bind-view').fadeIn();
+        renderBindList();
     };
 
     const renderBindList = () => {
@@ -1291,10 +1744,11 @@ $menuBtn.on('click', async () => {
         if (bChars.length === 0) $cont.html('<div style="padding:15px; color:gray; text-align:center;">这本书目前可以说是非常地清闲，没有任何绑定呢~</div>');
     };
     $ui.find('#wb-bind-search').on('input', renderBindList);
-    $ui.find('#wb-btn-bind-cancel').on('click', () => { $ui.find('#wb-bind-view').hide(); $ui.find('#wb-main-view').fadeIn(); });
+    $ui.find('#wb-btn-bind-cancel').on('click', () => { $ui.find('#wb-bind-view').hide(); $ui.find('#wb-tab-strip, #wb-main-view').fadeIn(); });
 
     $ui.find('#wb-btn-save-snap').on('click', async () => {
-         let name = await SillyTavern.callGenericPopup("创建新快照组合名称：", SillyTavern.POPUP_TYPE.INPUT, "新备份组合");
+         let name = await SillyTaver
+         n.callGenericPopup("创建新快照组合名称：", SillyTavern.POPUP_TYPE.INPUT, "新备份组合");
          if (!name || !(name=name.trim())) return;
          updateVariablesWith(v => { if (!v.wb_snapshots) v.wb_snapshots = {}; v.wb_snapshots[name] = { type: 'simple', wbs: getGlobalWorldbookNames() }; return v; }, { type: 'global' });
          toastr.success("组合保存完毕。"); renderData();
@@ -1317,7 +1771,7 @@ $menuBtn.on('click', async () => {
             });
         };
         $ui.find('#wb-edit-snap-search').off('input').on('input', buildList).val(''); buildList();
-        $ui.find('#wb-main-view').hide(); $ui.find('#wb-edit-snap-view').fadeIn(200);
+        $ui.find('#wb-main-view, #wb-tab-strip').hide(); $ui.find('#wb-edit-snap-view').fadeIn(200);
     };
 
     $ui.find('#wb-btn-edit-save').on('click', async () => {
@@ -1328,9 +1782,9 @@ $menuBtn.on('click', async () => {
             if (nName !== snapOldName) delete v.wb_snapshots[snapOldName];
             v.wb_snapshots[nName] = { type: 'simple', wbs: snapTempList }; return v;
         }, { type: 'global' });
-        toastr.success("快照已成功更新！"); $ui.find('#wb-edit-snap-view').hide(); $ui.find('#wb-main-view').fadeIn(); renderData();
+        toastr.success("快照已成功更新！"); $ui.find('#wb-edit-snap-view').hide(); $ui.find('#wb-tab-strip, #wb-main-view').fadeIn(); renderData();
     });
-    $ui.find('#wb-btn-edit-cancel').on('click', () => { $ui.find('#wb-edit-snap-view').hide(); $ui.find('#wb-main-view').fadeIn(); });
+    $ui.find('#wb-btn-edit-cancel').on('click', () => { $ui.find('#wb-edit-snap-view').hide(); $ui.find('#wb-tab-strip, #wb-main-view').fadeIn(); });
 
     let detailedSnapData = {}; let detailedSnapOldName = ""; let currentOpenedDsWb = "";
 
@@ -1391,7 +1845,7 @@ $menuBtn.on('click', async () => {
         };
 
         $ui.find('#dsnap-entry-sort').off('change').on('change', async () => { if (currentOpenedDsWb) { const entries = await getWorldbook(currentOpenedDsWb); renderDsEntryItems(entries, currentOpenedDsWb); } });
-        renderWbList(); $ui.find('#wb-main-view, #wb-edit-snap-view, #wb-assoc-view').hide(); $ui.find('#wb-detailed-snap-view').fadeIn(200);
+        renderWbList(); $ui.find('#wb-main-view, #wb-edit-snap-view, #wb-assoc-view, #wb-tab-strip, #wb-char-view').hide(); $ui.find('#wb-detailed-snap-view').fadeIn(200);
     };
 
     const applyDetailedSnapshot = async (data) => {
@@ -1420,11 +1874,11 @@ $menuBtn.on('click', async () => {
             if(name !== detailedSnapOldName) delete v.wb_snapshots[detailedSnapOldName];
             v.wb_snapshots[name] = { type: 'detailed', data: detailedSnapData }; return v;
         }, { type: 'global' });
-        toastr.success(`快照保存好啦。`); $ui.find('#wb-detailed-snap-view').hide(); $ui.find('#wb-main-view').fadeIn(200); renderData();
+        toastr.success(`快照保存好啦。`); $ui.find('#wb-detailed-snap-view').hide(); $ui.find('#wb-tab-strip, #wb-main-view').fadeIn(200); renderData();
     });
-    $ui.find('#dsnap-cancel').on('click', () => { $ui.find('#wb-detailed-snap-view').hide(); $ui.find('#wb-main-view').fadeIn(200); });
+    $ui.find('#dsnap-cancel').on('click', () => { $ui.find('#wb-detailed-snap-view').hide(); $ui.find('#wb-tab-strip, #wb-main-view').fadeIn(200); });
 
-    let tuneWbName = ""; let tuneEntries =[]; let originalTuneEntries =[]; // ✨ 鹿酱新增：用于随时记忆主人的原始存档！
+    let tuneWbName = ""; let tuneEntries =[]; let originalTuneEntries =[];
     let tuneReturnView = '#wb-main-view';
 
     const openEntryTuneView = async (wbName, fromView = '#wb-main-view') => {
@@ -1433,13 +1887,13 @@ $menuBtn.on('click', async () => {
         await withLoadingOverlay(async () => {
             const fetched = await getWorldbook(wbName);
             tuneEntries = JSON.parse(JSON.stringify(fetched));
-            originalTuneEntries = JSON.parse(JSON.stringify(fetched)); // ✨ 鹿酱帮您在刚进门时偷偷备份一份！
+            originalTuneEntries = JSON.parse(JSON.stringify(fetched));
         }, `提取内容...`);
         isEntryBatchMode = false; entryBatchSelected.clear();
         $ui.find('#wb-btn-entry-batch').removeClass('btn-warning').addClass('btn-danger').html('<i class="fa-solid fa-layer-group"></i> 批量操作');
         $ui.find('#wb-entry-batch-actions').hide();
         renderEntryList();
-        $ui.find('#wb-main-view, #wb-detail-view, #wb-assoc-view').hide();
+        $ui.find('#wb-main-view, #wb-detail-view, #wb-assoc-view, #wb-tab-strip, #wb-char-view').hide();
         $ui.find('#wb-entry-view').fadeIn(200);
     };
 
@@ -1540,7 +1994,6 @@ $menuBtn.on('click', async () => {
                  renderEntryList();
              });
 
-             // ============ ✨ 修复误删 Bug 的安全验证逻辑 ============
              $gHeader.find('.wb-group-delete').on('click', async (e) => {
                 e.stopPropagation();
 
@@ -1552,11 +2005,11 @@ $menuBtn.on('click', async () => {
                     SillyTavern.POPUP_TYPE.TEXT,
                     "",
                     {
-                        okButton: "点错了取消", 
+                        okButton: "点错了取消",
                         customButtons: [
                             {text: "彻底清空分组与条目", result: 888, classes: ["btn-danger"]},
                             {text: "仅解散分组(条目回未分类)", result: 999, classes: ["btn-warning"]}
-                        ] 
+                        ]
                     }
                 );
 
@@ -1581,11 +2034,10 @@ $menuBtn.on('click', async () => {
                 const posBadgeHtml = `<span class="badge-grey" style="color:var(--SmartThemeBodyColor); background:none; border-color:var(--SmartThemeBorderColor);">${formatPositionBadge(entry.position)}</span>`;
 
                 const isEn = entry.enabled;
-                const dynamicBg = isEn ? 'var(--SmartThemeBotMesColor)' : 'rgba(125,125,125,0.08)'; // 没开启时蒙上一层灰黑
-                const dynamicOpacity = isEn ? '1' : '0.55'; // 没开启时变透明
+                const dynamicBg = isEn ? 'var(--SmartThemeBotMesColor)' : 'rgba(125,125,125,0.08)';
+                const dynamicOpacity = isEn ? '1' : '0.55';
                 const $item = $(`<div class="lulu-wb-entry-item" style="display:flex; align-items:flex-start; gap:12px; padding:10px; border-left: 4px solid ${isEn ? 'var(--okGreen)' : 'gray'}; background:${dynamicBg}; border-radius:4px; opacity:${dynamicOpacity}; transition: 0.2s;"></div>`);
 
-                // 停留在上面时略微恢复透明度方便查看
                 $item.hover(
                     function() { if (!isEn) $(this).css('opacity', '1'); },
                     function() { if (!isEn) $(this).css('opacity', '0.55'); }
@@ -1639,15 +2091,17 @@ $menuBtn.on('click', async () => {
 
     $ui.find('#wb-btn-entry-save').on('click', async () => {
         await withLoadingOverlay(async () => { await replaceWorldbook(tuneWbName, tuneEntries); }, `写入中...`);
-        originalTuneEntries = JSON.parse(JSON.stringify(tuneEntries)); // ✨ 鹿酱新增：保存成功后，把现在的样子当做新的“原始状态”记住！
+        originalTuneEntries = JSON.parse(JSON.stringify(tuneEntries));
         toastr.success(`[${tuneWbName}] 的修改已经成功保存啦！`);
+
         if(tuneReturnView === '#wb-main-view') renderData();
+        else if(tuneReturnView === '#wb-char-view') renderCharView();
     });
 
     $ui.find('#wb-btn-entry-cancel').on('click', async () => {
         const isDirty = JSON.stringify(tuneEntries) !== JSON.stringify(originalTuneEntries);
 
-        if (isDirty) { 
+        if (isDirty) {
             const confirm = await SillyTavern.callGenericPopup(
                 `当前条目的更改（比如新分了组、开启了条目等）还没有点底部的<strong style="color:var(--SmartThemeQuoteColor);">绿色按钮保存</strong>哦！<br>真的要放弃这些修改，直接返回吗？`,
                 SillyTavern.POPUP_TYPE.CONFIRM
@@ -1656,6 +2110,7 @@ $menuBtn.on('click', async () => {
         }
 
         $ui.find('#wb-entry-view').hide();
+        $ui.find('#wb-tab-strip').show();
         $ui.find(tuneReturnView).fadeIn(200);
     });
 
@@ -1672,6 +2127,7 @@ $menuBtn.on('click', async () => {
         $ui.find('#wb-det-exclude-recursion').prop('checked', !!isExclude); $ui.find('#wb-det-prevent-recursion').prop('checked', !!isPrevent);
         $ui.find('#wb-entry-view').hide(); $ui.find('#wb-detail-view').fadeIn(200);
     };
+
     $ui.find('#wb-btn-det-save').on('click', () => {
         if(tuneDetailIndex === -1) return;
         const e = tuneEntries[tuneDetailIndex], pos = $ui.find('#wb-det-position').val(), order = parseInt($ui.find('#wb-det-order').val()) || 100;
