@@ -1424,13 +1424,17 @@ $menuBtn.on('click', async () => {
     });
     $ui.find('#dsnap-cancel').on('click', () => { $ui.find('#wb-detailed-snap-view').hide(); $ui.find('#wb-main-view').fadeIn(200); });
 
-    let tuneWbName = ""; let tuneEntries =[];
+    let tuneWbName = ""; let tuneEntries =[]; let originalTuneEntries =[]; // ✨ 鹿酱新增：用于随时记忆主人的原始存档！
     let tuneReturnView = '#wb-main-view';
 
     const openEntryTuneView = async (wbName, fromView = '#wb-main-view') => {
         tuneReturnView = fromView;
         tuneWbName = wbName; $ui.find('#wb-entry-title').text(wbName); $ui.find('#wb-entry-search').val(''); $ui.find('#wb-entry-sort').val('default');
-        await withLoadingOverlay(async () => { tuneEntries = JSON.parse(JSON.stringify(await getWorldbook(wbName))); }, `提取内容...`);
+        await withLoadingOverlay(async () => {
+            const fetched = await getWorldbook(wbName);
+            tuneEntries = JSON.parse(JSON.stringify(fetched));
+            originalTuneEntries = JSON.parse(JSON.stringify(fetched)); // ✨ 鹿酱帮您在刚进门时偷偷备份一份！
+        }, `提取内容...`);
         isEntryBatchMode = false; entryBatchSelected.clear();
         $ui.find('#wb-btn-entry-batch').removeClass('btn-warning').addClass('btn-danger').html('<i class="fa-solid fa-layer-group"></i> 批量操作');
         $ui.find('#wb-entry-batch-actions').hide();
@@ -1635,11 +1639,22 @@ $menuBtn.on('click', async () => {
 
     $ui.find('#wb-btn-entry-save').on('click', async () => {
         await withLoadingOverlay(async () => { await replaceWorldbook(tuneWbName, tuneEntries); }, `写入中...`);
-        toastr.success(`[${tuneWbName}] 的修改已经成功保存啦！`); 
+        originalTuneEntries = JSON.parse(JSON.stringify(tuneEntries)); // ✨ 鹿酱新增：保存成功后，把现在的样子当做新的“原始状态”记住！
+        toastr.success(`[${tuneWbName}] 的修改已经成功保存啦！`);
         if(tuneReturnView === '#wb-main-view') renderData();
     });
 
-    $ui.find('#wb-btn-entry-cancel').on('click', () => {
+    $ui.find('#wb-btn-entry-cancel').on('click', async () => {
+        const isDirty = JSON.stringify(tuneEntries) !== JSON.stringify(originalTuneEntries);
+
+        if (isDirty) { 
+            const confirm = await SillyTavern.callGenericPopup(
+                `当前条目的更改（比如新分了组、开启了条目等）还没有点底部的<strong style="color:var(--SmartThemeQuoteColor);">绿色按钮保存</strong>哦！<br>真的要放弃这些修改，直接返回吗？`,
+                SillyTavern.POPUP_TYPE.CONFIRM
+            );
+            if (confirm !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+        }
+
         $ui.find('#wb-entry-view').hide();
         $ui.find(tuneReturnView).fadeIn(200);
     });
@@ -1676,4 +1691,3 @@ $menuBtn.on('click', async () => {
 
     await popup.show();
 });
-   
