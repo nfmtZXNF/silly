@@ -411,8 +411,8 @@ $menuBtn.on('click', async () => {
 
                 <div class="wb-btn-group">
                     <div class="wb-action-btn wb-nowrap-btn" id="wb-btn-clear" style="color: #888;"><i class="fa-solid fa-power-off"></i> 关闭当前所有全局启用</div>
-                    <div class="wb-action-btn wb-nowrap-btn btn-primary" id="wb-btn-save-snap"><i class="fa-solid fa-box-archive"></i> 分组状态快照 (全局)</div>
-                    <div class="wb-action-btn wb-nowrap-btn btn-primary" id="wb-btn-create-detail-snap"><i class="fa-solid fa-puzzle-piece"></i> 条目复用组合快照 (全局)</div>
+                    <div class="wb-action-btn wb-nowrap-btn btn-primary" id="wb-btn-save-snap"><i class="fa-solid fa-box-archive"></i> 将当前勾选存为快照 (全局)</div>
+                    <div class="wb-action-btn wb-nowrap-btn btn-primary" id="wb-btn-create-detail-snap"><i class="fa-solid fa-puzzle-piece"></i> 创建复合快照 (全局)</div>
                     <div class="wb-action-btn wb-nowrap-btn btn-danger" id="wb-btn-batch-toggle"><i class="fa-solid fa-trash-can"></i> 批量删除模式</div>
                 </div>
 
@@ -769,16 +769,15 @@ $menuBtn.on('click', async () => {
         let currentMode = $ui.find('#wb-theme-select').val();
         if (currentMode === 'default' || currentMode === 'dark' || currentMode === 'custom') {
             $ui.find('#wb-theme-select').val('light').trigger('change');
-            if(typeof toastr !== 'undefined') toastr.success("已为您开启：浅色柔和阅读模式 ☀️");
+            if(typeof toastr !== 'undefined') toastr.success("已为您开启：浅色模式 ☀️");
         }
         else if (currentMode === 'light') {
             $ui.find('#wb-theme-select').val('dark').trigger('change');
-            if(typeof toastr !== 'undefined') toastr.success("已为您开启：深色寂静护眼模式 🌙");
+            if(typeof toastr !== 'undefined') toastr.success("已为您开启：深色模式 🌙");
         }
     });
 
     loadThemeSettings(); 
-    // --- 主题换肤魔法核心结束 ---
 
 
     const isFloatingEnabledNow = localStorage.getItem('lulu_wb_floating_enabled') === 'true';
