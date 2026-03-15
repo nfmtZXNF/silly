@@ -12,6 +12,29 @@ let globalBindingMapCache = {};
 
 let isEntryBatchMode = false;
 let entryBatchSelected = new Set();
+if ($("#lulu-drag-line-style").length === 0) {
+    $("head").append(`
+        <style id="lulu-drag-line-style">
+            .lulu-drag-over-top {
+                box-shadow: 0 -3px 0 0 #51cf66 !important;
+                margin-top: 25px !important;
+                transition: margin 0.15s ease-out, box-shadow 0.1s !important;
+            }
+            .lulu-drag-over-bottom {
+                box-shadow: 0 3px 0 0 #51cf66 !important;
+                margin-bottom: 25px !important;
+                transition: margin 0.15s ease-out, box-shadow 0.1s !important;
+            }
+            .lulu-drag-ghost {
+                opacity: 0.4 !important;
+                transform: scale(0.98) !important;
+                border: 1px dashed #51cf66 !important;
+            }
+        </style>
+    `);
+}
+const getSharedGroupOrder = () => JSON.parse(localStorage.getItem('lulu_wb_native_group_order') || '[]');
+const setSharedGroupOrder = (arr) => localStorage.setItem('lulu_wb_native_group_order', JSON.stringify(arr));
 
 const formatPositionBadge = (pos) => {
     if (!pos) return '📍未知位置 | 🔢100';
@@ -45,9 +68,7 @@ const getPersonaWbs = () => {
     try {
         const ctx = typeof SillyTavern !== 'undefined' ? SillyTavern.getContext() : (typeof getContext === 'function' ? getContext() : {});
         const pus = ctx.powerUserSettings || {};
-
         if (pus.persona_description_lorebook) books.push(pus.persona_description_lorebook);
-
         const activeId = getCurrentPersonaId(ctx, pus);
         if (activeId && pus.persona_descriptions && pus.persona_descriptions[activeId]) {
             if (pus.persona_descriptions[activeId].lorebook) books.push(pus.persona_descriptions[activeId].lorebook);
@@ -165,7 +186,6 @@ const toggleFloatingButton = (show) => {
                 btnNode.style.setProperty('transition', 'none', 'important');
             }
         };
-
         const onPointerUp = (ev) => {
             btnNode.removeEventListener('pointermove', onPointerMove); btnNode.removeEventListener('pointerup', onPointerUp); btnNode.removeEventListener('pointercancel', onPointerUp);
             try { btnNode.releasePointerCapture(ev.pointerId); } catch(err) {}
@@ -323,6 +343,10 @@ $menuBtn.on('click', async () => {
                         <input type="checkbox" id="wb-toggle-floating" style="accent-color: var(--SmartThemeQuoteColor); transform: scale(1.1);">
                         <span style="font-weight: bold; color: var(--SmartThemeQuoteColor);">🔮 开启悬浮球</span>
                     </label>
+                    <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px; margin: 0; white-space: nowrap; background: rgba(125,125,125,0.1); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--SmartThemeBorderColor);">
+                        <input type="checkbox" id="wb-toggle-native-magic" style="accent-color: #51cf66; transform: scale(1.1);">
+                        <span style="font-weight: bold; color: #51cf66;">🪄 原生分类同步</span>
+                    </label>
 
                     <button id="wb-theme-quick-toggle" class="menu_button interactable" style="margin: 0; padding: 4px 10px; min-width: unset; font-size: 13px; border-radius: 6px; background: rgba(125,125,125,0.1); border: 1px solid var(--SmartThemeBorderColor); flex-shrink: 0; white-space: nowrap;" title="一键切换深色/浅色护眼模式"><i class="fa-solid fa-circle-half-stroke"></i></button>
 
@@ -339,7 +363,7 @@ $menuBtn.on('click', async () => {
             <!-- ✨ 皮肤设定的下拉内容区域 -->
             <div id="wb-theme-config-panel" style="display:none; margin-bottom: 12px; border-radius: 8px; border: 1px dashed var(--SmartThemeQuoteColor); background: rgba(0,0,0,0.1); padding: 12px;">
                 <div style="font-weight: bold; margin-bottom: 10px; color: var(--SmartThemeQuoteColor); display:flex; align-items:center; gap:6px;">
-                    <i class="fa-solid fa-paint-roller"></i> 魔法皮肤调色板
+                    <i class="fa-solid fa-paint-roller"></i> 皮肤调色板
                     <span style="font-weight:normal; font-size:12px; color:gray;">(独立于酒馆全局，随意调整，妈妈再也不用担心我看不清字啦)</span>
                 </div>
                 <div style="display:flex; gap:12px; align-items: center; flex-wrap: wrap;">
@@ -779,8 +803,7 @@ $menuBtn.on('click', async () => {
         }
     });
 
-    loadThemeSettings(); 
-
+    loadThemeSettings();
 
     const isFloatingEnabledNow = localStorage.getItem('lulu_wb_floating_enabled') === 'true';
     $ui.find('#wb-toggle-floating').prop('checked', isFloatingEnabledNow);
@@ -791,6 +814,15 @@ $menuBtn.on('click', async () => {
         toggleFloatingButton(isEnable);
         if (typeof toastr !== 'undefined') {
             toastr.success(isEnable ? "✨ 悬浮魔法球已经召唤出来了！您可以点击展开小抽屉，或者拖动它哦。" : "🪄 悬浮魔法球已经安静地收回去了~");
+        }
+    });
+    const isNativeMagicEnabledNow = localStorage.getItem('lulu_wb_native_magic_enabled') !== 'false';
+    $ui.find('#wb-toggle-native-magic').prop('checked', isNativeMagicEnabledNow);
+    $ui.find('#wb-toggle-native-magic').on('change', function() {
+        const isEnable = $(this).is(':checked');
+        localStorage.setItem('lulu_wb_native_magic_enabled', isEnable);
+        if (typeof toastr !== 'undefined') {
+            toastr.success(isEnable ? "🪄 原生UI的分组已激活！两边同步哦~" : "💤 原生UI分组已沉睡，酒馆恢复原生样式~");
         }
     });
 
@@ -1042,13 +1074,12 @@ $menuBtn.on('click', async () => {
     const popup = new SillyTavern.Popup($ui, SillyTavern.POPUP_TYPE.TEXT, '', {
         allowVerticalScrolling: true, okButton: "关闭面板",
         onOpen: async () => {
-            $(popup.dlg).addClass('wb-manager-dialog'); 
+            $(popup.dlg).addClass('wb-manager-dialog');
             showTab(window.luluWbInitTabType || 'global');
             await initiateDeepScan();
         }
     });
 
-    // Fallback if dialog lacks class instantly
     setTimeout(() => $(popup.dlg).addClass('wb-manager-dialog'), 50);
 
     const attemptCreateWb = async (defaultName = "") => {
@@ -1069,12 +1100,12 @@ $menuBtn.on('click', async () => {
         }, "正在创建世界书...");
     };
     $ui.find('#wb-btn-create-wb').on('click', () => attemptCreateWb());
-    // === 这里开始是批量导入 ===
+
     const $fileInput = $('<input type="file" multiple accept=".json" style="display: none;">');
     $ui.append($fileInput);
 
     $ui.find('#wb-btn-import-wb').on('click', () => {
-        $fileInput.val(''); 
+        $fileInput.val('');
         $fileInput.trigger('click');
     });
 
@@ -1086,7 +1117,7 @@ $menuBtn.on('click', async () => {
             let successCount = 0;
             let failCount = 0;
             let skipCount = 0;
-            let newlyImportedNames = []; 
+            let newlyImportedNames = [];
             const $overlay = $ui.find('#wb-loading-overlay');
 
             for (let i = 0; i < files.length; i++) {
@@ -1107,16 +1138,12 @@ $menuBtn.on('click', async () => {
                     else rawEntries = Object.values(data).filter(item => typeof item === 'object' && item !== null);
 
                     let entries = rawEntries.map(e => {
-                        // 1. 抓取被藏起的名字：原生V2里它叫 comment 哦！
                         let eName = e.name || e.comment || e.title || "未定名条目";
-
-                        // 2. 状态纠正
                         let eEnabled = true;
                         if (e.enabled !== undefined) eEnabled = e.enabled;
                         else if (e.disable !== undefined) eEnabled = !e.disable;
                         else if (e.disabled !== undefined) eEnabled = !e.disabled;
 
-                        // 3. 触发策略转换
                         let strategy = e.strategy;
                         if (!strategy) {
                             let keys = [];
@@ -1130,7 +1157,6 @@ $menuBtn.on('click', async () => {
                             strategy = { type: isConstant ? 'constant' : 'selective', keys: keys };
                         }
 
-                        // 4. 定位深浅度转换
                         let position = e.position;
                         if (!position || typeof position !== 'object') {
                             let pType = 'at_depth';
@@ -1174,15 +1200,8 @@ $menuBtn.on('click', async () => {
                         $overlay.hide();
                         const btnRes = await SillyTavern.callGenericPopup(
                             `哎呀，发现同名世界书 [${finalName}] 了呢！想要如何处置这本即将导入的新书呀？`,
-                            SillyTavern.POPUP_TYPE.TEXT,
-                            "",
-                            {
-                                okButton: "跳过这本",
-                                customButtons: [
-                                    {text: "取代原文件", result: 888, classes: ["btn-danger"]},
-                                    {text: "重命名并新建", result: 999, classes:["btn-primary"]}
-                                ]
-                            }
+                            SillyTavern.POPUP_TYPE.TEXT, "",
+                            { okButton: "跳过这本", customButtons: [ {text: "取代原文件", result: 888, classes: ["btn-danger"]}, {text: "重命名并新建", result: 999, classes:["btn-primary"]} ] }
                         );
                         $overlay.show();
 
@@ -1198,7 +1217,7 @@ $menuBtn.on('click', async () => {
                             $overlay.show();
 
                             if (!newName || typeof newName !== 'string' || newName.trim() === '') {
-                                shouldSkip = true; 
+                                shouldSkip = true;
                                 break;
                             }
                             finalName = newName.trim();
@@ -1208,21 +1227,16 @@ $menuBtn.on('click', async () => {
                         }
                     }
 
-                    if (shouldSkip) {
-                        skipCount++;
-                        continue; 
-                    }
+                    if (shouldSkip) { skipCount++; continue; }
 
                     await createWorldbook(finalName, entries);
 
                     globalBindingMapCache[finalName] = [];
-                    const c = loadBindingCache() || {};
-                    c[finalName] = [];
-                    saveBindingCache(c);
+                    const c = loadBindingCache() || {}; c[finalName] = []; saveBindingCache(c);
                     if (data.lulu_categories && Array.isArray(data.lulu_categories)) {
                         let cData = getCategories();
                         data.lulu_categories.forEach(catName => {
-                            if (!cData[catName]) cData[catName] = []; 
+                            if (!cData[catName]) cData[catName] = [];
                             if (!cData[catName].includes(finalName)) cData[catName].push(finalName);
                         });
                         saveCategories(cData);
@@ -1231,15 +1245,11 @@ $menuBtn.on('click', async () => {
                     successCount++;
                     newlyImportedNames.push(finalName);
 
-                } catch (err) {
-                    console.error("导入这本世界书时发生了一点小意外呢", file.name, err);
-                    failCount++;
-                }
+                } catch (err) { failCount++; }
             }
 
             if (successCount > 0) {
                 if (typeof toastr !== 'undefined') toastr.success(`大功告成！已为您导入了 ${successCount} 本新书！${skipCount > 0 ? ` (略过了 ${skipCount} 本)` : ''}${failCount > 0 ? ` (出错了 ${failCount} 本)` : ''}`);
-
                 renderData();
                 setTimeout(() => {
                     newlyImportedNames.forEach((name, index) => {
@@ -1247,13 +1257,8 @@ $menuBtn.on('click', async () => {
                         if ($highlightItem.length) {
                             $highlightItem.css('animation', 'wb-highlight-flash 2.5s ease-in-out');
                             $highlightItem.addClass('wb-highlight');
-                            if (index === 0) {
-                                $highlightItem[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            }
-                            setTimeout(() => {
-                                $highlightItem.removeClass('wb-highlight');
-                                $highlightItem.css('animation', '');
-                            }, 2500);
+                            if (index === 0) $highlightItem[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            setTimeout(() => { $highlightItem.removeClass('wb-highlight'); $highlightItem.css('animation', ''); }, 2500);
                         }
                     });
                 }, 200);
@@ -1265,10 +1270,8 @@ $menuBtn.on('click', async () => {
                 if (typeof toastr !== 'undefined') toastr.info(`本次导入结束啦，没有任何世界书加入酒馆呢。`);
                 $fileInput.val('');
             }
-
         }, `正在专注解析并导入，请稍候...`);
     });
-    // === 批量导入到此结束 ===
 
     const attemptRenameWb = async (oldName, isBound, bindings, defaultNewName = "") => {
         if (isBound) return SillyTavern.callGenericPopup(`❌ 无法重命名：\n[${oldName}] 已绑定其他角色或用户，无法直接修改哦。可以先解绑再重命名最后再绑定。`, SillyTavern.POPUP_TYPE.TEXT);
@@ -1285,7 +1288,6 @@ $menuBtn.on('click', async () => {
             delete globalBindingMapCache[oldName]; globalBindingMapCache[newName] =[];
 
             const c = loadBindingCache(); if(c){ delete c[oldName]; c[newName] = []; saveBindingCache(c); }
-
             let cData = getCategories();
             Object.keys(cData).forEach(k => { if(cData[k].includes(oldName)) { cData[k] = cData[k].filter(n=>n!==oldName); cData[k].push(newName); } });
             saveCategories(cData);
@@ -1319,8 +1321,7 @@ $menuBtn.on('click', async () => {
 
         await withLoadingOverlay(async () => {
             let delay = 0;
-            let allCats = getCategories(); 
-
+            let allCats = getCategories();
             for (let wb of batchSelected) {
                 let myCats = Object.keys(allCats).filter(k => allCats[k].includes(wb));
                 setTimeout(async () => {
@@ -1460,7 +1461,6 @@ $menuBtn.on('click', async () => {
                     }
 
                     await withLoadingOverlay(async () => {
-
                           for (const wb of curBound) {
                               let wbEntries = await getWorldbook(wb);
                               let changed = false;
@@ -1705,11 +1705,9 @@ $menuBtn.on('click', async () => {
     $ui.find('#wb-assoc-user-add-btn').on('click', async () => {
         const wb = $ui.find('#wb-assoc-user-add-sel').val();
         if(!wb) return;
-
         if (getPersonaWbs().length > 0) {
              if(await SillyTavern.callGenericPopup(`通常情况下 Persona 只能绑定一本世界书哦。如果继续操作，会替换掉原本绑定的，可以吗？`, SillyTavern.POPUP_TYPE.CONFIRM) !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
         }
-
         await withLoadingOverlay(async () => {
             await rebindPersonaWorldbook(wb);
             await initiateDeepScan(true, false);
@@ -1723,7 +1721,6 @@ $menuBtn.on('click', async () => {
     $ui.find('#wb-assoc-char-add-btn').on('click', async () => {
         const wb = $ui.find('#wb-assoc-char-add-sel').val();
         if(!wb) return;
-
         let charBooksObj = {primary: null, additional:[]};
         try { if (typeof getCharWorldbookNames === 'function') charBooksObj = getCharWorldbookNames('current') || charBooksObj; } catch(e){}
         const cBooks =[];
@@ -1832,7 +1829,7 @@ $menuBtn.on('click', async () => {
             const $tagRow = $('<div class="wb-tag-area"></div>');
 
             const isBound = bindings.length > 0;
-            const $bindTag = $(`<div class="wb-bind-tag" style="background: ${isBound?'var(--SmartThemeQuoteColor)':'#888'}1A; border: 1px solid ${isBound?'var(--SmartThemeQuoteColor)':'#888'}; color: ${isBound?'var(--SmartThemeQuoteColor)':'#888'};">${isBound ? `📌 已关联 ${bindings.length} 名角色/用户` : `⚪ 暂无关联`}</div>`);
+            const $bindTag = $(`<div class="wb-bind-tag" style="background: ${isBound?'var(--SmartThemeQuoteColor)':'#888'}1A; border: 1px solid ${isBound?'var(--SmartThemeQuoteColor)':'#888'}; color: ${isBound?'var(--SmartThemeQuoteColor)':'#888'};">${isBound ? `📌${bindings.length}` : `无`}</div>`);
             if (isBound) $bindTag.on('click', () => openBindView(wb));
             $tagRow.append($bindTag);
 
@@ -2165,7 +2162,9 @@ $menuBtn.on('click', async () => {
     let wbEntryGroupState = {};
 
     const renderEntryList = () => {
-        const keyword = $ui.find('#wb-entry-search').val().toLowerCase(), sortMode = $ui.find('#wb-entry-sort').val() || 'default', $container = $ui.find('#wb-entry-container').empty();
+        const keyword = $ui.find('#wb-entry-search').val().toLowerCase();
+        const sortMode = $ui.find('#wb-entry-sort').val() || 'default';
+        const $container = $ui.find('#wb-entry-container').empty();
         $ui.find('#wb-entry-batch-count').text(entryBatchSelected.size);
 
         const filteredEntries = tuneEntries.filter(entry => { const searchStr = `${entry.name||''} ${(entry.strategy?.keys||[]).join(',')}`.toLowerCase(); return !keyword || searchStr.includes(keyword); });
@@ -2194,69 +2193,142 @@ $menuBtn.on('click', async () => {
              groupedEntries[g].push(entry);
         });
 
-        for (const [groupName, gEntries] of Object.entries(groupedEntries)) {
-             const isCollapsed = wbEntryGroupState[groupName] === true;
+        let sharedOrder = getSharedGroupOrder();
+        let orderChanged = false;
+        Object.keys(groupedEntries).forEach(g => {
+            if (g !== "📁 未分类条目" && !sharedOrder.includes(g)) {
+                sharedOrder.push(g);
+                orderChanged = true;
+            }
+        });
+        if (orderChanged) setSharedGroupOrder(sharedOrder);
 
-             const $gHeader = $(`<div style="background: rgba(0,0,0,0.15); padding:8px 12px; margin-top:8px; border-radius:6px; cursor:pointer; font-weight:bold; color:var(--SmartThemeBodyColor); border:1px solid var(--SmartThemeBorderColor); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-                 <span><i class="fa-solid ${isCollapsed ? 'fa-chevron-right' : 'fa-chevron-down'}" style="margin-right:6px; color:var(--SmartThemeQuoteColor);"></i> ${groupName} <span style="font-size:12px; color:gray; font-weight:normal; margin-left:4px;">( ${gEntries.length} 项 )</span></span>
-                 <div style="display:flex; gap:6px;">
+        const sortedGroupNames = Object.keys(groupedEntries).sort((a, b) => {
+            if (a === "📁 未分类条目") return 1;
+            if (b === "📁 未分类条目") return -1;
+            let idxA = sharedOrder.indexOf(a);
+            let idxB = sharedOrder.indexOf(b);
+            if (idxA === -1) idxA = 9999;
+            if (idxB === -1) idxB = 9999;
+            return idxA - idxB;
+        });
+
+        for (const groupName of sortedGroupNames) {
+             const gEntries = groupedEntries[groupName];
+             const isCollapsed = wbEntryGroupState[groupName] === true;
+             const isDraggable = groupName !== "📁 未分类条目";
+             const dragIcon = isDraggable ? `<i class="fa-solid fa-hand-paper lulu-panel-drag-handle" style="cursor:grab; margin-right:8px; color:gray;" title="按住拖拽排序"></i>` : '';
+
+             const $gHeader = $(`<div class="lulu-ui-group-header" data-groupname="${groupName}" draggable="${isDraggable ? 'true' : 'false'}" style="background: rgba(0,0,0,0.15); padding:8px 12px; margin-top:8px; border-radius:6px; cursor:pointer; font-weight:bold; color:var(--SmartThemeBodyColor); border:1px solid var(--SmartThemeBorderColor); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                 <span style="display:flex; align-items:center;">
+                     ${dragIcon}
+                     <i class="fa-solid ${isCollapsed ? 'fa-chevron-right' : 'fa-chevron-down'}" style="margin-right:6px; color:var(--SmartThemeQuoteColor);"></i>
+                     ${groupName}
+                     <span style="font-size:12px; color:gray; font-weight:normal; margin-left:4px;">( ${gEntries.length} 项 )</span>
+                 </span>
+                 <div style="display:flex; gap:6px;" class="lulu-group-ctrls">
+                     ${isDraggable ? `
+                     <i class="fa-solid fa-arrow-up lulu-btn-up" title="上移" style="padding:6px; font-size:12px; color:gray; cursor:pointer; background:rgba(125,125,125,0.15); border-radius:4px; transition:0.2s;"></i>
+                     <i class="fa-solid fa-arrow-down lulu-btn-down" title="下移" style="padding:6px; font-size:12px; color:gray; cursor:pointer; background:rgba(125,125,125,0.15); border-radius:4px; margin-right:10px; transition:0.2s;"></i>
+                     ` : ''}
                      <button class="menu_button interactable wb-nowrap-btn wb-group-enable-all" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(81, 207, 102, 0.15); color:#51cf66; border:1px solid rgba(81, 207, 102, 0.5);" title="开启该组所有条目"><i class="fa-solid fa-check"></i> 全开</button>
                      <button class="menu_button interactable wb-nowrap-btn wb-group-disable-all" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(150, 150, 150, 0.15); color:gray; border:1px solid rgba(150, 150, 150, 0.5);" title="关闭该组所有条目"><i class="fa-solid fa-xmark"></i> 全关</button>
-                     ${groupName !== "📁 未分类条目" ? `<button class="menu_button interactable wb-nowrap-btn wb-group-delete" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(255, 107, 107, 0.15); color:#ff6b6b; border:1px solid rgba(255, 107, 107, 0.5);" title="删除分组或解散"><i class="fa-solid fa-trash"></i> 删除</button>` : ''}
+                     ${isDraggable ? `<button class="menu_button interactable wb-nowrap-btn wb-group-delete" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(255, 107, 107, 0.15); color:#ff6b6b; border:1px solid rgba(255, 107, 107, 0.5);" title="删除分组或解散"><i class="fa-solid fa-trash"></i> 删除</button>` : ''}
                  </div>
              </div>`);
 
              const $gContainer = $(`<div style="display:${isCollapsed ? 'none' : 'flex'}; flex-direction:column; padding-left:10px; margin-top:6px; border-left: 2px solid var(--SmartThemeBorderColor); gap: 4px;"></div>`);
 
              $gHeader.on('click', (e) => {
-                 if ($(e.target).closest('button').length) return;
+                 if ($(e.target).closest('.lulu-group-ctrls').length || $(e.target).hasClass('lulu-panel-drag-handle')) return;
                  wbEntryGroupState[groupName] = !isCollapsed;
                  renderEntryList();
              });
+             if (isDraggable) {
+                $gHeader.on('dragstart', function(e) {
+                    e.originalEvent.dataTransfer.setData('text/plain', groupName);
+                    $(this).addClass('lulu-drag-ghost');
+                });
+                $gHeader.on('dragend', function() {
+                    $(this).removeClass('lulu-drag-ghost');
+                    $('.lulu-drag-over-top, .lulu-drag-over-bottom').removeClass('lulu-drag-over-top lulu-drag-over-bottom');
+                });
+                $gHeader.on('dragover', function(e) {
+                    e.preventDefault();
+                    const rect = this.getBoundingClientRect();
+                    const isBottomHalf = e.originalEvent.clientY > rect.top + (rect.height / 2);
+                    if (isBottomHalf) {
+                        $(this).removeClass('lulu-drag-over-top').addClass('lulu-drag-over-bottom');
+                    } else {
+                        $(this).removeClass('lulu-drag-over-bottom').addClass('lulu-drag-over-top');
+                    }
+                });
+                $gHeader.on('dragleave', function() {
+                    $(this).removeClass('lulu-drag-over-top lulu-drag-over-bottom');
+                });
+                $gHeader.on('drop', function(e) {
+                    e.preventDefault();
+                    $(this).removeClass('lulu-drag-over-top lulu-drag-over-bottom');
+                    const draggedGrp = e.originalEvent.dataTransfer.getData('text/plain');
+                    const targetGrp = $(this).attr('data-groupname');
+                    if (draggedGrp && draggedGrp !== targetGrp && draggedGrp !== "📁 未分类条目" && targetGrp !== "📁 未分类条目") {
+                        let order = getSharedGroupOrder();
+                        const fromIdx = order.indexOf(draggedGrp);
+                        if (fromIdx > -1) {
+                            const rect = this.getBoundingClientRect();
+                            const isBottomHalf = e.originalEvent.clientY > rect.top + (rect.height / 2);
+                            order.splice(fromIdx, 1);
+                            let newToIdx = order.indexOf(targetGrp);
+                            if (isBottomHalf) newToIdx++;
+                            order.splice(newToIdx, 0, draggedGrp);
+                            setSharedGroupOrder(order);
+                            renderEntryList();
+                        }
+                    }
+                });
+                 // 面板内的上下按钮
+                 $gHeader.find('.lulu-btn-up').on('click', () => {
+                     let order = getSharedGroupOrder();
+                     const idx = order.indexOf(groupName);
+                     if (idx > 0) {
+                         [order[idx - 1], order[idx]] = [order[idx], order[idx - 1]];
+                         setSharedGroupOrder(order); renderEntryList();
+                     }
+                 });
+                 $gHeader.find('.lulu-btn-down').on('click', () => {
+                     let order = getSharedGroupOrder();
+                     const idx = order.indexOf(groupName);
+                     if (idx !== -1 && idx < order.length - 1) {
+                         [order[idx + 1], order[idx]] = [order[idx], order[idx + 1]];
+                         setSharedGroupOrder(order); renderEntryList();
+                     }
+                 });
+             }
 
              // 组内全开
              $gHeader.find('.wb-group-enable-all').on('click', (e) => {
-                 e.stopPropagation();
-                 gEntries.forEach(entry => entry.enabled = true);
-                 renderEntryList();
+                 e.stopPropagation(); gEntries.forEach(entry => entry.enabled = true); renderEntryList();
              });
-
              // 组内全关
              $gHeader.find('.wb-group-disable-all').on('click', (e) => {
-                 e.stopPropagation();
-                 gEntries.forEach(entry => entry.enabled = false);
-                 renderEntryList();
+                 e.stopPropagation(); gEntries.forEach(entry => entry.enabled = false); renderEntryList();
              });
 
              $gHeader.find('.wb-group-delete').on('click', async (e) => {
                 e.stopPropagation();
-
-                const magicMsg = `<div style="margin-bottom:8px;">想要对【<strong style="color:var(--SmartThemeQuoteColor);">${groupName}</strong>】做什么呢？</div>
-                                  <span style="font-size:12px; color:gray;">(当前组内包含 ${gEntries.length} 个条目)</span>`;
-
                 const btnRes = await SillyTavern.callGenericPopup(
-                    magicMsg,
-                    SillyTavern.POPUP_TYPE.TEXT,
-                    "",
-                    {
-                        okButton: "点错了取消",
-                        customButtons: [
-                            {text: "彻底清空分组与条目", result: 888, classes: ["btn-danger"]},
-                            {text: "仅解散分组(条目回未分类)", result: 999, classes: ["btn-warning"]}
-                        ]
-                    }
+                    `<div style="margin-bottom:8px;">想要对【<strong style="color:var(--SmartThemeQuoteColor);">${groupName}</strong>】做什么呢？</div><span style="font-size:12px; color:gray;">(当前组内包含 ${gEntries.length} 个条目)</span>`,
+                    SillyTavern.POPUP_TYPE.TEXT, "", { okButton: "点错了取消", customButtons: [ {text: "彻底清空分组与条目", result: 888, classes: ["btn-danger"]}, {text: "仅解散分组(条目回未分类)", result: 999, classes: ["btn-warning"]} ] }
                 );
 
                 if (btnRes === 888) {
                     const uidsToRemove = gEntries.map(entry => entry.uid);
                     tuneEntries = tuneEntries.filter(entry => !uidsToRemove.includes(entry.uid));
-                    delete wbEntryGroupState[groupName];
-                    renderEntryList();
+                    delete wbEntryGroupState[groupName]; renderEntryList();
                     toastr.success(`【${groupName}】内容已被彻底扫除干净啦！记得按绿色保存按钮哦~`);
                 } else if (btnRes === 999) {
                     gEntries.forEach(entry => entry.group = "");
-                    delete wbEntryGroupState[groupName];
-                    renderEntryList();
+                    delete wbEntryGroupState[groupName]; renderEntryList();
                     toastr.success(`【${groupName}】已解散，里面的内容已经安全返回未分类区啦。`);
                 }
             });
@@ -2334,15 +2406,13 @@ $menuBtn.on('click', async () => {
 
     $ui.find('#wb-btn-entry-cancel').on('click', async () => {
         const isDirty = JSON.stringify(tuneEntries) !== JSON.stringify(originalTuneEntries);
-
         if (isDirty) {
             const confirm = await SillyTavern.callGenericPopup(
-                `当前条目的更改（比如新分了组、开启了条目等）还没有点底部的<strong style="color:var(--SmartThemeQuoteColor);">绿色按钮保存</strong>哦！<br>真的要放弃这些修改，直接返回吗？`,
+                `当前条目的更改还没点左下角<strong style="color:var(--SmartThemeQuoteColor);">绿色按钮保存</strong>哦！<br>真的要放弃这些修改直接返回吗？`,
                 SillyTavern.POPUP_TYPE.CONFIRM
             );
             if (confirm !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
         }
-
         $ui.find('#wb-entry-view').hide();
         $ui.find('#wb-tab-strip').show();
         $ui.find(tuneReturnView).fadeIn(200);
@@ -2380,4 +2450,234 @@ $menuBtn.on('click', async () => {
     });
 
     await popup.show();
+    (function initLuLuNativeWbSyncV7() {
+        let groupFoldState = JSON.parse(localStorage.getItem('lulu_wb_native_fold_state') || '{}');
+        const saveFoldState = () => localStorage.setItem('lulu_wb_native_fold_state', JSON.stringify(groupFoldState));
+
+        let currentActiveWbName = null;
+        let cachedWbEntries = [];
+        let isFetching = false;
+
+        setInterval(async () => {
+            const isNativeMagicEnabled = localStorage.getItem('lulu_wb_native_magic_enabled') !== 'false';
+
+            const $entries = $('.world_entry');
+            if ($entries.length === 0) return;
+            const $container = $entries.first().parent();
+            if (!$container.length) return;
+            if (!isNativeMagicEnabled) {
+                if ($container.css('display') === 'flex') {
+                    $container.css({ 'display': '', 'flex-direction': '' });
+                    $('.lulu-native-group-header').remove();
+                    $entries.css({'order': '', 'display': '', 'margin': ''});
+                }
+                return;
+            }
+
+            if (isFetching) return;
+
+            if ($container.css('display') !== 'flex' || $container.css('flex-direction') !== 'column') {
+                $container.css({ 'display': 'flex', 'flex-direction': 'column' });
+            }
+
+            const visibleWbName = $('.move_entry_button').first().attr('data-current-world');
+            if (!visibleWbName) return;
+
+            if (currentActiveWbName !== visibleWbName) {
+                isFetching = true;
+                try {
+                    const rawData = await getWorldbook(visibleWbName);
+                    if (rawData && Array.isArray(rawData)) { cachedWbEntries = rawData; currentActiveWbName = visibleWbName; }
+                } catch (err) {} finally { isFetching = false; }
+                return;
+            }
+
+            if (!cachedWbEntries || cachedWbEntries.length === 0) return;
+
+            const groupCounts = {};
+
+            $entries.each(function(index) {
+                const $entry = $(this);
+                let myGroup = "📁 未分类条目";
+
+                const entryTitle = $entry.find('textarea[name="comment"]').val()?.trim() || "";
+                let foundEntry = cachedWbEntries.find(e => (e.name === entryTitle || e.comment === entryTitle));
+                if (!foundEntry) {
+                    const domUid = parseInt($entry.attr('uid') || $entry.data('id'), 10);
+                    if (!isNaN(domUid) && cachedWbEntries[domUid]) { foundEntry = cachedWbEntries[domUid]; }
+                }
+
+                if (foundEntry && foundEntry.group && foundEntry.group.trim() !== '') myGroup = foundEntry.group.trim();
+
+                if (!groupCounts[myGroup]) groupCounts[myGroup] = 0;
+                groupCounts[myGroup]++;
+
+                $entry.attr('data-lulu-grp', myGroup);
+                $entry.attr('data-lulu-native-index', index);
+            });
+            let luluGroupOrder = JSON.parse(localStorage.getItem('lulu_wb_native_group_order') || '[]');
+            let currentGroups = Object.keys(groupCounts).filter(g => g !== "📁 未分类条目");
+            let orderChanged = false;
+            currentGroups.forEach(g => {
+                if (!luluGroupOrder.includes(g)) { luluGroupOrder.push(g); orderChanged = true; }
+            });
+            if (orderChanged) localStorage.setItem('lulu_wb_native_group_order', JSON.stringify(luluGroupOrder));
+
+            const sortedGroupNames = Object.keys(groupCounts).sort((a, b) => {
+                if (a === "📁 未分类条目") return 1;
+                if (b === "📁 未分类条目") return -1;
+                let idxA = luluGroupOrder.indexOf(a);
+                let idxB = luluGroupOrder.indexOf(b);
+                if (idxA === -1) idxA = 9999;
+                if (idxB === -1) idxB = 9999;
+                return idxA - idxB;
+            });
+
+            sortedGroupNames.forEach((gName, gIndex) => {
+                const baseOrder = (gIndex + 1) * 10000;
+                let $header = $container.children(`.lulu-native-group-header[data-groupname="${gName}"]`);
+                const isFolded = groupFoldState[gName] === true;
+                const isDraggable = gName !== "📁 未分类条目";
+
+                if ($header.length === 0) {
+                    const dragIconHtml = isDraggable ? `<i class="fa-solid fa-hand-paper lulu-drag-handle" style="cursor:grab; font-size:14px; color:gray; padding-right:8px; display:inline-flex; align-items:center;" title="按住拖拽排序分类"></i>` : '';
+                    const sortButtonsHtml = !isDraggable ? '' : `
+                        <div style="display:flex; gap: 6px; margin-right: 15px;" class="lulu-sort-btns">
+                            <i class="fa-solid fa-arrow-up lulu-move-up" title="将此分类上移" style="padding:4px; font-size:14px; color:gray; transition:0.2s; cursor:pointer;"></i>
+                            <i class="fa-solid fa-arrow-down lulu-move-down" title="将此分类下移" style="padding:4px; font-size:14px; color:gray; transition:0.2s; cursor:pointer;"></i>
+                        </div>
+                    `;
+
+                    $header = $(`
+                        <div class="lulu-native-group-header" data-groupname="${gName}" draggable="${isDraggable ? 'true' : 'false'}" style="background: var(--SmartThemeBlurTintColor, rgba(0,0,0,0.15)); padding:10px 14px; margin: 10px 0 6px 0; border-radius:6px; font-weight:bold; color:var(--SmartThemeQuoteColor, #70a1ff); border:1px solid var(--SmartThemeBorderColor, gray); display:flex; justify-content:space-between; align-items:center; user-select:none; transition: 0.2s; flex-shrink: 0; align-content: center;">
+                            <span style="display:flex; align-items:center;">
+                                ${dragIconHtml}
+                                <span class="lulu-click-fold" style="display:flex; align-items:center; cursor:pointer;">
+                                    <i class="fa-solid ${isFolded ? 'fa-chevron-right' : 'fa-chevron-down'} lulu-fold-icon" style="margin-right:8px; width: 16px; text-align:center;"></i>
+                                    <span style="font-size: 14.5px;" class="lulu-g-title">${gName}</span>
+                                    <span style="font-size: 11px; font-weight: normal; color: gray; margin-left: 6px;" class="lulu-g-count">(${groupCounts[gName]}项)</span>
+                                </span>
+                            </span>
+                            <span style="display:flex; align-items:center;">
+                                ${sortButtonsHtml}
+                                <span style="font-size:11.5px; font-weight:normal; color:gray; opacity: 0.6;"><i class="fa-solid fa-link"></i> 分组内会根据选项排序哦</span>
+                            </span>
+                        </div>
+                    `);
+
+                    $header.hover(
+                        function() { $(this).css('background', 'var(--SmartThemeBotMesColor, rgba(125,125,125,0.3))'); },
+                        function() { $(this).css('background', 'var(--SmartThemeBlurTintColor, rgba(0,0,0,0.15))'); }
+                    );
+
+                    $header.find('.lulu-move-up, .lulu-move-down').hover(
+                        function() { $(this).css('color', 'var(--SmartThemeQuoteColor)'); $(this).css('transform', 'scale(1.2)'); },
+                        function() { $(this).css('color', 'gray'); $(this).css('transform', 'scale(1)'); }
+                    );
+                    $header.find('.lulu-click-fold').on('click', function(e) {
+                        e.stopPropagation();
+                        const grp = $header.attr('data-groupname');
+                        const isNowFolded = !groupFoldState[grp];
+                        groupFoldState[grp] = isNowFolded;
+                        saveFoldState();
+
+                        const $icon = $(this).find('.lulu-fold-icon');
+                        if (isNowFolded) $icon.removeClass('fa-chevron-down').addClass('fa-chevron-right');
+                        else $icon.removeClass('fa-chevron-right').addClass('fa-chevron-down');
+
+                        $container.children(`.world_entry[data-lulu-grp="${grp}"]`).each(function() {
+                            if (isNowFolded) $(this).hide(); else $(this).show();
+                        });
+                    });
+                    if (isDraggable) {
+                        $header.on('dragstart', function(e) {
+                            e.originalEvent.dataTransfer.setData('text/plain', gName);
+                            $(this).addClass('lulu-drag-ghost');
+                        });
+                        $header.on('dragend', function() {
+                            $(this).removeClass('lulu-drag-ghost');
+                            $('.lulu-drag-over-top, .lulu-drag-over-bottom').removeClass('lulu-drag-over-top lulu-drag-over-bottom');
+                        });
+                        $header.on('dragover', function(e) {
+                            e.preventDefault();
+                            const rect = this.getBoundingClientRect();
+                            const isBottomHalf = e.originalEvent.clientY > rect.top + (rect.height / 2);
+                            if (isBottomHalf) {
+                                $(this).removeClass('lulu-drag-over-top').addClass('lulu-drag-over-bottom');
+                            } else {
+                                $(this).removeClass('lulu-drag-over-bottom').addClass('lulu-drag-over-top');
+                            }
+                        });
+                        $header.on('dragleave', function() {
+                            $(this).removeClass('lulu-drag-over-top lulu-drag-over-bottom');
+                        });
+                        $header.on('drop', function(e) {
+                            e.preventDefault();
+                            $(this).removeClass('lulu-drag-over-top lulu-drag-over-bottom');
+                            const draggedGrp = e.originalEvent.dataTransfer.getData('text/plain');
+                            const targetGrp = $(this).attr('data-groupname');
+                            if (draggedGrp && draggedGrp !== targetGrp && draggedGrp !== "📁 未分类条目" && targetGrp !== "📁 未分类条目") {
+                                let order = JSON.parse(localStorage.getItem('lulu_wb_native_group_order') || '[]');
+                                const fromIdx = order.indexOf(draggedGrp);
+                                if (fromIdx > -1) {
+                                    const rect = this.getBoundingClientRect();
+                                    const isBottomHalf = e.originalEvent.clientY > rect.top + (rect.height / 2);
+                                    order.splice(fromIdx, 1);
+                                    let newToIdx = order.indexOf(targetGrp);
+                                    if (isBottomHalf) newToIdx++;
+                                    order.splice(newToIdx, 0, draggedGrp);
+                                    localStorage.setItem('lulu_wb_native_group_order', JSON.stringify(order));
+                                }
+                            }
+                        });
+                    }
+
+                    // 向上排按钮
+                    $header.find('.lulu-move-up').on('click', function(e) {
+                        e.stopPropagation();
+                        const idx = luluGroupOrder.indexOf(gName);
+                        if (idx > 0) {
+                            [luluGroupOrder[idx - 1], luluGroupOrder[idx]] = [luluGroupOrder[idx], luluGroupOrder[idx - 1]];
+                            localStorage.setItem('lulu_wb_native_group_order', JSON.stringify(luluGroupOrder));
+                        }
+                    });
+
+                    // 向下排按钮
+                    $header.find('.lulu-move-down').on('click', function(e) {
+                        e.stopPropagation();
+                        const idx = luluGroupOrder.indexOf(gName);
+                        if (idx !== -1 && idx < luluGroupOrder.length - 1) {
+                            [luluGroupOrder[idx + 1], luluGroupOrder[idx]] = [luluGroupOrder[idx], luluGroupOrder[idx + 1]];
+                            localStorage.setItem('lulu_wb_native_group_order', JSON.stringify(luluGroupOrder));
+                        }
+                    });
+
+                    $container.append($header);
+                } else {
+                    $header.find('.lulu-g-count').text(`(${groupCounts[gName]}项)`);
+                    const $icon = $header.find('.lulu-fold-icon');
+                    if (isFolded) $icon.removeClass('fa-chevron-down').addClass('fa-chevron-right');
+                    else $icon.removeClass('fa-chevron-right').addClass('fa-chevron-down');
+                }
+
+                $header.css('order', baseOrder);
+
+                $container.children(`.world_entry[data-lulu-grp="${gName}"]`).each(function() {
+                    const nativeIdx = parseInt($(this).attr('data-lulu-native-index') || 0);
+                    $(this).css('order', baseOrder + 1 + nativeIdx);
+
+                    if (isFolded) {
+                        if ($(this).css('display') !== 'none') $(this).css({'display': 'none', 'margin': '0'});
+                    } else {
+                        if ($(this).css('display') === 'none') $(this).css({'display': '', 'margin': ''});
+                    }
+                });
+            });
+            $container.children('.lulu-native-group-header').each(function() {
+                const gName = $(this).attr('data-groupname');
+                if (!groupCounts[gName]) $(this).remove();
+            });
+
+        }, 300);
+    })();
 });
