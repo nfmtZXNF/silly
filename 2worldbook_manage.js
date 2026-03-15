@@ -406,6 +406,7 @@ $menuBtn.on('click', async () => {
                         <button id="wb-btn-select-all" class="menu_button interactable wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px;"><i class="fa-solid fa-check-double"></i> 全选当前项</button>
                         <button id="wb-btn-deselect-all" class="menu_button interactable wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px;"><i class="fa-regular fa-square"></i> 撤销当前全选</button>
                         <button id="wb-btn-create-wb" class="menu_button interactable btn-success wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px; border:none;"><i class="fa-solid fa-plus"></i> 新建</button>
+                       <button type="button" id="wb-btn-import-wb" class="menu_button interactable btn-success wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px; border:none; background: rgba(32, 201, 151, 0.15); color: #20c997; border: 1px solid rgba(32, 201, 151, 0.5);"><i class="fa-solid fa-file-import"></i> 批量导入</button>
                     </div>
                 </div>
 
@@ -413,13 +414,16 @@ $menuBtn.on('click', async () => {
                     <div class="wb-action-btn wb-nowrap-btn" id="wb-btn-clear" style="color: #888;"><i class="fa-solid fa-power-off"></i> 关闭当前所有全局启用</div>
                     <div class="wb-action-btn wb-nowrap-btn btn-primary" id="wb-btn-save-snap"><i class="fa-solid fa-box-archive"></i> 将当前勾选存为快照 (全局)</div>
                     <div class="wb-action-btn wb-nowrap-btn btn-primary" id="wb-btn-create-detail-snap"><i class="fa-solid fa-puzzle-piece"></i> 创建复合快照 (全局)</div>
-                    <div class="wb-action-btn wb-nowrap-btn btn-danger" id="wb-btn-batch-toggle"><i class="fa-solid fa-trash-can"></i> 批量删除模式</div>
+                    <div class="wb-action-btn wb-nowrap-btn btn-warning" id="wb-btn-batch-toggle" style="color: #fcc419; background: rgba(252, 196, 25, 0.1); border-color: #fcc419;"><i class="fa-solid fa-layer-group"></i> 批量操作模式</div>
                 </div>
 
-                <div id="wb-batch-actions" style="display: none; background: rgba(255, 107, 107, 0.1); border: 1px dashed #ff6b6b; border-radius: 6px; padding: 10px; margin-bottom: 10px; flex-direction: column; gap: 10px;">
+                <div id="wb-batch-actions" style="display: none; background: rgba(0,0,0, 0.15); border: 1px dashed var(--SmartThemeQuoteColor); border-radius: 6px; padding: 10px; margin-bottom: 10px; flex-direction: column; gap: 10px;">
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap: wrap; gap: 10px;">
-                        <span style="color: #ff6b6b; font-weight: bold; font-size: 14px; margin-top: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> 待删除的世界书：</span>
-                        <button class="menu_button interactable btn-danger wb-nowrap-btn" id="wb-btn-confirm-delete" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-burst"></i> 确认永久删除 (<span id="wb-batch-count">0</span>)</button>
+                        <span style="color: var(--SmartThemeQuoteColor); font-weight: bold; font-size: 14px; margin-top: 4px;"><i class="fa-solid fa-check-double"></i> 选中的世界书 (<span id="wb-batch-count">0</span>)：</span>
+                        <div style="display:flex; gap: 8px; flex-wrap: wrap;">
+                             <button class="menu_button interactable btn-primary wb-nowrap-btn" id="wb-btn-batch-export" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-file-export"></i> 批量打包导出</button>
+                             <button class="menu_button interactable btn-danger wb-nowrap-btn" id="wb-btn-confirm-delete" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-burst"></i> 确认永久删除</button>
+                        </div>
                     </div>
                     <div id="wb-batch-selected-list" style="display: flex; flex-wrap: wrap; gap: 6px; max-height: 80px; overflow-y: auto;"></div>
                 </div>
@@ -665,8 +669,6 @@ $menuBtn.on('click', async () => {
             </div>
         </div>
     `);
-
-    // --- ✨ 鹿酱精心制作的主题换肤魔法核心 ---
     const hexToRgba = (hex, alpha) => {
         let r=0, g=0, b=0;
         if(hex.length === 7){
@@ -1040,7 +1042,7 @@ $menuBtn.on('click', async () => {
     const popup = new SillyTavern.Popup($ui, SillyTavern.POPUP_TYPE.TEXT, '', {
         allowVerticalScrolling: true, okButton: "关闭面板",
         onOpen: async () => {
-            $(popup.dlg).addClass('wb-manager-dialog'); // 为对话框加上专属称号以便受膜法控制~
+            $(popup.dlg).addClass('wb-manager-dialog'); 
             showTab(window.luluWbInitTabType || 'global');
             await initiateDeepScan();
         }
@@ -1067,6 +1069,206 @@ $menuBtn.on('click', async () => {
         }, "正在创建世界书...");
     };
     $ui.find('#wb-btn-create-wb').on('click', () => attemptCreateWb());
+    // === 这里开始是批量导入 ===
+    const $fileInput = $('<input type="file" multiple accept=".json" style="display: none;">');
+    $ui.append($fileInput);
+
+    $ui.find('#wb-btn-import-wb').on('click', () => {
+        $fileInput.val(''); 
+        $fileInput.trigger('click');
+    });
+
+    $fileInput.on('change', async (e) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+
+        await withLoadingOverlay(async () => {
+            let successCount = 0;
+            let failCount = 0;
+            let skipCount = 0;
+            let newlyImportedNames = []; 
+            const $overlay = $ui.find('#wb-loading-overlay');
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                try {
+                    const content = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = ev => resolve(ev.target.result);
+                        reader.onerror = ev => reject(ev);
+                        reader.readAsText(file);
+                    });
+
+                    const data = JSON.parse(content);
+                    let rawEntries = [];
+                    if (Array.isArray(data)) rawEntries = data;
+                    else if (data.entries) rawEntries = Array.isArray(data.entries) ? data.entries : Object.values(data.entries);
+                    else if (data.data && data.data.entries) rawEntries = Array.isArray(data.data.entries) ? data.data.entries : Object.values(data.data.entries);
+                    else rawEntries = Object.values(data).filter(item => typeof item === 'object' && item !== null);
+
+                    let entries = rawEntries.map(e => {
+                        // 1. 抓取被藏起的名字：原生V2里它叫 comment 哦！
+                        let eName = e.name || e.comment || e.title || "未定名条目";
+
+                        // 2. 状态纠正
+                        let eEnabled = true;
+                        if (e.enabled !== undefined) eEnabled = e.enabled;
+                        else if (e.disable !== undefined) eEnabled = !e.disable;
+                        else if (e.disabled !== undefined) eEnabled = !e.disabled;
+
+                        // 3. 触发策略转换
+                        let strategy = e.strategy;
+                        if (!strategy) {
+                            let keys = [];
+                            if (Array.isArray(e.keys)) keys = e.keys;
+                            else if (Array.isArray(e.key)) keys = e.key;
+                            else if (typeof e.key === 'string') keys = e.key.split(',').map(s=>s.trim()).filter(Boolean);
+                            else if (typeof e.keys === 'string') keys = e.keys.split(',').map(s=>s.trim()).filter(Boolean);
+
+                            let isConstant = e.constant;
+                            if (isConstant === undefined) isConstant = keys.length === 0;
+                            strategy = { type: isConstant ? 'constant' : 'selective', keys: keys };
+                        }
+
+                        // 4. 定位深浅度转换
+                        let position = e.position;
+                        if (!position || typeof position !== 'object') {
+                            let pType = 'at_depth';
+                            let posInt = typeof e.position === 'number' ? e.position : parseInt(e.position);
+                            if (posInt === 0) pType = 'before_character_definition';
+                            else if (posInt === 1) pType = 'after_character_definition';
+                            else if (posInt === 2) pType = 'before_example_messages';
+                            else if (posInt === 3) pType = 'after_example_messages';
+                            else if (posInt === 4) pType = 'at_depth';
+
+                            position = {
+                                type: pType,
+                                role: e.role || 'system',
+                                depth: e.depth !== undefined ? parseInt(e.depth) : 4,
+                                order: e.order !== undefined ? parseInt(e.order) : (e.insertion_order !== undefined ? parseInt(e.insertion_order) : 100)
+                            };
+                        }
+                        let prevent_in = e.exclude_recursion || (e.recursion && e.recursion.prevent_incoming) || false;
+                        let prevent_out = e.prevent_recursion || (e.recursion && e.recursion.prevent_outgoing) || false;
+
+                        return {
+                            uid: e.uid || Date.now() + Math.floor(Math.random() * 1000000),
+                            name: eName,
+                            enabled: eEnabled,
+                            content: e.content || e.description || e.text || "",
+                            group: e.group || "",
+                            strategy: strategy,
+                            position: position,
+                            recursion: e.recursion || { prevent_incoming: prevent_in, prevent_outgoing: prevent_out, delay_until: null },
+                            exclude_recursion: prevent_in,
+                            prevent_recursion: prevent_out
+                        };
+                    });
+
+                    let rawName = file.name.replace(/\.[^/.]+$/, "");
+                    let finalName = rawName.trim() || `未命名世界书_${Date.now()}`;
+
+                    let currentWbNames = getWorldbookNames();
+                    let shouldSkip = false;
+                    while (currentWbNames.includes(finalName)) {
+                        $overlay.hide();
+                        const btnRes = await SillyTavern.callGenericPopup(
+                            `哎呀，发现同名世界书 [${finalName}] 了呢！想要如何处置这本即将导入的新书呀？`,
+                            SillyTavern.POPUP_TYPE.TEXT,
+                            "",
+                            {
+                                okButton: "跳过这本",
+                                customButtons: [
+                                    {text: "取代原文件", result: 888, classes: ["btn-danger"]},
+                                    {text: "重命名并新建", result: 999, classes:["btn-primary"]}
+                                ]
+                            }
+                        );
+                        $overlay.show();
+
+                        if (btnRes === 888) {
+                            await deleteWorldbook(finalName);
+                            delete globalBindingMapCache[finalName];
+                            const c = loadBindingCache();
+                            if(c){ delete c[finalName]; saveBindingCache(c); }
+                            break;
+                        } else if (btnRes === 999) {
+                            $overlay.hide();
+                            let newName = await SillyTavern.callGenericPopup(`请为它赐予一个新的名称吧：`, SillyTavern.POPUP_TYPE.INPUT, finalName + "_新");
+                            $overlay.show();
+
+                            if (!newName || typeof newName !== 'string' || newName.trim() === '') {
+                                shouldSkip = true; 
+                                break;
+                            }
+                            finalName = newName.trim();
+                        } else {
+                            shouldSkip = true;
+                            break;
+                        }
+                    }
+
+                    if (shouldSkip) {
+                        skipCount++;
+                        continue; 
+                    }
+
+                    await createWorldbook(finalName, entries);
+
+                    globalBindingMapCache[finalName] = [];
+                    const c = loadBindingCache() || {};
+                    c[finalName] = [];
+                    saveBindingCache(c);
+                    if (data.lulu_categories && Array.isArray(data.lulu_categories)) {
+                        let cData = getCategories();
+                        data.lulu_categories.forEach(catName => {
+                            if (!cData[catName]) cData[catName] = []; 
+                            if (!cData[catName].includes(finalName)) cData[catName].push(finalName);
+                        });
+                        saveCategories(cData);
+                    }
+
+                    successCount++;
+                    newlyImportedNames.push(finalName);
+
+                } catch (err) {
+                    console.error("导入这本世界书时发生了一点小意外呢", file.name, err);
+                    failCount++;
+                }
+            }
+
+            if (successCount > 0) {
+                if (typeof toastr !== 'undefined') toastr.success(`大功告成！已为您导入了 ${successCount} 本新书！${skipCount > 0 ? ` (略过了 ${skipCount} 本)` : ''}${failCount > 0 ? ` (出错了 ${failCount} 本)` : ''}`);
+
+                renderData();
+                setTimeout(() => {
+                    newlyImportedNames.forEach((name, index) => {
+                        const $highlightItem = $ui.find('#wb-container').find(`[data-wb-name="${name.replace(/"/g, '\\"')}"]`);
+                        if ($highlightItem.length) {
+                            $highlightItem.css('animation', 'wb-highlight-flash 2.5s ease-in-out');
+                            $highlightItem.addClass('wb-highlight');
+                            if (index === 0) {
+                                $highlightItem[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }
+                            setTimeout(() => {
+                                $highlightItem.removeClass('wb-highlight');
+                                $highlightItem.css('animation', '');
+                            }, 2500);
+                        }
+                    });
+                }, 200);
+
+            } else if (skipCount > 0 && successCount === 0) {
+                if (typeof toastr !== 'undefined') toastr.info(`本次导入工作结束啦。您全选了跳过，共略过了 ${skipCount} 本书，没有发生任何变动哦。`);
+                $fileInput.val('');
+            } else {
+                if (typeof toastr !== 'undefined') toastr.info(`本次导入结束啦，没有任何世界书加入酒馆呢。`);
+                $fileInput.val('');
+            }
+
+        }, `正在专注解析并导入，请稍候...`);
+    });
+    // === 批量导入到此结束 ===
 
     const attemptRenameWb = async (oldName, isBound, bindings, defaultNewName = "") => {
         if (isBound) return SillyTavern.callGenericPopup(`❌ 无法重命名：\n[${oldName}] 已绑定其他角色或用户，无法直接修改哦。可以先解绑再重命名最后再绑定。`, SillyTavern.POPUP_TYPE.TEXT);
@@ -1104,13 +1306,35 @@ $menuBtn.on('click', async () => {
         isBatchMode = !isBatchMode;
         if(isBatchMode) {
             batchSelected.clear();
-            $(this).removeClass('btn-danger').addClass('btn-warning').html('<i class="fa-solid fa-check"></i> 退出批量模式');
+            $(this).removeClass('btn-warning').addClass('btn-danger').html('<i class="fa-solid fa-xmark"></i> 退出批量操作');
             $ui.find('#wb-batch-actions').css('display', 'flex');
         } else {
-            $(this).removeClass('btn-warning').addClass('btn-danger').html('<i class="fa-solid fa-trash-can"></i> 批量删除模式');
+            $(this).removeClass('btn-danger').addClass('btn-warning').html('<i class="fa-solid fa-layer-group"></i> 批量操作模式');
             $ui.find('#wb-batch-actions').hide();
         }
         renderData();
+    });
+    $ui.find('#wb-btn-batch-export').on('click', async () => {
+        if(batchSelected.size === 0) return toastr.warning("请先勾选需要导出的世界书哦~");
+
+        await withLoadingOverlay(async () => {
+            let delay = 0;
+            let allCats = getCategories(); 
+
+            for (let wb of batchSelected) {
+                let myCats = Object.keys(allCats).filter(k => allCats[k].includes(wb));
+                setTimeout(async () => {
+                    const entries = await getWorldbook(wb);
+                    const blob = new Blob([JSON.stringify({ entries: entries, name: wb, lulu_categories: myCats }, null, 2)], { type: "application/json" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a'); a.href = url; a.download = `${wb}.json`;
+                    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+                }, delay);
+                delay += 400;
+            }
+        }, `正在唤醒打包功能，为您仔细分装 ${batchSelected.size} 本书...`);
+
+        toastr.success(`批量导出指令已发出！浏览器马上就会下载 ${batchSelected.size} 份世界书啦~`);
     });
 
     $ui.find('#wb-btn-select-all').on('click', async () => {
@@ -1274,7 +1498,7 @@ $menuBtn.on('click', async () => {
 
     $ui.find('#wb-btn-save-char-snap').on('click', async () => {
         const charName = typeof getCurrentCharacterName === 'function' ? getCurrentCharacterName() : (typeof SillyTavern !== 'undefined' ? SillyTavern.getContext().name2 : null);
-        if (!charName) return toastr.warning("主人，您还未开启与任何角色的聊天哦。");
+        if (!charName) return toastr.warning("您还未开启与任何角色的聊天哦。");
 
         const boundBooks = getCharBoundBooks();
         if (boundBooks.length === 0) return toastr.warning("当前角色没有绑定任何世界书，不能创建“空气”快照哦~");
@@ -1675,6 +1899,18 @@ $menuBtn.on('click', async () => {
                 }));
 
                 $actions.append($('<div class="wb-icon-btn" title="整理条目"><i class="fa-solid fa-list"></i></div>').on('click', () => openEntryTuneView(wb, '#wb-main-view')))
+                        .append($('<div class="wb-icon-btn hover-blue" title="打包导出这本世界书 (会保留您的所有分组哦！)"><i class="fa-solid fa-download"></i></div>').on('click', async () => {
+                             await withLoadingOverlay(async () => {
+                                 const entries = await getWorldbook(wb);
+                                 let allCats = getCategories();
+                                 let myCats = Object.keys(allCats).filter(k => allCats[k].includes(wb));
+                                 const blob = new Blob([JSON.stringify({ entries: entries, name: wb, lulu_categories: myCats }, null, 2)], { type: "application/json" });
+                                 const url = URL.createObjectURL(blob);
+                                 const a = document.createElement('a'); a.href = url; a.download = `${wb}.json`;
+                                 document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+                             }, "正在为您打包这本世界书...");
+                             if(typeof toastr !== 'undefined') toastr.success(`[${wb}] 已经装进小包裹，成功导出啦！`);
+                        }))
                         .append($('<div class="wb-icon-btn" title="重命名名称"><i class="fa-solid fa-pen"></i></div>').on('click', () => attemptRenameWb(wb, bindings.length > 0, bindings)))
                         .append($('<div class="wb-icon-btn hover-red" title="彻底删除"><i class="fa-solid fa-trash"></i></div>').on('click', async () => {
                              if (await SillyTavern.callGenericPopup(`删除确认：丢失 [${wb}] ？`, SillyTavern.POPUP_TYPE.CONFIRM) === SillyTavern.POPUP_RESULT.AFFIRMATIVE) {
@@ -1746,12 +1982,11 @@ $menuBtn.on('click', async () => {
     $ui.find('#wb-btn-bind-cancel').on('click', () => { $ui.find('#wb-bind-view').hide(); $ui.find('#wb-tab-strip, #wb-main-view').fadeIn(); });
 
     $ui.find('#wb-btn-save-snap').on('click', async () => {
-         let name = await SillyTaver
-         n.callGenericPopup("创建新快照组合名称：", SillyTavern.POPUP_TYPE.INPUT, "新备份组合");
-         if (!name || !(name=name.trim())) return;
-         updateVariablesWith(v => { if (!v.wb_snapshots) v.wb_snapshots = {}; v.wb_snapshots[name] = { type: 'simple', wbs: getGlobalWorldbookNames() }; return v; }, { type: 'global' });
-         toastr.success("组合保存完毕。"); renderData();
-    });
+        let name = await SillyTavern.callGenericPopup("创建新快照组合名称：", SillyTavern.POPUP_TYPE.INPUT, "新备份组合");
+        if (!name || !(name=name.trim())) return;
+        updateVariablesWith(v => { if (!v.wb_snapshots) v.wb_snapshots = {}; v.wb_snapshots[name] = { type: 'simple', wbs: getGlobalWorldbookNames() }; return v; }, { type: 'global' });
+        toastr.success("组合保存完毕。"); renderData();
+   });
 
     let snapOldName = "", snapTempList =[];
     const openEditSnapView = (name, list) => {
