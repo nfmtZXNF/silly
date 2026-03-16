@@ -30,6 +30,11 @@ if ($("#lulu-drag-line-style").length === 0) {
                 transform: scale(0.98) !important;
                 border: 1px dashed #51cf66 !important;
             }
+            /* 鹿酱添加：解决手机浏览器自动闪烁和原生打架的问题 */
+            .lulu-folded-hide {
+                display: none !important;
+                margin: 0 !important;
+            }
         </style>
     `);
 }
@@ -869,13 +874,18 @@ $menuBtn.on('click', async () => {
         finally { $overlay.fadeOut('slow'); }
     };
 
+    /* 鹿酱修复点 1：强大的防字符串侵蚀转换魔法！ */
     const getCategories = () => {
         let vars = getVariables({ type: 'global' });
-        if (!vars.wb_categories) {
-            vars.wb_categories = { "🌟默认收藏夹":[] };
-            updateVariablesWith(v => { v.wb_categories = vars.wb_categories; return v; }, { type: 'global' });
+        let cats = vars.wb_categories;
+        if (typeof cats === 'string') {
+            try { cats = JSON.parse(cats); } catch(e) { cats = null; }
         }
-        return vars.wb_categories;
+        if (!cats || typeof cats !== 'object' || Array.isArray(cats)) {
+            cats = { "🌟默认收藏夹":[] };
+            updateVariablesWith(v => { v.wb_categories = cats; return v; }, { type: 'global' });
+        }
+        return cats;
     };
     const saveCategories = (catObj) => {
         updateVariablesWith(v => { v.wb_categories = catObj; return v; }, { type: 'global' });
@@ -1395,6 +1405,17 @@ $menuBtn.on('click', async () => {
     });
 
     const renderCharView = () => {
+        /* 继续鹿酱的防字符串入侵魔法 2 */
+        let vars = getVariables({ type: 'global' });
+        let charSnaps = vars.wb_char_snapshots;
+        if (typeof charSnaps === 'string') {
+            try { charSnaps = JSON.parse(charSnaps); } catch(e) { charSnaps = null; }
+        }
+        if (!charSnaps || typeof charSnaps !== 'object' || Array.isArray(charSnaps)) {
+            charSnaps = {};
+            updateVariablesWith(v => { v.wb_char_snapshots = charSnaps; return v; }, { type: 'global' });
+        }
+
         const charName = typeof getCurrentCharacterName === 'function' ? getCurrentCharacterName() : (typeof SillyTavern !== 'undefined' ? SillyTavern.getContext().name2 : null);
         const $bCont = $ui.find('#wb-char-books-container').empty();
         const $sCont = $ui.find('#wb-char-snap-container').empty();
@@ -1431,12 +1452,7 @@ $menuBtn.on('click', async () => {
             });
         }
 
-        let vars = getVariables({ type: 'global' });
-        if (!vars.wb_char_snapshots) {
-            vars.wb_char_snapshots = {};
-            updateVariablesWith(v => { v.wb_char_snapshots = vars.wb_char_snapshots; return v; }, { type: 'global' });
-        }
-        const mySnaps = vars.wb_char_snapshots[charName] || {};
+        const mySnaps = charSnaps[charName] || {};
 
         if (Object.keys(mySnaps).length === 0) {
              $sCont.html('<div style="color:gray; padding:10px; text-align:center;">这名角色还没有存过专属搭配组合呢，快点上方按钮留个纪念吧~</div>');
@@ -1478,7 +1494,11 @@ $menuBtn.on('click', async () => {
 
                  $act.append($('<button class="menu_button interactable btn-danger wb-nowrap-btn" style="margin:0; padding:6px 10px; border:none;" title="抛掉这个快照"><i class="fa fa-trash"></i></button>').on('click', async () => {
                      if (await SillyTavern.callGenericPopup(`确认跟快照说拜拜？`, SillyTavern.POPUP_TYPE.CONFIRM) === SillyTavern.POPUP_RESULT.AFFIRMATIVE) {
-                          updateVariablesWith(v => { delete v.wb_char_snapshots[charName][snapName]; return v; }, { type: 'global' });
+                          updateVariablesWith(v => {
+                             if(typeof v.wb_char_snapshots === 'string') { try{v.wb_char_snapshots = JSON.parse(v.wb_char_snapshots);}catch(e){v.wb_char_snapshots={};} }
+                             if(v.wb_char_snapshots && v.wb_char_snapshots[charName]) delete v.wb_char_snapshots[charName][snapName];
+                             return v;
+                          }, { type: 'global' });
                           renderCharView();
                      }
                  }));
@@ -1511,7 +1531,11 @@ $menuBtn.on('click', async () => {
         }, "正在读取现在的条目配置...");
 
         let vars = getVariables({ type: 'global' });
-        let existingSnaps = (vars.wb_char_snapshots && vars.wb_char_snapshots[charName]) ? vars.wb_char_snapshots[charName] : {};
+        let charSnaps = vars.wb_char_snapshots;
+        if (typeof charSnaps === 'string') {
+            try { charSnaps = JSON.parse(charSnaps); } catch(e) { charSnaps = {}; }
+        }
+        let existingSnaps = (charSnaps && typeof charSnaps === 'object' && charSnaps[charName]) ? charSnaps[charName] : {};
         let duplicateSnapName = null;
         for (const [eName, eData] of Object.entries(existingSnaps)) {
             let isSame = true;
@@ -1554,7 +1578,11 @@ $menuBtn.on('click', async () => {
             if (!snapName || !(snapName = snapName.trim())) return;
 
             if (btnRes === 999 && snapName !== duplicateSnapName) {
-                updateVariablesWith(v => { delete v.wb_char_snapshots[charName][duplicateSnapName]; return v; }, { type: 'global' });
+                updateVariablesWith(v => {
+                    if(typeof v.wb_char_snapshots === 'string') { try{v.wb_char_snapshots = JSON.parse(v.wb_char_snapshots);}catch(e){v.wb_char_snapshots={};} }
+                    if(v.wb_char_snapshots && v.wb_char_snapshots[charName]) delete v.wb_char_snapshots[charName][duplicateSnapName];
+                    return v;
+                }, { type: 'global' });
             }
         } else {
             snapName = await SillyTavern.callGenericPopup("请给当前的组合状态起个名字吧：", SillyTavern.POPUP_TYPE.INPUT, "新情境");
@@ -1570,7 +1598,10 @@ $menuBtn.on('click', async () => {
         }
 
         updateVariablesWith(v => {
-            if (!v.wb_char_snapshots) v.wb_char_snapshots = {};
+            if (typeof v.wb_char_snapshots === 'string') {
+                try { v.wb_char_snapshots = JSON.parse(v.wb_char_snapshots); } catch(e){ v.wb_char_snapshots = {}; }
+            }
+            if (!v.wb_char_snapshots || typeof v.wb_char_snapshots !== 'object' || Array.isArray(v.wb_char_snapshots)) v.wb_char_snapshots = {};
             if (!v.wb_char_snapshots[charName]) v.wb_char_snapshots[charName] = {};
             v.wb_char_snapshots[charName][snapName] = newSnapData;
             return v;
@@ -1706,978 +1737,1015 @@ $menuBtn.on('click', async () => {
         const wb = $ui.find('#wb-assoc-user-add-sel').val();
         if(!wb) return;
         if (getPersonaWbs().length > 0) {
-             if(await SillyTavern.callGenericPopup(`通常情况下 Persona 只能绑定一本世界书哦。如果继续操作，会替换掉原本绑定的，可以吗？`, SillyTavern.POPUP_TYPE.CONFIRM) !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
-        }
-        await withLoadingOverlay(async () => {
-            await rebindPersonaWorldbook(wb);
-            await initiateDeepScan(true, false);
-        }, "正在努力为你的 Persona 建立羁绊...");
+            if(await SillyTavern.callGenericPopup(`通常情况下 Persona 只能绑定一本世界书哦。如果继续操作，会替换掉原本绑定的，可以吗？`, SillyTavern.POPUP_TYPE.CONFIRM) !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+       }
+       await withLoadingOverlay(async () => {
+           await rebindPersonaWorldbook(wb);
+           await initiateDeepScan(true, false);
+       }, "正在努力为你的 Persona 建立羁绊...");
 
-        toastr.success(`成功把[${wb}] 绑定给当前的 Persona 啦！`);
-        $ui.find('#wb-assoc-user-add-search').val('');
-        renderAssocView();
-    });
-
-    $ui.find('#wb-assoc-char-add-btn').on('click', async () => {
-        const wb = $ui.find('#wb-assoc-char-add-sel').val();
-        if(!wb) return;
-        let charBooksObj = {primary: null, additional:[]};
-        try { if (typeof getCharWorldbookNames === 'function') charBooksObj = getCharWorldbookNames('current') || charBooksObj; } catch(e){}
-        const cBooks =[];
-        if(charBooksObj.primary) cBooks.push(charBooksObj.primary);
-        if(charBooksObj.additional) cBooks.push(...charBooksObj.additional);
-
-        cBooks.push(wb);
-        const newPrimary = cBooks.shift();
-        const newAdd = cBooks;
-
-        await withLoadingOverlay(async () => {
-            if (typeof rebindCharWorldbooks === 'function') {
-                await rebindCharWorldbooks('current', { primary: newPrimary, additional: newAdd });
-                await initiateDeepScan(true, false);
-            }
-        }, "正在努力为你当前的角色卡绑定世界书...");
-
-        toastr.success(`成功把[${wb}] 绑定给角色卡啦！`);
-        $ui.find('#wb-assoc-char-add-search').val('');
-        renderAssocView();
-    });
-
-    $ui.find('#wb-btn-assoc-cancel').on('click', () => {
-        $ui.find('#wb-assoc-view').hide();
-        $ui.find('#wb-tab-strip, #wb-char-view').fadeIn(200);
-        renderCharView();
-    });
-
-    const renderData = (highlightName = null) => {
-        const keyword = $ui.find('#wb-search-input').val().toLowerCase();
-        const showUnboundOnly = $ui.find('#wb-filter-unbound').is(':checked');
-        const stateFilter = $ui.find('#wb-filter-state').val();
-        const sortMode = $ui.find('#wb-sort-select').val();
-
-        const wCatSettings = getCategories();
-        let currentSelCat = $ui.find('#wb-category-filter').val() || 'all';
-        let $catDrop = $ui.find('#wb-category-filter').empty();
-        $catDrop.append(`<option value="all">📁 所有类别</option><option value="unassigned">📂 未分类</option>`);
-        Object.keys(wCatSettings).forEach(cName => $catDrop.append(`<option value="${cName}">${cName}</option>`));
-        if (!Object.keys(wCatSettings).includes(currentSelCat) && currentSelCat !== 'unassigned') currentSelCat = 'all';
-        $catDrop.val(currentSelCat);
-        $ui.find('#wb-btn-del-category').toggle(currentSelCat !== 'all' && currentSelCat !== 'unassigned');
-
-        const allWbs = getWorldbookNames();
-        const activeWbs = getGlobalWorldbookNames();
-        const snapshots = getVariables({ type: 'global' }).wb_snapshots || {};
-
-        currentVisibleWbs = [...allWbs].filter(wb => {
-            const bindings = globalBindingMapCache[wb] ||[];
-            if (keyword && !((wb + " " + bindings.map(c => c.name).join(" ")).toLowerCase().includes(keyword))) return false;
-            if (showUnboundOnly && bindings.length > 0) return false;
-            if (stateFilter === 'enabled' && !activeWbs.includes(wb)) return false;
-            if (stateFilter === 'disabled' && activeWbs.includes(wb)) return false;
-
-            if (currentSelCat === 'unassigned') {
-                const isAssigned = Object.values(wCatSettings).some(list => Array.isArray(list) && list.includes(wb));
-                if (isAssigned) return false;
-            } else if (currentSelCat !== 'all') {
-                const tList = wCatSettings[currentSelCat] ||[];
-                if (!tList.includes(wb)) return false;
-            }
-            return true;
-        }).sort((a, b) => {
-            if (sortMode === 'az') return a.localeCompare(b, 'zh-CN');
-            if (sortMode === 'za') return b.localeCompare(a, 'zh-CN');
-            const aA = activeWbs.includes(a), bA = activeWbs.includes(b);
-            if (aA === bA) return a.localeCompare(b, 'zh-CN');
-            return aA ? -1 : 1;
-        });
-
-        const $wbContainer = $ui.find('#wb-container').empty();
-        $ui.find('#wb-batch-count').text(batchSelected.size);
-        const $batchList = $ui.find('#wb-batch-selected-list').empty();
-        if (batchSelected.size > 0) batchSelected.forEach(wb => $batchList.append(`<span style="background:rgba(255,107,107,0.2);color:#ff6b6b;padding:3px 6px;border-radius:4px;font-size:12px;white-space:nowrap;border:1px solid #ff6b6b;"><i class="fa-solid fa-xmark"></i> ${wb}</span>`));
-        else $batchList.html('<span style="color:gray; font-size:12px;">暂未选中</span>');
-
-        currentVisibleWbs.forEach(wb => {
-            const bindings = globalBindingMapCache[wb] ||[];
-            const myCats = Object.keys(wCatSettings).filter(k => Array.isArray(wCatSettings[k]) && wCatSettings[k].includes(wb));
-
-            const $wrapper = $('<div class="wb-item-wrapper"></div>').attr('data-wb-name', wb);
-
-            const $header = $('<div class="wb-item-header"></div>');
-            const $titleArea = $('<label class="wb-item-title-area" style="cursor:pointer;"></label>');
-            let $chk;
-
-            if(isBatchMode) {
-                $chk = $('<input type="checkbox" style="transform: scale(1.2); margin-top:2px; flex-shrink:0; accent-color:#ff6b6b;">').prop('checked', batchSelected.has(wb));
-                $titleArea.on('click', (e) => { e.preventDefault(); batchSelected.has(wb) ? batchSelected.delete(wb) : batchSelected.add(wb); renderData(); });
-            } else {
-                $chk = $('<input type="checkbox" style="transform: scale(1.2); margin-top:2px; flex-shrink:0;">').prop('checked', activeWbs.includes(wb));
-                $chk.on('change', async function() {
-                    await withLoadingOverlay(async () => {
-                        let current = getGlobalWorldbookNames();
-                        $(this).is(':checked') ? current.push(wb) : current = current.filter(n => n !== wb);
-                        await rebindGlobalWorldbooks(current); renderData();
-                    }, "应用中...");
-                });
-            }
-            $titleArea.append($chk);
-            const statusStyle = activeWbs.includes(wb) && !isBatchMode ? 'color: var(--SmartThemeQuoteColor);' : '';
-            $titleArea.append(`<span class="wb-name-text" style="${statusStyle}" title="${wb}">${wb}</span>`);
-            $header.append($titleArea);
-
-            const $bottomBar = $('<div class="wb-item-bottom"></div>');
-            const $tagRow = $('<div class="wb-tag-area"></div>');
-
-            const isBound = bindings.length > 0;
-            const $bindTag = $(`<div class="wb-bind-tag" style="background: ${isBound?'var(--SmartThemeQuoteColor)':'#888'}1A; border: 1px solid ${isBound?'var(--SmartThemeQuoteColor)':'#888'}; color: ${isBound?'var(--SmartThemeQuoteColor)':'#888'};">${isBound ? `📌${bindings.length}` : `无`}</div>`);
-            if (isBound) $bindTag.on('click', () => openBindView(wb));
-            $tagRow.append($bindTag);
-
-            if (myCats && myCats.length > 0) {
-                myCats.forEach(c => $tagRow.append(`<div class="wb-bind-tag wb-cat-tag" style="background: rgba(252, 196, 25, 0.15); border: 1px solid #fcc419; color: #fcc419;" title="当前所在分类"><i class="fa-solid fa-folder"></i> ${c}</div>`));
-            }
-            $bottomBar.append($tagRow);
-
-            const $catDrawer = $('<div class="wb-cat-drawer" style="display:none; padding-top:6px; border-top:1px dashed var(--SmartThemeBorderColor); margin-top:6px; flex-direction:column; gap:6px;"></div>');
-
-            if (!isBatchMode) {
-                const $actions = $('<div class="wb-item-actions"></div>');
-                const isDefFav = myCats.includes("🌟默认收藏夹");
-
-                $actions.append($(`<div class="wb-icon-btn hover-yellow" title="一键收纳入 🌟默认收藏夹" style="color:${isDefFav?'#fcc419':'inherit'}"><i class="fa-${isDefFav?'solid':'regular'} fa-star"></i></div>`).on('click', (e) => {
-                    e.stopPropagation(); let d = getCategories(); if(!d["🌟默认收藏夹"]) d["🌟默认收藏夹"] = [];
-                    isDefFav ? d["🌟默认收藏夹"] = d["🌟默认收藏夹"].filter(x=>x!==wb) : d["🌟默认收藏夹"].push(wb);
-                    saveCategories(d); renderData(wb);
-                }));
-
-                $actions.append($(`<div class="wb-icon-btn hover-blue" title="分类管理抽屉"><i class="fa-solid fa-folder-open"></i></div>`).on('click', (e) => {
-                    e.stopPropagation();
-                    const renderDrawer = () => {
-                         $catDrawer.empty();
-                         let d = getCategories();
-                         let cKeys = Object.keys(d);
-                         let _mCats = cKeys.filter(k => d[k].includes(wb));
-
-                         const $btnGrp = $('<div style="display:flex; flex-wrap:wrap; gap:6px;"></div>');
-                         cKeys.forEach(cName => {
-                              let isInside = _mCats.includes(cName);
-                              let $cBtn = $(`<div class="wb-bind-tag" style="background:${isInside?'var(--SmartThemeQuoteColor)':'var(--SmartThemeBlurTintColor)'}; color:${isInside?'#fff':'var(--SmartThemeBodyColor)'}; border-color:${isInside?'var(--SmartThemeQuoteColor)':'var(--SmartThemeBorderColor)'}; cursor:pointer;"><i class="fa-solid ${isInside?'fa-check':'fa-folder'}"></i> ${cName}</div>`);
-                              $cBtn.on('click', (ev) => {
-                                   ev.stopPropagation();
-                                   let curD = getCategories();
-                                   if (!curD[cName]) curD[cName] = [];
-                                   isInside ? curD[cName] = curD[cName].filter(x => x!==wb) : curD[cName].push(wb);
-                                   saveCategories(curD);
-                                   renderDrawer();
-                                   let allCatsSpan = Object.keys(curD).filter(k => curD[k].includes(wb));
-                                   $tagRow.find('.wb-cat-tag').remove();
-                                   allCatsSpan.forEach(c => $tagRow.append(`<div class="wb-bind-tag wb-cat-tag" style="background: rgba(252, 196, 25, 0.15); border: 1px solid #fcc419; color: #fcc419;" title="当前所在分类"><i class="fa-solid fa-folder"></i> ${c}</div>`));
-                              });
-                              $btnGrp.append($cBtn);
-                         });
-
-                         let $newBtn = $(`<div class="wb-bind-tag" style="background:#51cf66; border-color:#51cf66; color:#fff; cursor:pointer;"><i class="fa-solid fa-plus"></i> 新增分类</div>`);
-                         $newBtn.on('click', async (ev) => {
-                              ev.stopPropagation();
-                              let newCName = await SillyTavern.callGenericPopup("请告诉我新分类的名字：", SillyTavern.POPUP_TYPE.INPUT);
-                              if(newCName && (newCName=newCName.trim())) {
-                                   let curD = getCategories();
-                                   if(curD[newCName]) return toastr.warning("名字已经存在咯！");
-                                   curD[newCName] = [wb]; saveCategories(curD);
-                                   renderDrawer();
-                                   $tagRow.append(`<div class="wb-bind-tag wb-cat-tag" style="background: rgba(252, 196, 25, 0.15); border: 1px solid #fcc419; color: #fcc419;" title="当前所在分类"><i class="fa-solid fa-folder"></i> ${newCName}</div>`);
-                              }
-                         });
-                         $btnGrp.append($newBtn);
-                         $catDrawer.append('<div style="font-size:12px; color:var(--SmartThemeQuoteColor); margin-bottom:4px; font-weight:bold;">✨ 点选即可收入对应分类中，可以多选哦：</div>').append($btnGrp);
-                    };
-
-                    if ($catDrawer.is(':visible')) { $catDrawer.slideUp(150); } else { renderDrawer(); $catDrawer.slideDown(150); }
-                }));
-
-                $actions.append($('<div class="wb-icon-btn" title="整理条目"><i class="fa-solid fa-list"></i></div>').on('click', () => openEntryTuneView(wb, '#wb-main-view')))
-                        .append($('<div class="wb-icon-btn hover-blue" title="打包导出这本世界书 (会保留您的所有分组哦！)"><i class="fa-solid fa-download"></i></div>').on('click', async () => {
-                             await withLoadingOverlay(async () => {
-                                 const entries = await getWorldbook(wb);
-                                 let allCats = getCategories();
-                                 let myCats = Object.keys(allCats).filter(k => allCats[k].includes(wb));
-                                 const blob = new Blob([JSON.stringify({ entries: entries, name: wb, lulu_categories: myCats }, null, 2)], { type: "application/json" });
-                                 const url = URL.createObjectURL(blob);
-                                 const a = document.createElement('a'); a.href = url; a.download = `${wb}.json`;
-                                 document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-                             }, "正在为您打包这本世界书...");
-                             if(typeof toastr !== 'undefined') toastr.success(`[${wb}] 已经装进小包裹，成功导出啦！`);
-                        }))
-                        .append($('<div class="wb-icon-btn" title="重命名名称"><i class="fa-solid fa-pen"></i></div>').on('click', () => attemptRenameWb(wb, bindings.length > 0, bindings)))
-                        .append($('<div class="wb-icon-btn hover-red" title="彻底删除"><i class="fa-solid fa-trash"></i></div>').on('click', async () => {
-                             if (await SillyTavern.callGenericPopup(`删除确认：丢失 [${wb}] ？`, SillyTavern.POPUP_TYPE.CONFIRM) === SillyTavern.POPUP_RESULT.AFFIRMATIVE) {
-                                  await withLoadingOverlay(async () => {
-                                      await deleteWorldbook(wb);
-                                      delete globalBindingMapCache[wb];
-                                      const c = loadBindingCache(); if(c){ delete c[wb]; saveBindingCache(c);}
-                                      let d = getCategories(); Object.keys(d).forEach(k => d[k] = d[k].filter(n=>n!==wb)); saveCategories(d);
-                                      renderData();
-                                  }, `删除中...`);
-                             }
-                        }));
-                $bottomBar.append($actions);
-            }
-
-            $wrapper.append($header).append($bottomBar).append($catDrawer);
-            $wbContainer.append($wrapper);
-        });
-
-        if (highlightName) {
-            setTimeout(() => {
-                const $highlightItem = $wbContainer.find(`[data-wb-name="${highlightName}"]`);
-                if ($highlightItem.length) { $highlightItem[0].scrollIntoView({ behavior: 'smooth', block: 'center' }); $highlightItem.addClass('wb-highlight'); setTimeout(() => $highlightItem.removeClass('wb-highlight'), 1000); }
-            }, 100);
-        }
-
-        const $snapContainer = $ui.find('#wb-snapshot-container').empty();
-        Object.entries(snapshots).forEach(([name, snapData]) => {
-            const isDetailed = !Array.isArray(snapData) && snapData.type === 'detailed';
-            const wbs = isDetailed ? Object.keys(snapData.data) : (Array.isArray(snapData) ? snapData : snapData.wbs);
-            const $item = $(`<div style="display:flex; justify-content:space-between; align-items:center; padding:10px; background:var(--SmartThemeBotMesColor); border-radius:6px; border:1px solid var(--SmartThemeBorderColor); flex-wrap:wrap; gap:8px;"></div>`);
-            $item.append(`<div style="flex:1; min-width: 150px;"><div style="font-weight:bold;font-size:14px;"><i class="fa-solid ${isDetailed?'fa-puzzle-piece':'fa-box-archive'}" style="color:var(--SmartThemeQuoteColor);"></i> ${name}</div><div style="font-size:12px;color:gray;">${isDetailed?`含 ${Object.values(snapData.data).reduce((a,c)=>a+c.length,0)} 个内容微调`:`含 ${(wbs||[]).length} 项设定`}</div></div>`);
-            const $act = $('<div style="display:flex; gap:6px; flex-wrap: wrap;"></div>');
-            $act.append($('<button class="menu_button interactable btn-success wb-nowrap-btn" style="margin:0; padding:6px 12px; font-size:12px; border:none;">应用该组合</button>').on('click', async () => {
-                if(isDetailed) await applyDetailedSnapshot(snapData.data); else await withLoadingOverlay(async() => await rebindGlobalWorldbooks(wbs), `应用中...`);
-                toastr.success("组合已应用。"); renderData();
-            }));
-            $act.append($('<button class="menu_button interactable wb-nowrap-btn" style="margin:0; padding:6px 10px;" title="编辑项"><i class="fa fa-pen"></i></button>').on('click', () => isDetailed ? openDetailedSnapView(name, snapData.data) : openEditSnapView(name, wbs)));
-            $act.append($('<button class="menu_button interactable btn-danger wb-nowrap-btn" style="margin:0; padding:6px 10px; border:none;" title="删除快照"><i class="fa fa-trash"></i></button>').on('click', async () => {
-                if (await SillyTavern.callGenericPopup(`确认删除快照？`, SillyTavern.POPUP_TYPE.CONFIRM) === SillyTavern.POPUP_RESULT.AFFIRMATIVE) { updateVariablesWith(v => { delete v.wb_snapshots[name]; return v; }, { type: 'global' }); renderData(); }
-            }));
-            $item.append($act); $snapContainer.append($item);
-        });
-    };
-
-    let activeBindWb = "";
-    const openBindView = (wbName) => {
-        activeBindWb = wbName; $ui.find('#wb-bind-title').text(wbName);
-        $ui.find('#wb-main-view, #wb-tab-strip').hide();
-        $ui.find('#wb-bind-view').fadeIn();
-        renderBindList();
-    };
-
-    const renderBindList = () => {
-        const kw = $ui.find('#wb-bind-search').val().toLowerCase();
-        const $cont = $ui.find('#wb-bind-container').empty();
-        const bChars = globalBindingMapCache[activeBindWb] ||[];
-        (kw ? bChars.filter(c => c.name.toLowerCase().includes(kw)) : bChars).forEach(char => {
-            $cont.append(`<div style="display:flex; justify-content:space-between; align-items:center; background: var(--SmartThemeBotMesColor); border: 1px solid var(--SmartThemeBorderColor); border-radius:6px; padding: 10px;">
-                               <div style="display:flex; align-items:center; gap:12px;">
-                                 <img src="${(SillyTavern && typeof SillyTavern.getThumbnailUrl === 'function') ? SillyTavern.getThumbnailUrl(char.name.includes('用户') ? 'persona' : 'avatar', char.avatar) : ''}" style="width:38px; height:38px; border-radius:50%; object-fit:cover; border:2px solid var(--SmartThemeQuoteColor); background:#333;">
-                                 <div style="display:flex; flex-direction:column;"><span style="font-weight:bold; font-size:14px; margin-bottom:2px;">${char.name}</span><div style="font-size:11px;color:gray;">(${char.avatar})</div></div>
-                               </div>
-                             </div>`);
-        });
-        if (bChars.length === 0) $cont.html('<div style="padding:15px; color:gray; text-align:center;">这本书目前可以说是非常地清闲，没有任何绑定呢~</div>');
-    };
-    $ui.find('#wb-bind-search').on('input', renderBindList);
-    $ui.find('#wb-btn-bind-cancel').on('click', () => { $ui.find('#wb-bind-view').hide(); $ui.find('#wb-tab-strip, #wb-main-view').fadeIn(); });
-
-    $ui.find('#wb-btn-save-snap').on('click', async () => {
-        let name = await SillyTavern.callGenericPopup("创建新快照组合名称：", SillyTavern.POPUP_TYPE.INPUT, "新备份组合");
-        if (!name || !(name=name.trim())) return;
-        updateVariablesWith(v => { if (!v.wb_snapshots) v.wb_snapshots = {}; v.wb_snapshots[name] = { type: 'simple', wbs: getGlobalWorldbookNames() }; return v; }, { type: 'global' });
-        toastr.success("组合保存完毕。"); renderData();
+       toastr.success(`成功把[${wb}] 绑定给当前的 Persona 啦！`);
+       $ui.find('#wb-assoc-user-add-search').val('');
+       renderAssocView();
    });
 
-    let snapOldName = "", snapTempList =[];
-    const openEditSnapView = (name, list) => {
-        snapOldName = name; snapTempList = [...list]; $ui.find('#wb-edit-snap-name').val(name);
-        const buildList = () => {
-            const kw = $ui.find('#wb-edit-snap-search').val().toLowerCase();
-            const $c = $ui.find('#wb-edit-snap-container').empty();
-            [...getWorldbookNames()].sort((a,b) => { const ac = snapTempList.includes(a), bc = snapTempList.includes(b); return ac===bc ? a.localeCompare(b,'zh-CN') : (ac?-1:1); }).forEach(w => {
-                if (kw && !w.toLowerCase().includes(kw)) return;
-                const isChk = snapTempList.includes(w);
-                const $wHolder = $(`<div class="wb-item-wrapper" style="flex-direction:row; align-items:center; cursor:pointer;"></div>`);
-                const $chkBox = $(`<input type="checkbox" style="transform:scale(1.2); flex-shrink:0;">`).prop('checked', isChk);
-                $wHolder.append($chkBox, `<span class="wb-name-text" style="${isChk?'font-weight:bold;color:var(--SmartThemeQuoteColor)':''}">${w}</span>`).on('click', () => $chkBox.prop('checked', !$chkBox.is(':checked')).trigger('change'));
-                $chkBox.on('change', function() { $(this).is(':checked') ? (snapTempList.includes(w)||snapTempList.push(w)) : (snapTempList=snapTempList.filter(n=>n!==w)); buildList(); });
-                $c.append($wHolder);
-            });
-        };
-        $ui.find('#wb-edit-snap-search').off('input').on('input', buildList).val(''); buildList();
-        $ui.find('#wb-main-view, #wb-tab-strip').hide(); $ui.find('#wb-edit-snap-view').fadeIn(200);
-    };
-
-    $ui.find('#wb-btn-edit-save').on('click', async () => {
-        const nName = $ui.find('#wb-edit-snap-name').val().trim();
-        if(!nName) return toastr.warning("名称不能为空哦。");
-        updateVariablesWith(v => {
-            if (!v.wb_snapshots) v.wb_snapshots = {};
-            if (nName !== snapOldName) delete v.wb_snapshots[snapOldName];
-            v.wb_snapshots[nName] = { type: 'simple', wbs: snapTempList }; return v;
-        }, { type: 'global' });
-        toastr.success("快照已成功更新！"); $ui.find('#wb-edit-snap-view').hide(); $ui.find('#wb-tab-strip, #wb-main-view').fadeIn(); renderData();
-    });
-    $ui.find('#wb-btn-edit-cancel').on('click', () => { $ui.find('#wb-edit-snap-view').hide(); $ui.find('#wb-tab-strip, #wb-main-view').fadeIn(); });
-
-    let detailedSnapData = {}; let detailedSnapOldName = ""; let currentOpenedDsWb = "";
-
-    const openDetailedSnapView = (name = "", existingData = {}) => {
-        detailedSnapOldName = name; detailedSnapData = JSON.parse(JSON.stringify(existingData)); $ui.find('#dsnap-name').val(name);
-        const $wbList = $ui.find('#dsnap-wb-list').empty(), $entryList = $ui.find('#dsnap-entry-list').empty(), allWbs = getWorldbookNames();
-
-        const renderWbList = () => {
-            const keyword = $ui.find('#dsnap-wb-search').val().toLowerCase(), hideBound = $ui.find('#dsnap-filter-unbound').is(':checked'); $wbList.empty();
-            const filteredWbs = allWbs.filter(wb => (wb.toLowerCase().includes(keyword) && (!hideBound || (globalBindingMapCache[wb] ||[]).length === 0)));
-            filteredWbs.forEach(wbName => {
-                const selectedCount = (detailedSnapData[wbName] ||[]).length;
-                const $item = $(`<div class="dsnap-wb-item" data-wbname="${wbName}">${wbName} <b style="color:var(--okGreen); display:${selectedCount>0?'inline':'none'};">(${selectedCount})</b></div>`);
-                $item.on('click', async () => {
-                    if ($item.hasClass('active')) return;
-                    $wbList.find('.active').removeClass('active'); $item.addClass('active'); currentOpenedDsWb = wbName; await renderEntryListFor(wbName);
-                });
-                $wbList.append($item);
-            });
-            if ($wbList.find('.active').length === 0 && filteredWbs.length > 0) $wbList.children().first().trigger('click');
-            else if (filteredWbs.length === 0) $entryList.html('<div style="color:gray;text-align:center;padding:20px;">未找到匹配的世界书</div>');
-        };
-
-        $ui.find('#dsnap-wb-search, #dsnap-filter-unbound').off('input change').on('input change', renderWbList); $ui.find('#dsnap-wb-search').val('');
-
-        const renderEntryListFor = async (wbName) => {
-            $entryList.html('<div style="padding:20px;text-align:center;"><i class="fa-solid fa-spinner fa-spin"></i> 正在加载条目...</div>');
-            try {
-                const entries = await getWorldbook(wbName);
-                if (entries.length === 0) { $entryList.html('<div style="color:gray; text-align:center; padding:15px;">这本书是空的...</div>'); return; }
-                renderDsEntryItems(entries, wbName);
-            } catch (e) { $entryList.html('<div style="color:red; text-align:center;">加载条目失败！</div>'); }
-        };
-
-        const renderDsEntryItems = (entries, wbName) => {
-            $entryList.empty(); let displayEntries = [...entries]; const sortMode = $ui.find('#dsnap-entry-sort').val() || 'default';
-            if (sortMode === 'order_asc') displayEntries.sort((a, b) => (a.position?.order ?? 100) - (b.position?.order ?? 100));
-            else if (sortMode === 'order_desc') displayEntries.sort((a, b) => (b.position?.order ?? 100) - (a.position?.order ?? 100));
-            else if (sortMode === 'depth_asc') displayEntries.sort((a, b) => (a.position?.depth ?? 0) - (b.position?.depth ?? 0));
-            else if (sortMode === 'depth_desc') displayEntries.sort((a, b) => (b.position?.depth ?? 0) - (a.position?.depth ?? 0));
-            else if (sortMode === 'az') displayEntries.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'zh-CN'));
-            else if (sortMode === 'za') displayEntries.sort((a, b) => (b.name || '').localeCompare(a.name || '', 'zh-CN'));
-
-            displayEntries.forEach(entry => {
-                const isChecked = (detailedSnapData[wbName] ||[]).includes(entry.uid);
-                const rawStateColor = entry.enabled ? 'var(--okGreen)' : 'gray', sType = entry.strategy?.type, StrategyTxt = sType === 'selective' ? '🟩 匹配' : '🟦 常驻', posBadge = formatPositionBadge(entry.position);
-                const $item = $(`<div class="dsnap-entry-item" style="border-left: 3px solid ${rawStateColor};"><input type="checkbox" style="transform:scale(1.2); margin-top:3px; flex-shrink:0;"><div class="dsnap-entry-body"><div class="dsnap-entry-title">${entry.name || `(未命名条目)`}</div><div class="dsnap-entry-meta"><span class="${entry.enabled?'badge-green':'badge-grey'}">${entry.enabled?'原始已启':'原始关闭'}</span><span class="badge-blue">${StrategyTxt}</span><span class="badge-grey" style="color:var(--SmartThemeQuoteColor); border-color:var(--SmartThemeBorderColor); background:none;">${posBadge}</span></div></div></div>`);
-
-                $item.find('input').prop('checked', isChecked).on('change', function() {
-                    const checked = $(this).is(':checked'); if (!detailedSnapData[wbName]) detailedSnapData[wbName] =[];
-                    if (checked) { if (!detailedSnapData[wbName].includes(entry.uid)) detailedSnapData[wbName].push(entry.uid); } else { detailedSnapData[wbName] = detailedSnapData[wbName].filter(uid => uid !== entry.uid); }
-                    if (detailedSnapData[wbName].length === 0) delete detailedSnapData[wbName];
-                    const newCount = (detailedSnapData[wbName] ||[]).length, $counter = $wbList.find(`.dsnap-wb-item.active[data-wbname="${wbName}"] b`);
-                    $counter.text(`(${newCount})`); newCount > 0 ? $counter.show() : $counter.hide();
-                });
-                $entryList.append($item);
-            });
-        };
-
-        $ui.find('#dsnap-entry-sort').off('change').on('change', async () => { if (currentOpenedDsWb) { const entries = await getWorldbook(currentOpenedDsWb); renderDsEntryItems(entries, currentOpenedDsWb); } });
-        renderWbList(); $ui.find('#wb-main-view, #wb-edit-snap-view, #wb-assoc-view, #wb-tab-strip, #wb-char-view').hide(); $ui.find('#wb-detailed-snap-view').fadeIn(200);
-    };
-
-    const applyDetailedSnapshot = async (data) => {
-        await withLoadingOverlay(async () => {
-            const allWbNames = getWorldbookNames(), targetWbNames = Object.keys(data);
-            for (const wbName of allWbNames) {
-                let wbEntries = await getWorldbook(wbName), changed = false;
-                if (targetWbNames.includes(wbName)) {
-                    const enabledUIDs = data[wbName];
-                    wbEntries.forEach(entry => { const shouldBeEnabled = enabledUIDs.includes(entry.uid); if(entry.enabled !== shouldBeEnabled) { entry.enabled = shouldBeEnabled; changed = true; } });
-                } else {
-                    wbEntries.forEach(entry => { if(entry.enabled) { entry.enabled = false; changed = true; } });
-                }
-                if (changed) await replaceWorldbook(wbName, wbEntries);
-            }
-            await rebindGlobalWorldbooks(targetWbNames);
-        }, "正在应用复合场景...");
-    };
-
-    $ui.find('#wb-btn-create-detail-snap').on('click', () => openDetailedSnapView());
-
-    $ui.find('#dsnap-save').on('click', () => {
-        const name = $ui.find('#dsnap-name').val().trim(); if (!name) return toastr.warning("也要留下好听的名字啊！");
-        updateVariablesWith(v => {
-            if (!v.wb_snapshots) v.wb_snapshots = {};
-            if(name !== detailedSnapOldName) delete v.wb_snapshots[detailedSnapOldName];
-            v.wb_snapshots[name] = { type: 'detailed', data: detailedSnapData }; return v;
-        }, { type: 'global' });
-        toastr.success(`快照保存好啦。`); $ui.find('#wb-detailed-snap-view').hide(); $ui.find('#wb-tab-strip, #wb-main-view').fadeIn(200); renderData();
-    });
-    $ui.find('#dsnap-cancel').on('click', () => { $ui.find('#wb-detailed-snap-view').hide(); $ui.find('#wb-tab-strip, #wb-main-view').fadeIn(200); });
-
-    let tuneWbName = ""; let tuneEntries =[]; let originalTuneEntries =[];
-    let tuneReturnView = '#wb-main-view';
-
-    const openEntryTuneView = async (wbName, fromView = '#wb-main-view') => {
-        tuneReturnView = fromView;
-        tuneWbName = wbName; $ui.find('#wb-entry-title').text(wbName); $ui.find('#wb-entry-search').val(''); $ui.find('#wb-entry-sort').val('default');
-        await withLoadingOverlay(async () => {
-            const fetched = await getWorldbook(wbName);
-            tuneEntries = JSON.parse(JSON.stringify(fetched));
-            originalTuneEntries = JSON.parse(JSON.stringify(fetched));
-        }, `提取内容...`);
-        isEntryBatchMode = false; entryBatchSelected.clear();
-        $ui.find('#wb-btn-entry-batch').removeClass('btn-warning').addClass('btn-danger').html('<i class="fa-solid fa-layer-group"></i> 批量操作');
-        $ui.find('#wb-entry-batch-actions').hide();
-        renderEntryList();
-        $ui.find('#wb-main-view, #wb-detail-view, #wb-assoc-view, #wb-tab-strip, #wb-char-view').hide();
-        $ui.find('#wb-entry-view').fadeIn(200);
-    };
-
-    $ui.find('#wb-btn-entry-batch').on('click', function() {
-        isEntryBatchMode = !isEntryBatchMode;
-        if(isEntryBatchMode) {
-            entryBatchSelected.clear(); $(this).removeClass('btn-danger').addClass('btn-warning').html('<i class="fa-solid fa-xmark"></i> 退出批量'); $ui.find('#wb-entry-batch-actions').css('display', 'flex');
-        } else {
-            $(this).removeClass('btn-warning').addClass('btn-danger').html('<i class="fa-solid fa-layer-group"></i> 批量操作'); $ui.find('#wb-entry-batch-actions').hide();
-        }
-        renderEntryList();
-    });
-
-    $ui.find('#wb-btn-entry-confirm-delete').on('click', async () => {
-        if(entryBatchSelected.size === 0) return toastr.warning("请先选中要删除的条目哦~");
-        if(await SillyTavern.callGenericPopup(`确认要暂时移除这 ${entryBatchSelected.size} 项内容吗？\n(移除后还需要点击最下方绿色保存按钮才会生效哦)`, SillyTavern.POPUP_TYPE.CONFIRM) === SillyTavern.POPUP_RESULT.AFFIRMATIVE) {
-             let sortedIndices = Array.from(entryBatchSelected).sort((a,b)=>b-a);
-             sortedIndices.forEach(idx => tuneEntries.splice(idx, 1)); entryBatchSelected.clear(); renderEntryList();
-             toastr.success("勾选的内容都暂存移除了，记得点确认保存把变更写入源文件哦！");
-        }
-    });
-
-    $ui.find('#wb-btn-entry-batch-group').on('click', async () => {
-        if(entryBatchSelected.size === 0) return toastr.warning("请先选中想要分类的条目哦~");
-        let newGroup = await SillyTavern.callGenericPopup("请输入这些条目想去的分组名称\\n(留空的话它们就会变回 '未分类' 哦):", SillyTavern.POPUP_TYPE.INPUT, "");
-        if (newGroup !== null) {
-            entryBatchSelected.forEach(idx => tuneEntries[idx].group = newGroup.trim());
-            entryBatchSelected.clear();
-            $ui.find('#wb-entry-batch-count').text("0");
-            renderEntryList();
-            toastr.success("批量改组完成！记得点绿色保存按钮才会生效哦~");
-        }
-    });
-
-    let wbEntryGroupState = {};
-
-    const renderEntryList = () => {
-        const keyword = $ui.find('#wb-entry-search').val().toLowerCase();
-        const sortMode = $ui.find('#wb-entry-sort').val() || 'default';
-        const $container = $ui.find('#wb-entry-container').empty();
-        $ui.find('#wb-entry-batch-count').text(entryBatchSelected.size);
-
-        const filteredEntries = tuneEntries.filter(entry => { const searchStr = `${entry.name||''} ${(entry.strategy?.keys||[]).join(',')}`.toLowerCase(); return !keyword || searchStr.includes(keyword); });
-
-        let sortedEntries = [...filteredEntries];
-        if (sortMode === 'order_asc') sortedEntries.sort((a, b) => (a.position?.order ?? 100) - (b.position?.order ?? 100));
-        else if (sortMode === 'order_desc') sortedEntries.sort((a, b) => (b.position?.order ?? 100) - (a.position?.order ?? 100));
-        else if (sortMode === 'depth_asc') sortedEntries.sort((a, b) => (a.position?.depth ?? 0) - (b.position?.depth ?? 0));
-        else if (sortMode === 'depth_desc') sortedEntries.sort((a, b) => (b.position?.depth ?? 0) - (a.position?.depth ?? 0));
-        else if (sortMode === 'az') sortedEntries.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'zh-CN'));
-        else if (sortMode === 'za') sortedEntries.sort((a, b) => (b.name || '').localeCompare(a.name || '', 'zh-CN'));
-
-        $ui.find('#wb-btn-entry-batch-select-all').off('click').on('click', () => {
-            sortedEntries.forEach(entry => entryBatchSelected.add(tuneEntries.indexOf(entry)));
-            renderEntryList();
-        });
-        $ui.find('#wb-btn-entry-batch-deselect-all').off('click').on('click', () => {
-            sortedEntries.forEach(entry => entryBatchSelected.delete(tuneEntries.indexOf(entry)));
-            renderEntryList();
-        });
-
-        const groupedEntries = {};
-        sortedEntries.forEach((entry) => {
-             let g = (entry.group && entry.group.trim() !== '') ? entry.group.trim() : "📁 未分类条目";
-             if (!groupedEntries[g]) groupedEntries[g] = [];
-             groupedEntries[g].push(entry);
-        });
-
-        let sharedOrder = getSharedGroupOrder();
-        let orderChanged = false;
-        Object.keys(groupedEntries).forEach(g => {
-            if (g !== "📁 未分类条目" && !sharedOrder.includes(g)) {
-                sharedOrder.push(g);
-                orderChanged = true;
-            }
-        });
-        if (orderChanged) setSharedGroupOrder(sharedOrder);
-
-        const sortedGroupNames = Object.keys(groupedEntries).sort((a, b) => {
-            if (a === "📁 未分类条目") return 1;
-            if (b === "📁 未分类条目") return -1;
-            let idxA = sharedOrder.indexOf(a);
-            let idxB = sharedOrder.indexOf(b);
-            if (idxA === -1) idxA = 9999;
-            if (idxB === -1) idxB = 9999;
-            return idxA - idxB;
-        });
-
-        for (const groupName of sortedGroupNames) {
-             const gEntries = groupedEntries[groupName];
-             const isCollapsed = wbEntryGroupState[groupName] === true;
-             const isDraggable = groupName !== "📁 未分类条目";
-             const dragIcon = isDraggable ? `<i class="fa-solid fa-hand-paper lulu-panel-drag-handle" style="cursor:grab; margin-right:8px; color:gray;" title="按住拖拽排序"></i>` : '';
-
-             const $gHeader = $(`<div class="lulu-ui-group-header" data-groupname="${groupName}" draggable="${isDraggable ? 'true' : 'false'}" style="background: rgba(0,0,0,0.15); padding:8px 12px; margin-top:8px; border-radius:6px; cursor:pointer; font-weight:bold; color:var(--SmartThemeBodyColor); border:1px solid var(--SmartThemeBorderColor); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-                 <span style="display:flex; align-items:center;">
-                     ${dragIcon}
-                     <i class="fa-solid ${isCollapsed ? 'fa-chevron-right' : 'fa-chevron-down'}" style="margin-right:6px; color:var(--SmartThemeQuoteColor);"></i>
-                     ${groupName}
-                     <span style="font-size:12px; color:gray; font-weight:normal; margin-left:4px;">( ${gEntries.length} 项 )</span>
-                 </span>
-                 <div style="display:flex; gap:6px;" class="lulu-group-ctrls">
-                     ${isDraggable ? `
-                     <i class="fa-solid fa-arrow-up lulu-btn-up" title="上移" style="padding:6px; font-size:12px; color:gray; cursor:pointer; background:rgba(125,125,125,0.15); border-radius:4px; transition:0.2s;"></i>
-                     <i class="fa-solid fa-arrow-down lulu-btn-down" title="下移" style="padding:6px; font-size:12px; color:gray; cursor:pointer; background:rgba(125,125,125,0.15); border-radius:4px; margin-right:10px; transition:0.2s;"></i>
-                     ` : ''}
-                     <button class="menu_button interactable wb-nowrap-btn wb-group-enable-all" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(81, 207, 102, 0.15); color:#51cf66; border:1px solid rgba(81, 207, 102, 0.5);" title="开启该组所有条目"><i class="fa-solid fa-check"></i> 全开</button>
-                     <button class="menu_button interactable wb-nowrap-btn wb-group-disable-all" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(150, 150, 150, 0.15); color:gray; border:1px solid rgba(150, 150, 150, 0.5);" title="关闭该组所有条目"><i class="fa-solid fa-xmark"></i> 全关</button>
-                     ${isDraggable ? `<button class="menu_button interactable wb-nowrap-btn wb-group-delete" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(255, 107, 107, 0.15); color:#ff6b6b; border:1px solid rgba(255, 107, 107, 0.5);" title="删除分组或解散"><i class="fa-solid fa-trash"></i> 删除</button>` : ''}
-                 </div>
-             </div>`);
-
-             const $gContainer = $(`<div style="display:${isCollapsed ? 'none' : 'flex'}; flex-direction:column; padding-left:10px; margin-top:6px; border-left: 2px solid var(--SmartThemeBorderColor); gap: 4px;"></div>`);
-
-             $gHeader.on('click', (e) => {
-                 if ($(e.target).closest('.lulu-group-ctrls').length || $(e.target).hasClass('lulu-panel-drag-handle')) return;
-                 wbEntryGroupState[groupName] = !isCollapsed;
-                 renderEntryList();
-             });
-             if (isDraggable) {
-                $gHeader.on('dragstart', function(e) {
-                    e.originalEvent.dataTransfer.setData('text/plain', groupName);
-                    $(this).addClass('lulu-drag-ghost');
-                });
-                $gHeader.on('dragend', function() {
-                    $(this).removeClass('lulu-drag-ghost');
-                    $('.lulu-drag-over-top, .lulu-drag-over-bottom').removeClass('lulu-drag-over-top lulu-drag-over-bottom');
-                });
-                $gHeader.on('dragover', function(e) {
-                    e.preventDefault();
-                    const rect = this.getBoundingClientRect();
-                    const isBottomHalf = e.originalEvent.clientY > rect.top + (rect.height / 2);
-                    if (isBottomHalf) {
-                        $(this).removeClass('lulu-drag-over-top').addClass('lulu-drag-over-bottom');
-                    } else {
-                        $(this).removeClass('lulu-drag-over-bottom').addClass('lulu-drag-over-top');
-                    }
-                });
-                $gHeader.on('dragleave', function() {
-                    $(this).removeClass('lulu-drag-over-top lulu-drag-over-bottom');
-                });
-                $gHeader.on('drop', function(e) {
-                    e.preventDefault();
-                    $(this).removeClass('lulu-drag-over-top lulu-drag-over-bottom');
-                    const draggedGrp = e.originalEvent.dataTransfer.getData('text/plain');
-                    const targetGrp = $(this).attr('data-groupname');
-                    if (draggedGrp && draggedGrp !== targetGrp && draggedGrp !== "📁 未分类条目" && targetGrp !== "📁 未分类条目") {
-                        let order = getSharedGroupOrder();
-                        const fromIdx = order.indexOf(draggedGrp);
-                        if (fromIdx > -1) {
-                            const rect = this.getBoundingClientRect();
-                            const isBottomHalf = e.originalEvent.clientY > rect.top + (rect.height / 2);
-                            order.splice(fromIdx, 1);
-                            let newToIdx = order.indexOf(targetGrp);
-                            if (isBottomHalf) newToIdx++;
-                            order.splice(newToIdx, 0, draggedGrp);
-                            setSharedGroupOrder(order);
-                            renderEntryList();
-                        }
-                    }
-                });
-                 // 面板内的上下按钮
-                 $gHeader.find('.lulu-btn-up').on('click', () => {
-                     let order = getSharedGroupOrder();
-                     const idx = order.indexOf(groupName);
-                     if (idx > 0) {
-                         [order[idx - 1], order[idx]] = [order[idx], order[idx - 1]];
-                         setSharedGroupOrder(order); renderEntryList();
-                     }
-                 });
-                 $gHeader.find('.lulu-btn-down').on('click', () => {
-                     let order = getSharedGroupOrder();
-                     const idx = order.indexOf(groupName);
-                     if (idx !== -1 && idx < order.length - 1) {
-                         [order[idx + 1], order[idx]] = [order[idx], order[idx + 1]];
-                         setSharedGroupOrder(order); renderEntryList();
-                     }
-                 });
-             }
-
-             // 组内全开
-             $gHeader.find('.wb-group-enable-all').on('click', (e) => {
-                 e.stopPropagation(); gEntries.forEach(entry => entry.enabled = true); renderEntryList();
-             });
-             // 组内全关
-             $gHeader.find('.wb-group-disable-all').on('click', (e) => {
-                 e.stopPropagation(); gEntries.forEach(entry => entry.enabled = false); renderEntryList();
-             });
-
-             $gHeader.find('.wb-group-delete').on('click', async (e) => {
-                e.stopPropagation();
-                const btnRes = await SillyTavern.callGenericPopup(
-                    `<div style="margin-bottom:8px;">想要对【<strong style="color:var(--SmartThemeQuoteColor);">${groupName}</strong>】做什么呢？</div><span style="font-size:12px; color:gray;">(当前组内包含 ${gEntries.length} 个条目)</span>`,
-                    SillyTavern.POPUP_TYPE.TEXT, "", { okButton: "点错了取消", customButtons: [ {text: "彻底清空分组与条目", result: 888, classes: ["btn-danger"]}, {text: "仅解散分组(条目回未分类)", result: 999, classes: ["btn-warning"]} ] }
-                );
-
-                if (btnRes === 888) {
-                    const uidsToRemove = gEntries.map(entry => entry.uid);
-                    tuneEntries = tuneEntries.filter(entry => !uidsToRemove.includes(entry.uid));
-                    delete wbEntryGroupState[groupName]; renderEntryList();
-                    toastr.success(`【${groupName}】内容已被彻底扫除干净啦！记得按绿色保存按钮哦~`);
-                } else if (btnRes === 999) {
-                    gEntries.forEach(entry => entry.group = "");
-                    delete wbEntryGroupState[groupName]; renderEntryList();
-                    toastr.success(`【${groupName}】已解散，里面的内容已经安全返回未分类区啦。`);
-                }
-            });
-
-             gEntries.forEach((entry) => {
-                const index = tuneEntries.indexOf(entry);
-                const strategy = entry.strategy || { type: 'constant', keys:[] };
-                const keysInfo = strategy.type !== 'selective' ? `<span style="color:gray;">[常驻无触发词]</span>` : `🔑 ${(strategy.keys||[]).join(', ')||'<span style="color:#d63384">未设置词汇</span>'}`;
-                const posBadgeHtml = `<span class="badge-grey" style="color:var(--SmartThemeBodyColor); background:none; border-color:var(--SmartThemeBorderColor);">${formatPositionBadge(entry.position)}</span>`;
-
-                const isEn = entry.enabled;
-                const dynamicBg = isEn ? 'var(--SmartThemeBotMesColor)' : 'rgba(125,125,125,0.08)';
-                const dynamicOpacity = isEn ? '1' : '0.55';
-                const $item = $(`<div class="lulu-wb-entry-item" style="display:flex; align-items:flex-start; gap:12px; padding:10px; border-left: 4px solid ${isEn ? 'var(--okGreen)' : 'gray'}; background:${dynamicBg}; border-radius:4px; opacity:${dynamicOpacity}; transition: 0.2s;"></div>`);
-
-                $item.hover(
-                    function() { if (!isEn) $(this).css('opacity', '1'); },
-                    function() { if (!isEn) $(this).css('opacity', '0.55'); }
-                );
-
-                let $chk;
-                if (isEntryBatchMode) {
-                    $chk = $(`<input type="checkbox" style="transform: scale(1.2); flex-shrink:0; margin-top:2px; accent-color:#ff6b6b;">`).prop('checked', entryBatchSelected.has(index)).on('change', function() {
-                        $(this).is(':checked') ? entryBatchSelected.add(index) : entryBatchSelected.delete(index); $ui.find('#wb-entry-batch-count').text(entryBatchSelected.size);
-                    });
-                } else {
-                    $chk = $(`<input type="checkbox" style="transform: scale(1.2); flex-shrink:0; margin-top:2px;">`).prop('checked', entry.enabled).on('change', function() { entry.enabled = $(this).is(':checked'); renderEntryList(); });
-                }
-
-                const $info = $(`<div style="flex:1; min-width:0; cursor:${isEntryBatchMode?'pointer':'default'};"><div style="font-weight:bold; margin-bottom: 5px; font-size:14px; word-break:break-all;">${entry.name || '未定义模块'}</div><div style="font-size:11px;color:gray;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${strategy.type !== 'selective' ? '<span class="badge-blue">常驻</span>' : '<span class="badge-green">匹配</span>'}${posBadgeHtml} <span style="margin-left:5px;">${keysInfo}</span></div></div>`);
-                if (isEntryBatchMode) $info.on('click', () => { $chk.prop('checked', !$chk.is(':checked')).trigger('change'); });
-
-                const $right = $('<div style="display:flex; gap:8px; margin-left:auto; flex-shrink:0;"></div>');
-
-                if(!isEntryBatchMode) {
-                     $right.append($('<button class="menu_button interactable wb-nowrap-btn" style="color:#fcc419; margin:0;" title="设置此条目的分组"><i class="fa fa-folder-tree"></i></button>').on('click', async () => {
-                         let res = await SillyTavern.callGenericPopup(`设置 [${entry.name||'未命名'}] 的分组名称\\n(同一个世界书内，名字相同就会归为一组，留空代表未分类):`, SillyTavern.POPUP_TYPE.INPUT, entry.group || "");
-                         if(res !== null) { entry.group = res.trim(); renderEntryList(); }
-                     }));
-                }
-
-                $right.append($('<button class="menu_button interactable wb-nowrap-btn" style="color:var(--SmartThemeQuoteColor); margin:0;" title="修改内容"><i class="fa fa-pen-nib"></i></button>').on('click', () => openDetailEditView(index)));
-                $right.append($('<button class="menu_button interactable wb-nowrap-btn" style="color:#ff6b6b; margin:0;" title="删除条目"><i class="fa fa-trash"></i></button>').on('click', async () => {
-                    if(await SillyTavern.callGenericPopup(`确认删除 [${entry.name || '未命名'}]？`, SillyTavern.POPUP_TYPE.CONFIRM) === SillyTavern.POPUP_RESULT.AFFIRMATIVE) { tuneEntries.splice(index, 1); renderEntryList(); }
-                }));
-
-                if(isEntryBatchMode) $right.hide();
-
-                $item.append($chk, $info, $right);
-                $gContainer.append($item);
-             });
-
-             $container.append($gHeader).append($gContainer);
-        }
-
-        if (sortedEntries.length === 0) $container.html(`<div style="color: gray; padding: 10px; text-align: center;">${tuneEntries.length > 0 ? '搜查不到匹配内容呢。': '完全是一本空壳书呀。'}</div>`);
-    };
-
-    $ui.find('#wb-entry-search').off('input').on('input', renderEntryList); $ui.find('#wb-entry-sort').off('change').on('change', renderEntryList);
-    $ui.find('#wb-btn-entry-all').off('click').on('click', () => { tuneEntries.forEach(e => e.enabled = true); renderEntryList(); });
-    $ui.find('#wb-btn-entry-none').off('click').on('click', () => { tuneEntries.forEach(e => e.enabled = false); renderEntryList(); });
-    $ui.find('#wb-btn-entry-add').off('click').on('click', () => {
-        tuneEntries.unshift({ uid: Date.now() + Math.random(), name: "新增编辑条目", enabled: true, content: "", group: "", strategy: { type: 'constant', keys:[] }, position: { type: 'at_depth', role: 'system', depth: 0, order: 100 }, recursion: { prevent_incoming: false, prevent_outgoing: false, delay_until: null }, exclude_recursion: false, prevent_recursion: false });
-        renderEntryList(); openDetailEditView(0);
-    });
-
-    $ui.find('#wb-btn-entry-save').on('click', async () => {
-        await withLoadingOverlay(async () => { await replaceWorldbook(tuneWbName, tuneEntries); }, `写入中...`);
-        originalTuneEntries = JSON.parse(JSON.stringify(tuneEntries));
-        toastr.success(`[${tuneWbName}] 的修改已经成功保存啦！`);
-
-        if(tuneReturnView === '#wb-main-view') renderData();
-        else if(tuneReturnView === '#wb-char-view') renderCharView();
-    });
-
-    $ui.find('#wb-btn-entry-cancel').on('click', async () => {
-        const isDirty = JSON.stringify(tuneEntries) !== JSON.stringify(originalTuneEntries);
-        if (isDirty) {
-            const confirm = await SillyTavern.callGenericPopup(
-                `当前条目的更改还没点左下角<strong style="color:var(--SmartThemeQuoteColor);">绿色按钮保存</strong>哦！<br>真的要放弃这些修改直接返回吗？`,
-                SillyTavern.POPUP_TYPE.CONFIRM
-            );
-            if (confirm !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
-        }
-        $ui.find('#wb-entry-view').hide();
-        $ui.find('#wb-tab-strip').show();
-        $ui.find(tuneReturnView).fadeIn(200);
-    });
-
-    let tuneDetailIndex = -1;
-    $ui.find('#wb-det-position').on('change', function() { $ui.find('#wb-det-depth-container').toggle($(this).val().startsWith('at_depth_')); });
-
-    const openDetailEditView = (index) => {
-        tuneDetailIndex = index; const e = tuneEntries[index]; $ui.find('#wb-detail-title').text(e.name || '空参数');
-        $ui.find('#wb-det-name').val(e.name || ''); $ui.find('#wb-det-content').val(e.content || ''); $ui.find('#wb-det-keys').val((e.strategy?.keys||[]).join(', ')); $ui.find('#wb-det-strategy').val(e.strategy?.type || 'constant');
-        let p = e.position?.type || 'at_depth'; if (p === 'at_depth' || p === 'outlet') p = `at_depth_${e.position?.role || 'system'}`;
-        $ui.find('#wb-det-position').val(p).trigger('change'); $ui.find('#wb-det-depth').val(e.position?.depth ?? 0); $ui.find('#wb-det-order').val(e.position?.order ?? 100);
-
-        const isExclude = e.recursion?.prevent_incoming ?? e.exclude_recursion ?? e.excludeRecursion ?? false, isPrevent = e.recursion?.prevent_outgoing ?? e.prevent_recursion ?? e.preventRecursion ?? false;
-        $ui.find('#wb-det-exclude-recursion').prop('checked', !!isExclude); $ui.find('#wb-det-prevent-recursion').prop('checked', !!isPrevent);
-        $ui.find('#wb-entry-view').hide(); $ui.find('#wb-detail-view').fadeIn(200);
-    };
-
-    $ui.find('#wb-btn-det-save').on('click', () => {
-        if(tuneDetailIndex === -1) return;
-        const e = tuneEntries[tuneDetailIndex], pos = $ui.find('#wb-det-position').val(), order = parseInt($ui.find('#wb-det-order').val()) || 100;
-        e.name = $ui.find('#wb-det-name').val(); e.content = $ui.find('#wb-det-content').val(); e.strategy = { type: $ui.find('#wb-det-strategy').val(), keys: $ui.find('#wb-det-keys').val().split(',').map(s=>s.trim()).filter(Boolean) };
-        if (pos.startsWith('at_depth_')) e.position = { type: 'at_depth', role: pos.replace('at_depth_',''), depth: parseInt($ui.find('#wb-det-depth').val())||0, order: order }; else e.position = { type: pos, order: order };
-
-        const checkExclude = $ui.find('#wb-det-exclude-recursion').is(':checked'), checkPrevent = $ui.find('#wb-det-prevent-recursion').is(':checked');
-        if (!e.recursion) e.recursion = { prevent_incoming: false, prevent_outgoing: false, delay_until: null };
-        e.recursion.prevent_incoming = checkExclude; e.recursion.prevent_outgoing = checkPrevent; e.exclude_recursion = checkExclude; e.prevent_recursion = checkPrevent;
-        $ui.find('#wb-detail-view').hide(); $ui.find('#wb-entry-view').fadeIn(200); renderEntryList();
-    });
-
-    $ui.find('#wb-btn-det-cancel').on('click', () => {
-        $ui.find('#wb-detail-view').hide();
-        $ui.find('#wb-entry-view').fadeIn(200);
-    });
-
-    await popup.show();
-    (function initLuLuNativeWbSyncV7() {
-        let groupFoldState = JSON.parse(localStorage.getItem('lulu_wb_native_fold_state') || '{}');
-        const saveFoldState = () => localStorage.setItem('lulu_wb_native_fold_state', JSON.stringify(groupFoldState));
-
-        let currentActiveWbName = null;
-        let cachedWbEntries = [];
-        let isFetching = false;
-
-        setInterval(async () => {
-            const isNativeMagicEnabled = localStorage.getItem('lulu_wb_native_magic_enabled') !== 'false';
-
-            const $entries = $('.world_entry');
-            if ($entries.length === 0) return;
-            const $container = $entries.first().parent();
-            if (!$container.length) return;
-            if (!isNativeMagicEnabled) {
-                if ($container.css('display') === 'flex') {
-                    $container.css({ 'display': '', 'flex-direction': '' });
-                    $('.lulu-native-group-header').remove();
-                    $entries.css({'order': '', 'display': '', 'margin': ''});
-                }
-                return;
-            }
-
-            if (isFetching) return;
-
-            if ($container.css('display') !== 'flex' || $container.css('flex-direction') !== 'column') {
-                $container.css({ 'display': 'flex', 'flex-direction': 'column' });
-            }
-
-            const visibleWbName = $('.move_entry_button').first().attr('data-current-world');
-            if (!visibleWbName) return;
-
-            if (currentActiveWbName !== visibleWbName) {
-                isFetching = true;
-                try {
-                    const rawData = await getWorldbook(visibleWbName);
-                    if (rawData && Array.isArray(rawData)) { cachedWbEntries = rawData; currentActiveWbName = visibleWbName; }
-                } catch (err) {} finally { isFetching = false; }
-                return;
-            }
-
-            if (!cachedWbEntries || cachedWbEntries.length === 0) return;
-
-            const groupCounts = {};
-
-            $entries.each(function(index) {
-                const $entry = $(this);
-                let myGroup = "📁 未分类条目";
-
-                const entryTitle = $entry.find('textarea[name="comment"]').val()?.trim() || "";
-                let foundEntry = cachedWbEntries.find(e => (e.name === entryTitle || e.comment === entryTitle));
-                if (!foundEntry) {
-                    const domUid = parseInt($entry.attr('uid') || $entry.data('id'), 10);
-                    if (!isNaN(domUid) && cachedWbEntries[domUid]) { foundEntry = cachedWbEntries[domUid]; }
-                }
-
-                if (foundEntry && foundEntry.group && foundEntry.group.trim() !== '') myGroup = foundEntry.group.trim();
-
-                if (!groupCounts[myGroup]) groupCounts[myGroup] = 0;
-                groupCounts[myGroup]++;
-
-                $entry.attr('data-lulu-grp', myGroup);
-                $entry.attr('data-lulu-native-index', index);
-            });
-            let luluGroupOrder = JSON.parse(localStorage.getItem('lulu_wb_native_group_order') || '[]');
-            let currentGroups = Object.keys(groupCounts).filter(g => g !== "📁 未分类条目");
-            let orderChanged = false;
-            currentGroups.forEach(g => {
-                if (!luluGroupOrder.includes(g)) { luluGroupOrder.push(g); orderChanged = true; }
-            });
-            if (orderChanged) localStorage.setItem('lulu_wb_native_group_order', JSON.stringify(luluGroupOrder));
-
-            const sortedGroupNames = Object.keys(groupCounts).sort((a, b) => {
-                if (a === "📁 未分类条目") return 1;
-                if (b === "📁 未分类条目") return -1;
-                let idxA = luluGroupOrder.indexOf(a);
-                let idxB = luluGroupOrder.indexOf(b);
-                if (idxA === -1) idxA = 9999;
-                if (idxB === -1) idxB = 9999;
-                return idxA - idxB;
-            });
-
-            sortedGroupNames.forEach((gName, gIndex) => {
-                const baseOrder = (gIndex + 1) * 10000;
-                let $header = $container.children(`.lulu-native-group-header[data-groupname="${gName}"]`);
-                const isFolded = groupFoldState[gName] === true;
-                const isDraggable = gName !== "📁 未分类条目";
-
-                if ($header.length === 0) {
-                    const dragIconHtml = isDraggable ? `<i class="fa-solid fa-hand-paper lulu-drag-handle" style="cursor:grab; font-size:14px; color:gray; padding-right:8px; display:inline-flex; align-items:center;" title="按住拖拽排序分类"></i>` : '';
-                    const sortButtonsHtml = !isDraggable ? '' : `
-                        <div style="display:flex; gap: 6px; margin-right: 15px;" class="lulu-sort-btns">
-                            <i class="fa-solid fa-arrow-up lulu-move-up" title="将此分类上移" style="padding:4px; font-size:14px; color:gray; transition:0.2s; cursor:pointer;"></i>
-                            <i class="fa-solid fa-arrow-down lulu-move-down" title="将此分类下移" style="padding:4px; font-size:14px; color:gray; transition:0.2s; cursor:pointer;"></i>
-                        </div>
-                    `;
-
-                    $header = $(`
-                        <div class="lulu-native-group-header" data-groupname="${gName}" draggable="${isDraggable ? 'true' : 'false'}" style="background: var(--SmartThemeBlurTintColor, rgba(0,0,0,0.15)); padding:10px 14px; margin: 10px 0 6px 0; border-radius:6px; font-weight:bold; color:var(--SmartThemeQuoteColor, #70a1ff); border:1px solid var(--SmartThemeBorderColor, gray); display:flex; justify-content:space-between; align-items:center; user-select:none; transition: 0.2s; flex-shrink: 0; align-content: center;">
-                            <span style="display:flex; align-items:center;">
-                                ${dragIconHtml}
-                                <span class="lulu-click-fold" style="display:flex; align-items:center; cursor:pointer;">
-                                    <i class="fa-solid ${isFolded ? 'fa-chevron-right' : 'fa-chevron-down'} lulu-fold-icon" style="margin-right:8px; width: 16px; text-align:center;"></i>
-                                    <span style="font-size: 14.5px;" class="lulu-g-title">${gName}</span>
-                                    <span style="font-size: 11px; font-weight: normal; color: gray; margin-left: 6px;" class="lulu-g-count">(${groupCounts[gName]}项)</span>
-                                </span>
-                            </span>
-                            <span style="display:flex; align-items:center;">
-                                ${sortButtonsHtml}
-                                <span style="font-size:11.5px; font-weight:normal; color:gray; opacity: 0.6;"><i class="fa-solid fa-link"></i> 分组内会根据选项排序哦</span>
-                            </span>
-                        </div>
-                    `);
-
-                    $header.hover(
-                        function() { $(this).css('background', 'var(--SmartThemeBotMesColor, rgba(125,125,125,0.3))'); },
-                        function() { $(this).css('background', 'var(--SmartThemeBlurTintColor, rgba(0,0,0,0.15))'); }
-                    );
-
-                    $header.find('.lulu-move-up, .lulu-move-down').hover(
-                        function() { $(this).css('color', 'var(--SmartThemeQuoteColor)'); $(this).css('transform', 'scale(1.2)'); },
-                        function() { $(this).css('color', 'gray'); $(this).css('transform', 'scale(1)'); }
-                    );
-                    $header.find('.lulu-click-fold').on('click', function(e) {
-                        e.stopPropagation();
-                        const grp = $header.attr('data-groupname');
-                        const isNowFolded = !groupFoldState[grp];
-                        groupFoldState[grp] = isNowFolded;
-                        saveFoldState();
-
-                        const $icon = $(this).find('.lulu-fold-icon');
-                        if (isNowFolded) $icon.removeClass('fa-chevron-down').addClass('fa-chevron-right');
-                        else $icon.removeClass('fa-chevron-right').addClass('fa-chevron-down');
-
-                        $container.children(`.world_entry[data-lulu-grp="${grp}"]`).each(function() {
-                            if (isNowFolded) $(this).hide(); else $(this).show();
+   $ui.find('#wb-assoc-char-add-btn').on('click', async () => {
+       const wb = $ui.find('#wb-assoc-char-add-sel').val();
+       if(!wb) return;
+       let charBooksObj = {primary: null, additional:[]};
+       try { if (typeof getCharWorldbookNames === 'function') charBooksObj = getCharWorldbookNames('current') || charBooksObj; } catch(e){}
+       const cBooks =[];
+       if(charBooksObj.primary) cBooks.push(charBooksObj.primary);
+       if(charBooksObj.additional) cBooks.push(...charBooksObj.additional);
+
+       cBooks.push(wb);
+       const newPrimary = cBooks.shift();
+       const newAdd = cBooks;
+
+       await withLoadingOverlay(async () => {
+           if (typeof rebindCharWorldbooks === 'function') {
+               await rebindCharWorldbooks('current', { primary: newPrimary, additional: newAdd });
+               await initiateDeepScan(true, false);
+           }
+       }, "正在努力为你当前的角色卡绑定世界书...");
+
+       toastr.success(`成功把[${wb}] 绑定给角色卡啦！`);
+       $ui.find('#wb-assoc-char-add-search').val('');
+       renderAssocView();
+   });
+
+   $ui.find('#wb-btn-assoc-cancel').on('click', () => {
+       $ui.find('#wb-assoc-view').hide();
+       $ui.find('#wb-tab-strip, #wb-char-view').fadeIn(200);
+       renderCharView();
+   });
+
+   const renderData = (highlightName = null) => {
+       const keyword = $ui.find('#wb-search-input').val().toLowerCase();
+       const showUnboundOnly = $ui.find('#wb-filter-unbound').is(':checked');
+       const stateFilter = $ui.find('#wb-filter-state').val();
+       const sortMode = $ui.find('#wb-sort-select').val();
+
+       const wCatSettings = getCategories();
+       let currentSelCat = $ui.find('#wb-category-filter').val() || 'all';
+       let $catDrop = $ui.find('#wb-category-filter').empty();
+       $catDrop.append(`<option value="all">📁 所有类别</option><option value="unassigned">📂 未分类</option>`);
+       Object.keys(wCatSettings).forEach(cName => $catDrop.append(`<option value="${cName}">${cName}</option>`));
+       if (!Object.keys(wCatSettings).includes(currentSelCat) && currentSelCat !== 'unassigned') currentSelCat = 'all';
+       $catDrop.val(currentSelCat);
+       $ui.find('#wb-btn-del-category').toggle(currentSelCat !== 'all' && currentSelCat !== 'unassigned');
+
+       const allWbs = getWorldbookNames();
+       const activeWbs = getGlobalWorldbookNames();
+
+       /* 鹿酱修复点：防止总快照变成长字符串，导致酒馆读取崩溃 */
+       let snapshots = getVariables({ type: 'global' }).wb_snapshots;
+       if (typeof snapshots === 'string') {
+           try { snapshots = JSON.parse(snapshots); } catch(e) { snapshots = {}; }
+       }
+       if (!snapshots || typeof snapshots !== 'object' || Array.isArray(snapshots)) snapshots = {};
+
+       currentVisibleWbs = [...allWbs].filter(wb => {
+           const bindings = globalBindingMapCache[wb] ||[];
+           if (keyword && !((wb + " " + bindings.map(c => c.name).join(" ")).toLowerCase().includes(keyword))) return false;
+           if (showUnboundOnly && bindings.length > 0) return false;
+           if (stateFilter === 'enabled' && !activeWbs.includes(wb)) return false;
+           if (stateFilter === 'disabled' && activeWbs.includes(wb)) return false;
+
+           if (currentSelCat === 'unassigned') {
+               const isAssigned = Object.values(wCatSettings).some(list => Array.isArray(list) && list.includes(wb));
+               if (isAssigned) return false;
+           } else if (currentSelCat !== 'all') {
+               const tList = wCatSettings[currentSelCat] ||[];
+               if (!tList.includes(wb)) return false;
+           }
+           return true;
+       }).sort((a, b) => {
+           if (sortMode === 'az') return a.localeCompare(b, 'zh-CN');
+           if (sortMode === 'za') return b.localeCompare(a, 'zh-CN');
+           const aA = activeWbs.includes(a), bA = activeWbs.includes(b);
+           if (aA === bA) return a.localeCompare(b, 'zh-CN');
+           return aA ? -1 : 1;
+       });
+
+       const $wbContainer = $ui.find('#wb-container').empty();
+       $ui.find('#wb-batch-count').text(batchSelected.size);
+       const $batchList = $ui.find('#wb-batch-selected-list').empty();
+       if (batchSelected.size > 0) batchSelected.forEach(wb => $batchList.append(`<span style="background:rgba(255,107,107,0.2);color:#ff6b6b;padding:3px 6px;border-radius:4px;font-size:12px;white-space:nowrap;border:1px solid #ff6b6b;"><i class="fa-solid fa-xmark"></i> ${wb}</span>`));
+       else $batchList.html('<span style="color:gray; font-size:12px;">暂未选中</span>');
+
+       currentVisibleWbs.forEach(wb => {
+           const bindings = globalBindingMapCache[wb] ||[];
+           const myCats = Object.keys(wCatSettings).filter(k => Array.isArray(wCatSettings[k]) && wCatSettings[k].includes(wb));
+
+           const $wrapper = $('<div class="wb-item-wrapper"></div>').attr('data-wb-name', wb);
+
+           const $header = $('<div class="wb-item-header"></div>');
+           const $titleArea = $('<label class="wb-item-title-area" style="cursor:pointer;"></label>');
+           let $chk;
+
+           if(isBatchMode) {
+               $chk = $('<input type="checkbox" style="transform: scale(1.2); margin-top:2px; flex-shrink:0; accent-color:#ff6b6b;">').prop('checked', batchSelected.has(wb));
+               $titleArea.on('click', (e) => { e.preventDefault(); batchSelected.has(wb) ? batchSelected.delete(wb) : batchSelected.add(wb); renderData(); });
+           } else {
+               $chk = $('<input type="checkbox" style="transform: scale(1.2); margin-top:2px; flex-shrink:0;">').prop('checked', activeWbs.includes(wb));
+               $chk.on('change', async function() {
+                   await withLoadingOverlay(async () => {
+                       let current = getGlobalWorldbookNames();
+                       $(this).is(':checked') ? current.push(wb) : current = current.filter(n => n !== wb);
+                       await rebindGlobalWorldbooks(current); renderData();
+                   }, "应用中...");
+               });
+           }
+           $titleArea.append($chk);
+           const statusStyle = activeWbs.includes(wb) && !isBatchMode ? 'color: var(--SmartThemeQuoteColor);' : '';
+           $titleArea.append(`<span class="wb-name-text" style="${statusStyle}" title="${wb}">${wb}</span>`);
+           $header.append($titleArea);
+
+           const $bottomBar = $('<div class="wb-item-bottom"></div>');
+           const $tagRow = $('<div class="wb-tag-area"></div>');
+
+           const isBound = bindings.length > 0;
+           const $bindTag = $(`<div class="wb-bind-tag" style="background: ${isBound?'var(--SmartThemeQuoteColor)':'#888'}1A; border: 1px solid ${isBound?'var(--SmartThemeQuoteColor)':'#888'}; color: ${isBound?'var(--SmartThemeQuoteColor)':'#888'};">${isBound ? `📌${bindings.length}` : `无`}</div>`);
+           if (isBound) $bindTag.on('click', () => openBindView(wb));
+           $tagRow.append($bindTag);
+
+           if (myCats && myCats.length > 0) {
+               myCats.forEach(c => $tagRow.append(`<div class="wb-bind-tag wb-cat-tag" style="background: rgba(252, 196, 25, 0.15); border: 1px solid #fcc419; color: #fcc419;" title="当前所在分类"><i class="fa-solid fa-folder"></i> ${c}</div>`));
+           }
+           $bottomBar.append($tagRow);
+
+           const $catDrawer = $('<div class="wb-cat-drawer" style="display:none; padding-top:6px; border-top:1px dashed var(--SmartThemeBorderColor); margin-top:6px; flex-direction:column; gap:6px;"></div>');
+
+           if (!isBatchMode) {
+               const $actions = $('<div class="wb-item-actions"></div>');
+               const isDefFav = myCats.includes("🌟默认收藏夹");
+
+               $actions.append($(`<div class="wb-icon-btn hover-yellow" title="一键收纳入 🌟默认收藏夹" style="color:${isDefFav?'#fcc419':'inherit'}"><i class="fa-${isDefFav?'solid':'regular'} fa-star"></i></div>`).on('click', (e) => {
+                   e.stopPropagation(); let d = getCategories(); if(!d["🌟默认收藏夹"]) d["🌟默认收藏夹"] = [];
+                   isDefFav ? d["🌟默认收藏夹"] = d["🌟默认收藏夹"].filter(x=>x!==wb) : d["🌟默认收藏夹"].push(wb);
+                   saveCategories(d); renderData(wb);
+               }));
+
+               $actions.append($(`<div class="wb-icon-btn hover-blue" title="分类管理抽屉"><i class="fa-solid fa-folder-open"></i></div>`).on('click', (e) => {
+                   e.stopPropagation();
+                   const renderDrawer = () => {
+                        $catDrawer.empty();
+                        let d = getCategories();
+                        let cKeys = Object.keys(d);
+                        let _mCats = cKeys.filter(k => d[k].includes(wb));
+
+                        const $btnGrp = $('<div style="display:flex; flex-wrap:wrap; gap:6px;"></div>');
+                        cKeys.forEach(cName => {
+                             let isInside = _mCats.includes(cName);
+                             let $cBtn = $(`<div class="wb-bind-tag" style="background:${isInside?'var(--SmartThemeQuoteColor)':'var(--SmartThemeBlurTintColor)'}; color:${isInside?'#fff':'var(--SmartThemeBodyColor)'}; border-color:${isInside?'var(--SmartThemeQuoteColor)':'var(--SmartThemeBorderColor)'}; cursor:pointer;"><i class="fa-solid ${isInside?'fa-check':'fa-folder'}"></i> ${cName}</div>`);
+                             $cBtn.on('click', (ev) => {
+                                  ev.stopPropagation();
+                                  let curD = getCategories();
+                                  if (!curD[cName]) curD[cName] = [];
+                                  isInside ? curD[cName] = curD[cName].filter(x => x!==wb) : curD[cName].push(wb);
+                                  saveCategories(curD);
+                                  renderDrawer();
+                                  let allCatsSpan = Object.keys(curD).filter(k => curD[k].includes(wb));
+                                  $tagRow.find('.wb-cat-tag').remove();
+                                  allCatsSpan.forEach(c => $tagRow.append(`<div class="wb-bind-tag wb-cat-tag" style="background: rgba(252, 196, 25, 0.15); border: 1px solid #fcc419; color: #fcc419;" title="当前所在分类"><i class="fa-solid fa-folder"></i> ${c}</div>`));
+                             });
+                             $btnGrp.append($cBtn);
                         });
-                    });
-                    if (isDraggable) {
-                        $header.on('dragstart', function(e) {
-                            e.originalEvent.dataTransfer.setData('text/plain', gName);
-                            $(this).addClass('lulu-drag-ghost');
+
+                        let $newBtn = $(`<div class="wb-bind-tag" style="background:#51cf66; border-color:#51cf66; color:#fff; cursor:pointer;"><i class="fa-solid fa-plus"></i> 新增分类</div>`);
+                        $newBtn.on('click', async (ev) => {
+                             ev.stopPropagation();
+                             let newCName = await SillyTavern.callGenericPopup("请告诉我新分类的名字：", SillyTavern.POPUP_TYPE.INPUT);
+                             if(newCName && (newCName=newCName.trim())) {
+                                  let curD = getCategories();
+                                  if(curD[newCName]) return toastr.warning("名字已经存在咯！");
+                                  curD[newCName] = [wb]; saveCategories(curD);
+                                  renderDrawer();
+                                  $tagRow.append(`<div class="wb-bind-tag wb-cat-tag" style="background: rgba(252, 196, 25, 0.15); border: 1px solid #fcc419; color: #fcc419;" title="当前所在分类"><i class="fa-solid fa-folder"></i> ${newCName}</div>`);
+                             }
                         });
-                        $header.on('dragend', function() {
-                            $(this).removeClass('lulu-drag-ghost');
-                            $('.lulu-drag-over-top, .lulu-drag-over-bottom').removeClass('lulu-drag-over-top lulu-drag-over-bottom');
-                        });
-                        $header.on('dragover', function(e) {
-                            e.preventDefault();
-                            const rect = this.getBoundingClientRect();
-                            const isBottomHalf = e.originalEvent.clientY > rect.top + (rect.height / 2);
-                            if (isBottomHalf) {
-                                $(this).removeClass('lulu-drag-over-top').addClass('lulu-drag-over-bottom');
-                            } else {
-                                $(this).removeClass('lulu-drag-over-bottom').addClass('lulu-drag-over-top');
+                        $btnGrp.append($newBtn);
+                        $catDrawer.append('<div style="font-size:12px; color:var(--SmartThemeQuoteColor); margin-bottom:4px; font-weight:bold;">✨ 点选即可收入对应分类中，可以多选哦：</div>').append($btnGrp);
+                   };
+
+                   if ($catDrawer.is(':visible')) { $catDrawer.slideUp(150); } else { renderDrawer(); $catDrawer.slideDown(150); }
+               }));
+
+               $actions.append($('<div class="wb-icon-btn" title="整理条目"><i class="fa-solid fa-list"></i></div>').on('click', () => openEntryTuneView(wb, '#wb-main-view')))
+                       .append($('<div class="wb-icon-btn hover-blue" title="打包导出这本世界书 (会保留您的所有分组哦！)"><i class="fa-solid fa-download"></i></div>').on('click', async () => {
+                            await withLoadingOverlay(async () => {
+                                const entries = await getWorldbook(wb);
+                                let allCats = getCategories();
+                                let myCats = Object.keys(allCats).filter(k => allCats[k].includes(wb));
+                                const blob = new Blob([JSON.stringify({ entries: entries, name: wb, lulu_categories: myCats }, null, 2)], { type: "application/json" });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a'); a.href = url; a.download = `${wb}.json`;
+                                document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+                            }, "正在为您打包这本世界书...");
+                            if(typeof toastr !== 'undefined') toastr.success(`[${wb}] 已经装进小包裹，成功导出啦！`);
+                       }))
+                       .append($('<div class="wb-icon-btn" title="重命名名称"><i class="fa-solid fa-pen"></i></div>').on('click', () => attemptRenameWb(wb, bindings.length > 0, bindings)))
+                       .append($('<div class="wb-icon-btn hover-red" title="彻底删除"><i class="fa-solid fa-trash"></i></div>').on('click', async () => {
+                            if (await SillyTavern.callGenericPopup(`删除确认：丢失 [${wb}] ？`, SillyTavern.POPUP_TYPE.CONFIRM) === SillyTavern.POPUP_RESULT.AFFIRMATIVE) {
+                                 await withLoadingOverlay(async () => {
+                                     await deleteWorldbook(wb);
+                                     delete globalBindingMapCache[wb];
+                                     const c = loadBindingCache(); if(c){ delete c[wb]; saveBindingCache(c);}
+                                     let d = getCategories(); Object.keys(d).forEach(k => d[k] = d[k].filter(n=>n!==wb)); saveCategories(d);
+                                     renderData();
+                                 }, `删除中...`);
                             }
-                        });
-                        $header.on('dragleave', function() {
-                            $(this).removeClass('lulu-drag-over-top lulu-drag-over-bottom');
-                        });
-                        $header.on('drop', function(e) {
-                            e.preventDefault();
-                            $(this).removeClass('lulu-drag-over-top lulu-drag-over-bottom');
-                            const draggedGrp = e.originalEvent.dataTransfer.getData('text/plain');
-                            const targetGrp = $(this).attr('data-groupname');
-                            if (draggedGrp && draggedGrp !== targetGrp && draggedGrp !== "📁 未分类条目" && targetGrp !== "📁 未分类条目") {
-                                let order = JSON.parse(localStorage.getItem('lulu_wb_native_group_order') || '[]');
-                                const fromIdx = order.indexOf(draggedGrp);
-                                if (fromIdx > -1) {
-                                    const rect = this.getBoundingClientRect();
-                                    const isBottomHalf = e.originalEvent.clientY > rect.top + (rect.height / 2);
-                                    order.splice(fromIdx, 1);
-                                    let newToIdx = order.indexOf(targetGrp);
-                                    if (isBottomHalf) newToIdx++;
-                                    order.splice(newToIdx, 0, draggedGrp);
-                                    localStorage.setItem('lulu_wb_native_group_order', JSON.stringify(order));
-                                }
-                            }
-                        });
-                    }
+                       }));
+               $bottomBar.append($actions);
+           }
 
-                    // 向上排按钮
-                    $header.find('.lulu-move-up').on('click', function(e) {
-                        e.stopPropagation();
-                        const idx = luluGroupOrder.indexOf(gName);
-                        if (idx > 0) {
-                            [luluGroupOrder[idx - 1], luluGroupOrder[idx]] = [luluGroupOrder[idx], luluGroupOrder[idx - 1]];
-                            localStorage.setItem('lulu_wb_native_group_order', JSON.stringify(luluGroupOrder));
-                        }
-                    });
+           $wrapper.append($header).append($bottomBar).append($catDrawer);
+           $wbContainer.append($wrapper);
+       });
 
-                    // 向下排按钮
-                    $header.find('.lulu-move-down').on('click', function(e) {
-                        e.stopPropagation();
-                        const idx = luluGroupOrder.indexOf(gName);
-                        if (idx !== -1 && idx < luluGroupOrder.length - 1) {
-                            [luluGroupOrder[idx + 1], luluGroupOrder[idx]] = [luluGroupOrder[idx], luluGroupOrder[idx + 1]];
-                            localStorage.setItem('lulu_wb_native_group_order', JSON.stringify(luluGroupOrder));
-                        }
-                    });
+       if (highlightName) {
+           setTimeout(() => {
+               const $highlightItem = $wbContainer.find(`[data-wb-name="${highlightName}"]`);
+               if ($highlightItem.length) { $highlightItem[0].scrollIntoView({ behavior: 'smooth', block: 'center' }); $highlightItem.addClass('wb-highlight'); setTimeout(() => $highlightItem.removeClass('wb-highlight'), 1000); }
+           }, 100);
+       }
 
-                    $container.append($header);
-                } else {
-                    $header.find('.lulu-g-count').text(`(${groupCounts[gName]}项)`);
-                    const $icon = $header.find('.lulu-fold-icon');
-                    if (isFolded) $icon.removeClass('fa-chevron-down').addClass('fa-chevron-right');
-                    else $icon.removeClass('fa-chevron-right').addClass('fa-chevron-down');
-                }
+       const $snapContainer = $ui.find('#wb-snapshot-container').empty();
+       Object.entries(snapshots).forEach(([name, snapData]) => {
+           const isDetailed = !Array.isArray(snapData) && snapData.type === 'detailed';
+           const wbs = isDetailed ? Object.keys(snapData.data) : (Array.isArray(snapData) ? snapData : snapData.wbs);
+           const $item = $(`<div style="display:flex; justify-content:space-between; align-items:center; padding:10px; background:var(--SmartThemeBotMesColor); border-radius:6px; border:1px solid var(--SmartThemeBorderColor); flex-wrap:wrap; gap:8px;"></div>`);
+           $item.append(`<div style="flex:1; min-width: 150px;"><div style="font-weight:bold;font-size:14px;"><i class="fa-solid ${isDetailed?'fa-puzzle-piece':'fa-box-archive'}" style="color:var(--SmartThemeQuoteColor);"></i> ${name}</div><div style="font-size:12px;color:gray;">${isDetailed?`含 ${Object.values(snapData.data).reduce((a,c)=>a+c.length,0)} 个内容微调`:`含 ${(wbs||[]).length} 项设定`}</div></div>`);
+           const $act = $('<div style="display:flex; gap:6px; flex-wrap: wrap;"></div>');
+           $act.append($('<button class="menu_button interactable btn-success wb-nowrap-btn" style="margin:0; padding:6px 12px; font-size:12px; border:none;">应用该组合</button>').on('click', async () => {
+               if(isDetailed) await applyDetailedSnapshot(snapData.data); else await withLoadingOverlay(async() => await rebindGlobalWorldbooks(wbs), `应用中...`);
+               toastr.success("组合已应用。"); renderData();
+           }));
+           $act.append($('<button class="menu_button interactable wb-nowrap-btn" style="margin:0; padding:6px 10px;" title="编辑项"><i class="fa fa-pen"></i></button>').on('click', () => isDetailed ? openDetailedSnapView(name, snapData.data) : openEditSnapView(name, wbs)));
+           $act.append($('<button class="menu_button interactable btn-danger wb-nowrap-btn" style="margin:0; padding:6px 10px; border:none;" title="删除快照"><i class="fa fa-trash"></i></button>').on('click', async () => {
+               if (await SillyTavern.callGenericPopup(`确认删除快照？`, SillyTavern.POPUP_TYPE.CONFIRM) === SillyTavern.POPUP_RESULT.AFFIRMATIVE) {
+                   updateVariablesWith(v => {
+                       if(typeof v.wb_snapshots === 'string') { try{v.wb_snapshots = JSON.parse(v.wb_snapshots);}catch(e){v.wb_snapshots={};} }
+                       if(v.wb_snapshots) delete v.wb_snapshots[name];
+                       return v;
+                   }, { type: 'global' });
+                   renderData();
+               }
+           }));
+           $item.append($act); $snapContainer.append($item);
+       });
+   };
 
-                $header.css('order', baseOrder);
+   let activeBindWb = "";
+   const openBindView = (wbName) => {
+       activeBindWb = wbName; $ui.find('#wb-bind-title').text(wbName);
+       $ui.find('#wb-main-view, #wb-tab-strip').hide();
+       $ui.find('#wb-bind-view').fadeIn();
+       renderBindList();
+   };
 
-                $container.children(`.world_entry[data-lulu-grp="${gName}"]`).each(function() {
-                    const nativeIdx = parseInt($(this).attr('data-lulu-native-index') || 0);
-                    $(this).css('order', baseOrder + 1 + nativeIdx);
+   const renderBindList = () => {
+       const kw = $ui.find('#wb-bind-search').val().toLowerCase();
+       const $cont = $ui.find('#wb-bind-container').empty();
+       const bChars = globalBindingMapCache[activeBindWb] ||[];
+       (kw ? bChars.filter(c => c.name.toLowerCase().includes(kw)) : bChars).forEach(char => {
+           $cont.append(`<div style="display:flex; justify-content:space-between; align-items:center; background: var(--SmartThemeBotMesColor); border: 1px solid var(--SmartThemeBorderColor); border-radius:6px; padding: 10px;">
+                              <div style="display:flex; align-items:center; gap:12px;">
+                                <img src="${(SillyTavern && typeof SillyTavern.getThumbnailUrl === 'function') ? SillyTavern.getThumbnailUrl(char.name.includes('用户') ? 'persona' : 'avatar', char.avatar) : ''}" style="width:38px; height:38px; border-radius:50%; object-fit:cover; border:2px solid var(--SmartThemeQuoteColor); background:#333;">
+                                <div style="display:flex; flex-direction:column;"><span style="font-weight:bold; font-size:14px; margin-bottom:2px;">${char.name}</span><div style="font-size:11px;color:gray;">(${char.avatar})</div></div>
+                              </div>
+                            </div>`);
+       });
+       if (bChars.length === 0) $cont.html('<div style="padding:15px; color:gray; text-align:center;">这本书目前可以说是非常地清闲，没有任何绑定呢~</div>');
+   };
+   $ui.find('#wb-bind-search').on('input', renderBindList);
+   $ui.find('#wb-btn-bind-cancel').on('click', () => { $ui.find('#wb-bind-view').hide(); $ui.find('#wb-tab-strip, #wb-main-view').fadeIn(); });
 
-                    if (isFolded) {
-                        if ($(this).css('display') !== 'none') $(this).css({'display': 'none', 'margin': '0'});
-                    } else {
-                        if ($(this).css('display') === 'none') $(this).css({'display': '', 'margin': ''});
+   $ui.find('#wb-btn-save-snap').on('click', async () => {
+       let name = await SillyTavern.callGenericPopup("创建新快照组合名称：", SillyTavern.POPUP_TYPE.INPUT, "新备份组合");
+       if (!name || !(name=name.trim())) return;
+       updateVariablesWith(v => {
+           if (typeof v.wb_snapshots === 'string') { try{v.wb_snapshots = JSON.parse(v.wb_snapshots);}catch(e){v.wb_snapshots={};} }
+           if (!v.wb_snapshots || typeof v.wb_snapshots !== 'object' || Array.isArray(v.wb_snapshots)) v.wb_snapshots = {};
+           v.wb_snapshots[name] = { type: 'simple', wbs: getGlobalWorldbookNames() };
+           return v;
+       }, { type: 'global' });
+       toastr.success("组合保存完毕。"); renderData();
+  });
+
+   let snapOldName = "", snapTempList =[];
+   const openEditSnapView = (name, list) => {
+       snapOldName = name; snapTempList = [...list]; $ui.find('#wb-edit-snap-name').val(name);
+       const buildList = () => {
+           const kw = $ui.find('#wb-edit-snap-search').val().toLowerCase();
+           const $c = $ui.find('#wb-edit-snap-container').empty();
+           [...getWorldbookNames()].sort((a,b) => { const ac = snapTempList.includes(a), bc = snapTempList.includes(b); return ac===bc ? a.localeCompare(b,'zh-CN') : (ac?-1:1); }).forEach(w => {
+               if (kw && !w.toLowerCase().includes(kw)) return;
+               const isChk = snapTempList.includes(w);
+               const $wHolder = $(`<div class="wb-item-wrapper" style="flex-direction:row; align-items:center; cursor:pointer;"></div>`);
+               const $chkBox = $(`<input type="checkbox" style="transform:scale(1.2); flex-shrink:0;">`).prop('checked', isChk);
+               $wHolder.append($chkBox, `<span class="wb-name-text" style="${isChk?'font-weight:bold;color:var(--SmartThemeQuoteColor)':''}">${w}</span>`).on('click', () => $chkBox.prop('checked', !$chkBox.is(':checked')).trigger('change'));
+               $chkBox.on('change', function() { $(this).is(':checked') ? (snapTempList.includes(w)||snapTempList.push(w)) : (snapTempList=snapTempList.filter(n=>n!==w)); buildList(); });
+               $c.append($wHolder);
+           });
+       };
+       $ui.find('#wb-edit-snap-search').off('input').on('input', buildList).val(''); buildList();
+       $ui.find('#wb-main-view, #wb-tab-strip').hide(); $ui.find('#wb-edit-snap-view').fadeIn(200);
+   };
+
+   $ui.find('#wb-btn-edit-save').on('click', async () => {
+       const nName = $ui.find('#wb-edit-snap-name').val().trim();
+       if(!nName) return toastr.warning("名称不能为空哦。");
+       updateVariablesWith(v => {
+           if(typeof v.wb_snapshots === 'string') { try{v.wb_snapshots = JSON.parse(v.wb_snapshots);}catch(e){v.wb_snapshots={};} }
+           if (!v.wb_snapshots || typeof v.wb_snapshots !== 'object' || Array.isArray(v.wb_snapshots)) v.wb_snapshots = {};
+           if (nName !== snapOldName) delete v.wb_snapshots[snapOldName];
+           v.wb_snapshots[nName] = { type: 'simple', wbs: snapTempList }; return v;
+       }, { type: 'global' });
+       toastr.success("快照已成功更新！"); $ui.find('#wb-edit-snap-view').hide(); $ui.find('#wb-tab-strip, #wb-main-view').fadeIn(); renderData();
+   });
+   $ui.find('#wb-btn-edit-cancel').on('click', () => { $ui.find('#wb-edit-snap-view').hide(); $ui.find('#wb-tab-strip, #wb-main-view').fadeIn(); });
+
+   let detailedSnapData = {}; let detailedSnapOldName = ""; let currentOpenedDsWb = "";
+
+   const openDetailedSnapView = (name = "", existingData = {}) => {
+       detailedSnapOldName = name; detailedSnapData = JSON.parse(JSON.stringify(existingData)); $ui.find('#dsnap-name').val(name);
+       const $wbList = $ui.find('#dsnap-wb-list').empty(), $entryList = $ui.find('#dsnap-entry-list').empty(), allWbs = getWorldbookNames();
+
+       const renderWbList = () => {
+           const keyword = $ui.find('#dsnap-wb-search').val().toLowerCase(), hideBound = $ui.find('#dsnap-filter-unbound').is(':checked'); $wbList.empty();
+           const filteredWbs = allWbs.filter(wb => (wb.toLowerCase().includes(keyword) && (!hideBound || (globalBindingMapCache[wb] ||[]).length === 0)));
+           filteredWbs.forEach(wbName => {
+               const selectedCount = (detailedSnapData[wbName] ||[]).length;
+               const $item = $(`<div class="dsnap-wb-item" data-wbname="${wbName}">${wbName} <b style="color:var(--okGreen); display:${selectedCount>0?'inline':'none'};">(${selectedCount})</b></div>`);
+               $item.on('click', async () => {
+                   if ($item.hasClass('active')) return;
+                   $wbList.find('.active').removeClass('active'); $item.addClass('active'); currentOpenedDsWb = wbName; await renderEntryListFor(wbName);
+               });
+               $wbList.append($item);
+           });
+           if ($wbList.find('.active').length === 0 && filteredWbs.length > 0) $wbList.children().first().trigger('click');
+           else if (filteredWbs.length === 0) $entryList.html('<div style="color:gray;text-align:center;padding:20px;">未找到匹配的世界书</div>');
+       };
+
+       $ui.find('#dsnap-wb-search, #dsnap-filter-unbound').off('input change').on('input change', renderWbList); $ui.find('#dsnap-wb-search').val('');
+
+       const renderEntryListFor = async (wbName) => {
+           $entryList.html('<div style="padding:20px;text-align:center;"><i class="fa-solid fa-spinner fa-spin"></i> 正在加载条目...</div>');
+           try {
+               const entries = await getWorldbook(wbName);
+               if (entries.length === 0) { $entryList.html('<div style="color:gray; text-align:center; padding:15px;">这本书是空的...</div>'); return; }
+               renderDsEntryItems(entries, wbName);
+           } catch (e) { $entryList.html('<div style="color:red; text-align:center;">加载条目失败！</div>'); }
+       };
+
+       const renderDsEntryItems = (entries, wbName) => {
+           $entryList.empty(); let displayEntries = [...entries]; const sortMode = $ui.find('#dsnap-entry-sort').val() || 'default';
+           if (sortMode === 'order_asc') displayEntries.sort((a, b) => (a.position?.order ?? 100) - (b.position?.order ?? 100));
+           else if (sortMode === 'order_desc') displayEntries.sort((a, b) => (b.position?.order ?? 100) - (a.position?.order ?? 100));
+           else if (sortMode === 'depth_asc') displayEntries.sort((a, b) => (a.position?.depth ?? 0) - (b.position?.depth ?? 0));
+           else if (sortMode === 'depth_desc') displayEntries.sort((a, b) => (b.position?.depth ?? 0) - (a.position?.depth ?? 0));
+           else if (sortMode === 'az') displayEntries.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'zh-CN'));
+           else if (sortMode === 'za') displayEntries.sort((a, b) => (b.name || '').localeCompare(a.name || '', 'zh-CN'));
+
+           displayEntries.forEach(entry => {
+               const isChecked = (detailedSnapData[wbName] ||[]).includes(entry.uid);
+               const rawStateColor = entry.enabled ? 'var(--okGreen)' : 'gray', sType = entry.strategy?.type, StrategyTxt = sType === 'selective' ? '🟩 匹配' : '🟦 常驻', posBadge = formatPositionBadge(entry.position);
+               const $item = $(`<div class="dsnap-entry-item" style="border-left: 3px solid ${rawStateColor};"><input type="checkbox" style="transform:scale(1.2); margin-top:3px; flex-shrink:0;"><div class="dsnap-entry-body"><div class="dsnap-entry-title">${entry.name || `(未命名条目)`}</div><div class="dsnap-entry-meta"><span class="${entry.enabled?'badge-green':'badge-grey'}">${entry.enabled?'原始已启':'原始关闭'}</span><span class="badge-blue">${StrategyTxt}</span><span class="badge-grey" style="color:var(--SmartThemeQuoteColor); border-color:var(--SmartThemeBorderColor); background:none;">${posBadge}</span></div></div></div>`);
+
+               $item.find('input').prop('checked', isChecked).on('change', function() {
+                   const checked = $(this).is(':checked'); if (!detailedSnapData[wbName]) detailedSnapData[wbName] =[];
+                   if (checked) { if (!detailedSnapData[wbName].includes(entry.uid)) detailedSnapData[wbName].push(entry.uid); } else { detailedSnapData[wbName] = detailedSnapData[wbName].filter(uid => uid !== entry.uid); }
+                   if (detailedSnapData[wbName].length === 0) delete detailedSnapData[wbName];
+                   const newCount = (detailedSnapData[wbName] ||[]).length, $counter = $wbList.find(`.dsnap-wb-item.active[data-wbname="${wbName}"] b`);
+                   $counter.text(`(${newCount})`); newCount > 0 ? $counter.show() : $counter.hide();
+               });
+               $entryList.append($item);
+           });
+       };
+
+       $ui.find('#dsnap-entry-sort').off('change').on('change', async () => { if (currentOpenedDsWb) { const entries = await getWorldbook(currentOpenedDsWb); renderDsEntryItems(entries, currentOpenedDsWb); } });
+       renderWbList(); $ui.find('#wb-main-view, #wb-edit-snap-view, #wb-assoc-view, #wb-tab-strip, #wb-char-view').hide(); $ui.find('#wb-detailed-snap-view').fadeIn(200);
+   };
+
+   const applyDetailedSnapshot = async (data) => {
+       await withLoadingOverlay(async () => {
+           const allWbNames = getWorldbookNames(), targetWbNames = Object.keys(data);
+           for (const wbName of allWbNames) {
+               let wbEntries = await getWorldbook(wbName), changed = false;
+               if (targetWbNames.includes(wbName)) {
+                   const enabledUIDs = data[wbName];
+                   wbEntries.forEach(entry => { const shouldBeEnabled = enabledUIDs.includes(entry.uid); if(entry.enabled !== shouldBeEnabled) { entry.enabled = shouldBeEnabled; changed = true; } });
+               } else {
+                   wbEntries.forEach(entry => { if(entry.enabled) { entry.enabled = false; changed = true; } });
+               }
+               if (changed) await replaceWorldbook(wbName, wbEntries);
+           }
+           await rebindGlobalWorldbooks(targetWbNames);
+       }, "正在应用复合场景...");
+   };
+
+   $ui.find('#wb-btn-create-detail-snap').on('click', () => openDetailedSnapView());
+
+   $ui.find('#dsnap-save').on('click', () => {
+       const name = $ui.find('#dsnap-name').val().trim(); if (!name) return toastr.warning("也要留下好听的名字啊！");
+       updateVariablesWith(v => {
+           if(typeof v.wb_snapshots === 'string') { try{v.wb_snapshots = JSON.parse(v.wb_snapshots);}catch(e){v.wb_snapshots={};} }
+           if (!v.wb_snapshots || typeof v.wb_snapshots !== 'object' || Array.isArray(v.wb_snapshots)) v.wb_snapshots = {};
+           if(name !== detailedSnapOldName) delete v.wb_snapshots[detailedSnapOldName];
+           v.wb_snapshots[name] = { type: 'detailed', data: detailedSnapData }; return v;
+       }, { type: 'global' });
+       toastr.success(`快照保存好啦。`); $ui.find('#wb-detailed-snap-view').hide(); $ui.find('#wb-tab-strip, #wb-main-view').fadeIn(200); renderData();
+   });
+   $ui.find('#dsnap-cancel').on('click', () => { $ui.find('#wb-detailed-snap-view').hide(); $ui.find('#wb-tab-strip, #wb-main-view').fadeIn(200); });
+
+   let tuneWbName = ""; let tuneEntries =[]; let originalTuneEntries =[];
+   let tuneReturnView = '#wb-main-view';
+
+   const openEntryTuneView = async (wbName, fromView = '#wb-main-view') => {
+       tuneReturnView = fromView;
+       tuneWbName = wbName; $ui.find('#wb-entry-title').text(wbName); $ui.find('#wb-entry-search').val(''); $ui.find('#wb-entry-sort').val('default');
+       await withLoadingOverlay(async () => {
+           const fetched = await getWorldbook(wbName);
+           tuneEntries = JSON.parse(JSON.stringify(fetched));
+           originalTuneEntries = JSON.parse(JSON.stringify(fetched));
+       }, `提取内容...`);
+       isEntryBatchMode = false; entryBatchSelected.clear();
+       $ui.find('#wb-btn-entry-batch').removeClass('btn-warning').addClass('btn-danger').html('<i class="fa-solid fa-layer-group"></i> 批量操作');
+       $ui.find('#wb-entry-batch-actions').hide();
+       renderEntryList();
+       $ui.find('#wb-main-view, #wb-detail-view, #wb-assoc-view, #wb-tab-strip, #wb-char-view').hide();
+       $ui.find('#wb-entry-view').fadeIn(200);
+   };
+
+   $ui.find('#wb-btn-entry-batch').on('click', function() {
+       isEntryBatchMode = !isEntryBatchMode;
+       if(isEntryBatchMode) {
+           entryBatchSelected.clear(); $(this).removeClass('btn-danger').addClass('btn-warning').html('<i class="fa-solid fa-xmark"></i> 退出批量'); $ui.find('#wb-entry-batch-actions').css('display', 'flex');
+       } else {
+           $(this).removeClass('btn-warning').addClass('btn-danger').html('<i class="fa-solid fa-layer-group"></i> 批量操作'); $ui.find('#wb-entry-batch-actions').hide();
+       }
+       renderEntryList();
+   });
+
+   $ui.find('#wb-btn-entry-confirm-delete').on('click', async () => {
+       if(entryBatchSelected.size === 0) return toastr.warning("请先选中要删除的条目哦~");
+       if(await SillyTavern.callGenericPopup(`确认要暂时移除这 ${entryBatchSelected.size} 项内容吗？\n(移除后还需要点击最下方绿色保存按钮才会生效哦)`, SillyTavern.POPUP_TYPE.CONFIRM) === SillyTavern.POPUP_RESULT.AFFIRMATIVE) {
+            let sortedIndices = Array.from(entryBatchSelected).sort((a,b)=>b-a);
+            sortedIndices.forEach(idx => tuneEntries.splice(idx, 1)); entryBatchSelected.clear(); renderEntryList();
+            toastr.success("勾选的内容都暂存移除了，记得点确认保存把变更写入源文件哦！");
+       }
+   });
+
+   $ui.find('#wb-btn-entry-batch-group').on('click', async () => {
+       if(entryBatchSelected.size === 0) return toastr.warning("请先选中想要分类的条目哦~");
+       let newGroup = await SillyTavern.callGenericPopup("请输入这些条目想去的分组名称\\n(留空的话它们就会变回 '未分类' 哦):", SillyTavern.POPUP_TYPE.INPUT, "");
+       if (newGroup !== null) {
+           entryBatchSelected.forEach(idx => tuneEntries[idx].group = newGroup.trim());
+           entryBatchSelected.clear();
+           $ui.find('#wb-entry-batch-count').text("0");
+           renderEntryList();
+           toastr.success("批量改组完成！记得点绿色保存按钮才会生效哦~");
+       }
+   });
+
+   let wbEntryGroupState = {};
+
+   const renderEntryList = () => {
+       const keyword = $ui.find('#wb-entry-search').val().toLowerCase();
+       const sortMode = $ui.find('#wb-entry-sort').val() || 'default';
+       const $container = $ui.find('#wb-entry-container').empty();
+       $ui.find('#wb-entry-batch-count').text(entryBatchSelected.size);
+
+       const filteredEntries = tuneEntries.filter(entry => { const searchStr = `${entry.name||''} ${(entry.strategy?.keys||[]).join(',')}`.toLowerCase(); return !keyword || searchStr.includes(keyword); });
+
+       let sortedEntries = [...filteredEntries];
+       if (sortMode === 'order_asc') sortedEntries.sort((a, b) => (a.position?.order ?? 100) - (b.position?.order ?? 100));
+       else if (sortMode === 'order_desc') sortedEntries.sort((a, b) => (b.position?.order ?? 100) - (a.position?.order ?? 100));
+       else if (sortMode === 'depth_asc') sortedEntries.sort((a, b) => (a.position?.depth ?? 0) - (b.position?.depth ?? 0));
+       else if (sortMode === 'depth_desc') sortedEntries.sort((a, b) => (b.position?.depth ?? 0) - (a.position?.depth ?? 0));
+       else if (sortMode === 'az') sortedEntries.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'zh-CN'));
+       else if (sortMode === 'za') sortedEntries.sort((a, b) => (b.name || '').localeCompare(a.name || '', 'zh-CN'));
+
+       $ui.find('#wb-btn-entry-batch-select-all').off('click').on('click', () => {
+           sortedEntries.forEach(entry => entryBatchSelected.add(tuneEntries.indexOf(entry)));
+           renderEntryList();
+       });
+       $ui.find('#wb-btn-entry-batch-deselect-all').off('click').on('click', () => {
+           sortedEntries.forEach(entry => entryBatchSelected.delete(tuneEntries.indexOf(entry)));
+           renderEntryList();
+       });
+
+       const groupedEntries = {};
+       sortedEntries.forEach((entry) => {
+            let g = (entry.group && entry.group.trim() !== '') ? entry.group.trim() : "📁 未分类条目";
+            if (!groupedEntries[g]) groupedEntries[g] = [];
+            groupedEntries[g].push(entry);
+       });
+
+       let sharedOrder = getSharedGroupOrder();
+       let orderChanged = false;
+       Object.keys(groupedEntries).forEach(g => {
+           if (g !== "📁 未分类条目" && !sharedOrder.includes(g)) {
+               sharedOrder.push(g);
+               orderChanged = true;
+           }
+       });
+       if (orderChanged) setSharedGroupOrder(sharedOrder);
+
+       const sortedGroupNames = Object.keys(groupedEntries).sort((a, b) => {
+           if (a === "📁 未分类条目") return 1;
+           if (b === "📁 未分类条目") return -1;
+           let idxA = sharedOrder.indexOf(a);
+           let idxB = sharedOrder.indexOf(b);
+           if (idxA === -1) idxA = 9999;
+           if (idxB === -1) idxB = 9999;
+           return idxA - idxB;
+       });
+
+       for (const groupName of sortedGroupNames) {
+            const gEntries = groupedEntries[groupName];
+            const isCollapsed = wbEntryGroupState[groupName] === true;
+            const isDraggable = groupName !== "📁 未分类条目";
+            const dragIcon = isDraggable ? `<i class="fa-solid fa-hand-paper lulu-panel-drag-handle" style="cursor:grab; margin-right:8px; color:gray;" title="按住拖拽排序"></i>` : '';
+
+            const $gHeader = $(`<div class="lulu-ui-group-header" data-groupname="${groupName}" draggable="${isDraggable ? 'true' : 'false'}" style="background: rgba(0,0,0,0.15); padding:8px 12px; margin-top:8px; border-radius:6px; cursor:pointer; font-weight:bold; color:var(--SmartThemeBodyColor); border:1px solid var(--SmartThemeBorderColor); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                <span style="display:flex; align-items:center;">
+                    ${dragIcon}
+                    <i class="fa-solid ${isCollapsed ? 'fa-chevron-right' : 'fa-chevron-down'}" style="margin-right:6px; color:var(--SmartThemeQuoteColor);"></i>
+                    ${groupName}
+                    <span style="font-size:12px; color:gray; font-weight:normal; margin-left:4px;">( ${gEntries.length} 项 )</span>
+                </span>
+                <div style="display:flex; gap:6px;" class="lulu-group-ctrls">
+                    ${isDraggable ? `
+                    <i class="fa-solid fa-arrow-up lulu-btn-up" title="上移" style="padding:6px; font-size:12px; color:gray; cursor:pointer; background:rgba(125,125,125,0.15); border-radius:4px; transition:0.2s;"></i>
+                    <i class="fa-solid fa-arrow-down lulu-btn-down" title="下移" style="padding:6px; font-size:12px; color:gray; cursor:pointer; background:rgba(125,125,125,0.15); border-radius:4px; margin-right:10px; transition:0.2s;"></i>
+                    ` : ''}
+                    <button class="menu_button interactable wb-nowrap-btn wb-group-enable-all" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(81, 207, 102, 0.15); color:#51cf66; border:1px solid rgba(81, 207, 102, 0.5);" title="开启该组所有条目"><i class="fa-solid fa-check"></i> 全开</button>
+                    <button class="menu_button interactable wb-nowrap-btn wb-group-disable-all" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(150, 150, 150, 0.15); color:gray; border:1px solid rgba(150, 150, 150, 0.5);" title="关闭该组所有条目"><i class="fa-solid fa-xmark"></i> 全关</button>
+                    ${isDraggable ? `<button class="menu_button interactable wb-nowrap-btn wb-group-delete" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(255, 107, 107, 0.15); color:#ff6b6b; border:1px solid rgba(255, 107, 107, 0.5);" title="删除分组或解散"><i class="fa-solid fa-trash"></i> 删除</button>` : ''}
+                </div>
+            </div>`);
+
+            const $gContainer = $(`<div style="display:${isCollapsed ? 'none' : 'flex'}; flex-direction:column; padding-left:10px; margin-top:6px; border-left: 2px solid var(--SmartThemeBorderColor); gap: 4px;"></div>`);
+
+            $gHeader.on('click', (e) => {
+                if ($(e.target).closest('.lulu-group-ctrls').length || $(e.target).hasClass('lulu-panel-drag-handle')) return;
+                wbEntryGroupState[groupName] = !isCollapsed;
+                renderEntryList();
+            });
+            if (isDraggable) {
+               $gHeader.on('dragstart', function(e) {
+                   e.originalEvent.dataTransfer.setData('text/plain', groupName);
+                   $(this).addClass('lulu-drag-ghost');
+               });
+               $gHeader.on('dragend', function() {
+                   $(this).removeClass('lulu-drag-ghost');
+                   $('.lulu-drag-over-top, .lulu-drag-over-bottom').removeClass('lulu-drag-over-top lulu-drag-over-bottom');
+               });
+               $gHeader.on('dragover', function(e) {
+                   e.preventDefault();
+                   const rect = this.getBoundingClientRect();
+                   const isBottomHalf = e.originalEvent.clientY > rect.top + (rect.height / 2);
+                   if (isBottomHalf) {
+                       $(this).removeClass('lulu-drag-over-top').addClass('lulu-drag-over-bottom');
+                   } else {
+                       $(this).removeClass('lulu-drag-over-bottom').addClass('lulu-drag-over-top');
+                   }
+               });
+               $gHeader.on('dragleave', function() {
+                   $(this).removeClass('lulu-drag-over-top lulu-drag-over-bottom');
+               });
+               $gHeader.on('drop', function(e) {
+                   e.preventDefault();
+                   $(this).removeClass('lulu-drag-over-top lulu-drag-over-bottom');
+                   const draggedGrp = e.originalEvent.dataTransfer.getData('text/plain');
+                   const targetGrp = $(this).attr('data-groupname');
+                   if (draggedGrp && draggedGrp !== targetGrp && draggedGrp !== "📁 未分类条目" && targetGrp !== "📁 未分类条目") {
+                       let order = getSharedGroupOrder();
+                       const fromIdx = order.indexOf(draggedGrp);
+                       if (fromIdx > -1) {
+                           const rect = this.getBoundingClientRect();
+                           const isBottomHalf = e.originalEvent.clientY > rect.top + (rect.height / 2);
+                           order.splice(fromIdx, 1);
+                           let newToIdx = order.indexOf(targetGrp);
+                           if (isBottomHalf) newToIdx++;
+                           order.splice(newToIdx, 0, draggedGrp);
+                           setSharedGroupOrder(order);
+                           renderEntryList();
+                       }
+                   }
+               });
+                // 面板内的上下按钮
+                $gHeader.find('.lulu-btn-up').on('click', () => {
+                    let order = getSharedGroupOrder();
+                    const idx = order.indexOf(groupName);
+                    if (idx > 0) {
+                        [order[idx - 1], order[idx]] = [order[idx], order[idx - 1]];
+                        setSharedGroupOrder(order); renderEntryList();
                     }
                 });
+                $gHeader.find('.lulu-btn-down').on('click', () => {
+                    let order = getSharedGroupOrder();
+                    const idx = order.indexOf(groupName);
+                    if (idx !== -1 && idx < order.length - 1) {
+                        [order[idx + 1], order[idx]] = [order[idx], order[idx + 1]];
+                        setSharedGroupOrder(order); renderEntryList();
+                    }
+                });
+            }
+
+            // 组内全开
+            $gHeader.find('.wb-group-enable-all').on('click', (e) => {
+                e.stopPropagation(); gEntries.forEach(entry => entry.enabled = true); renderEntryList();
             });
-            $container.children('.lulu-native-group-header').each(function() {
-                const gName = $(this).attr('data-groupname');
-                if (!groupCounts[gName]) $(this).remove();
+            // 组内全关
+            $gHeader.find('.wb-group-disable-all').on('click', (e) => {
+                e.stopPropagation(); gEntries.forEach(entry => entry.enabled = false); renderEntryList();
             });
 
-        }, 300);
-    })();
+            $gHeader.find('.wb-group-delete').on('click', async (e) => {
+               e.stopPropagation();
+               const btnRes = await SillyTavern.callGenericPopup(
+                   `<div style="margin-bottom:8px;">想要对【<strong style="color:var(--SmartThemeQuoteColor);">${groupName}</strong>】做什么呢？</div><span style="font-size:12px; color:gray;">(当前组内包含 ${gEntries.length} 个条目)</span>`,
+                   SillyTavern.POPUP_TYPE.TEXT, "", { okButton: "点错了取消", customButtons: [ {text: "彻底清空分组与条目", result: 888, classes: ["btn-danger"]}, {text: "仅解散分组(条目回未分类)", result: 999, classes: ["btn-warning"]} ] }
+               );
+
+               if (btnRes === 888) {
+                   const uidsToRemove = gEntries.map(entry => entry.uid);
+                   tuneEntries = tuneEntries.filter(entry => !uidsToRemove.includes(entry.uid));
+                   delete wbEntryGroupState[groupName]; renderEntryList();
+                   toastr.success(`【${groupName}】内容已被彻底扫除干净啦！记得按绿色保存按钮哦~`);
+               } else if (btnRes === 999) {
+                   gEntries.forEach(entry => entry.group = "");
+                   delete wbEntryGroupState[groupName]; renderEntryList();
+                   toastr.success(`【${groupName}】已解散，里面的内容已经安全返回未分类区啦。`);
+               }
+           });
+
+            gEntries.forEach((entry) => {
+               const index = tuneEntries.indexOf(entry);
+               const strategy = entry.strategy || { type: 'constant', keys:[] };
+               const keysInfo = strategy.type !== 'selective' ? `<span style="color:gray;">[常驻无触发词]</span>` : `🔑 ${(strategy.keys||[]).join(', ')||'<span style="color:#d63384">未设置词汇</span>'}`;
+               const posBadgeHtml = `<span class="badge-grey" style="color:var(--SmartThemeBodyColor); background:none; border-color:var(--SmartThemeBorderColor);">${formatPositionBadge(entry.position)}</span>`;
+
+               const isEn = entry.enabled;
+               const dynamicBg = isEn ? 'var(--SmartThemeBotMesColor)' : 'rgba(125,125,125,0.08)';
+               const dynamicOpacity = isEn ? '1' : '0.55';
+               const $item = $(`<div class="lulu-wb-entry-item" style="display:flex; align-items:flex-start; gap:12px; padding:10px; border-left: 4px solid ${isEn ? 'var(--okGreen)' : 'gray'}; background:${dynamicBg}; border-radius:4px; opacity:${dynamicOpacity}; transition: 0.2s;"></div>`);
+
+               $item.hover(
+                   function() { if (!isEn) $(this).css('opacity', '1'); },
+                   function() { if (!isEn) $(this).css('opacity', '0.55'); }
+               );
+
+               let $chk;
+               if (isEntryBatchMode) {
+                   $chk = $(`<input type="checkbox" style="transform: scale(1.2); flex-shrink:0; margin-top:2px; accent-color:#ff6b6b;">`).prop('checked', entryBatchSelected.has(index)).on('change', function() {
+                       $(this).is(':checked') ? entryBatchSelected.add(index) : entryBatchSelected.delete(index); $ui.find('#wb-entry-batch-count').text(entryBatchSelected.size);
+                   });
+               } else {
+                   $chk = $(`<input type="checkbox" style="transform: scale(1.2); flex-shrink:0; margin-top:2px;">`).prop('checked', entry.enabled).on('change', function() { entry.enabled = $(this).is(':checked'); renderEntryList(); });
+               }
+
+               const $info = $(`<div style="flex:1; min-width:0; cursor:${isEntryBatchMode?'pointer':'default'};"><div style="font-weight:bold; margin-bottom: 5px; font-size:14px; word-break:break-all;">${entry.name || '未定义模块'}</div><div style="font-size:11px;color:gray;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${strategy.type !== 'selective' ? '<span class="badge-blue">常驻</span>' : '<span class="badge-green">匹配</span>'}${posBadgeHtml} <span style="margin-left:5px;">${keysInfo}</span></div></div>`);
+               if (isEntryBatchMode) $info.on('click', () => { $chk.prop('checked', !$chk.is(':checked')).trigger('change'); });
+
+               const $right = $('<div style="display:flex; gap:8px; margin-left:auto; flex-shrink:0;"></div>');
+
+               if(!isEntryBatchMode) {
+                    $right.append($('<button class="menu_button interactable wb-nowrap-btn" style="color:#fcc419; margin:0;" title="设置此条目的分组"><i class="fa fa-folder-tree"></i></button>').on('click', async () => {
+                        let res = await SillyTavern.callGenericPopup(`设置 [${entry.name||'未命名'}] 的分组名称\\n(同一个世界书内，名字相同就会归为一组，留空代表未分类):`, SillyTavern.POPUP_TYPE.INPUT, entry.group || "");
+                        if(res !== null) { entry.group = res.trim(); renderEntryList(); }
+                    }));
+               }
+
+               $right.append($('<button class="menu_button interactable wb-nowrap-btn" style="color:var(--SmartThemeQuoteColor); margin:0;" title="修改内容"><i class="fa fa-pen-nib"></i></button>').on('click', () => openDetailEditView(index)));
+               $right.append($('<button class="menu_button interactable wb-nowrap-btn" style="color:#ff6b6b; margin:0;" title="删除条目"><i class="fa fa-trash"></i></button>').on('click', async () => {
+                   if(await SillyTavern.callGenericPopup(`确认删除 [${entry.name || '未命名'}]？`, SillyTavern.POPUP_TYPE.CONFIRM) === SillyTavern.POPUP_RESULT.AFFIRMATIVE) { tuneEntries.splice(index, 1); renderEntryList(); }
+               }));
+
+               if(isEntryBatchMode) $right.hide();
+
+               $item.append($chk, $info, $right);
+               $gContainer.append($item);
+            });
+
+            $container.append($gHeader).append($gContainer);
+       }
+
+       if (sortedEntries.length === 0) $container.html(`<div style="color: gray; padding: 10px; text-align: center;">${tuneEntries.length > 0 ? '搜查不到匹配内容呢。': '完全是一本空壳书呀。'}</div>`);
+   };
+
+   $ui.find('#wb-entry-search').off('input').on('input', renderEntryList); $ui.find('#wb-entry-sort').off('change').on('change', renderEntryList);
+   $ui.find('#wb-btn-entry-all').off('click').on('click', () => { tuneEntries.forEach(e => e.enabled = true); renderEntryList(); });
+   $ui.find('#wb-btn-entry-none').off('click').on('click', () => { tuneEntries.forEach(e => e.enabled = false); renderEntryList(); });
+   $ui.find('#wb-btn-entry-add').off('click').on('click', () => {
+       tuneEntries.unshift({ uid: Date.now() + Math.random(), name: "新增编辑条目", enabled: true, content: "", group: "", strategy: { type: 'constant', keys:[] }, position: { type: 'at_depth', role: 'system', depth: 0, order: 100 }, recursion: { prevent_incoming: false, prevent_outgoing: false, delay_until: null }, exclude_recursion: false, prevent_recursion: false });
+       renderEntryList(); openDetailEditView(0);
+   });
+
+   $ui.find('#wb-btn-entry-save').on('click', async () => {
+       await withLoadingOverlay(async () => { await replaceWorldbook(tuneWbName, tuneEntries); }, `写入中...`);
+       originalTuneEntries = JSON.parse(JSON.stringify(tuneEntries));
+       toastr.success(`[${tuneWbName}] 的修改已经成功保存啦！`);
+
+       if(tuneReturnView === '#wb-main-view') renderData();
+       else if(tuneReturnView === '#wb-char-view') renderCharView();
+   });
+
+   $ui.find('#wb-btn-entry-cancel').on('click', async () => {
+       const isDirty = JSON.stringify(tuneEntries) !== JSON.stringify(originalTuneEntries);
+       if (isDirty) {
+           const confirm = await SillyTavern.callGenericPopup(
+               `当前条目的更改还没点左下角<strong style="color:var(--SmartThemeQuoteColor);">绿色按钮保存</strong>哦！<br>真的要放弃这些修改直接返回吗？`,
+               SillyTavern.POPUP_TYPE.CONFIRM
+           );
+           if (confirm !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+       }
+       $ui.find('#wb-entry-view').hide();
+       $ui.find('#wb-tab-strip').show();
+       $ui.find(tuneReturnView).fadeIn(200);
+   });
+
+   let tuneDetailIndex = -1;
+   $ui.find('#wb-det-position').on('change', function() { $ui.find('#wb-det-depth-container').toggle($(this).val().startsWith('at_depth_')); });
+
+   const openDetailEditView = (index) => {
+       tuneDetailIndex = index; const e = tuneEntries[index]; $ui.find('#wb-detail-title').text(e.name || '空参数');
+       $ui.find('#wb-det-name').val(e.name || ''); $ui.find('#wb-det-content').val(e.content || ''); $ui.find('#wb-det-keys').val((e.strategy?.keys||[]).join(', ')); $ui.find('#wb-det-strategy').val(e.strategy?.type || 'constant');
+       let p = e.position?.type || 'at_depth'; if (p === 'at_depth' || p === 'outlet') p = `at_depth_${e.position?.role || 'system'}`;
+       $ui.find('#wb-det-position').val(p).trigger('change'); $ui.find('#wb-det-depth').val(e.position?.depth ?? 0); $ui.find('#wb-det-order').val(e.position?.order ?? 100);
+
+       const isExclude = e.recursion?.prevent_incoming ?? e.exclude_recursion ?? e.excludeRecursion ?? false, isPrevent = e.recursion?.prevent_outgoing ?? e.prevent_recursion ?? e.preventRecursion ?? false;
+       $ui.find('#wb-det-exclude-recursion').prop('checked', !!isExclude); $ui.find('#wb-det-prevent-recursion').prop('checked', !!isPrevent);
+       $ui.find('#wb-entry-view').hide(); $ui.find('#wb-detail-view').fadeIn(200);
+   };
+
+   $ui.find('#wb-btn-det-save').on('click', () => {
+       if(tuneDetailIndex === -1) return;
+       const e = tuneEntries[tuneDetailIndex], pos = $ui.find('#wb-det-position').val(), order = parseInt($ui.find('#wb-det-order').val()) || 100;
+       e.name = $ui.find('#wb-det-name').val(); e.content = $ui.find('#wb-det-content').val(); e.strategy = { type: $ui.find('#wb-det-strategy').val(), keys: $ui.find('#wb-det-keys').val().split(',').map(s=>s.trim()).filter(Boolean) };
+       if (pos.startsWith('at_depth_')) e.position = { type: 'at_depth', role: pos.replace('at_depth_',''), depth: parseInt($ui.find('#wb-det-depth').val())||0, order: order }; else e.position = { type: pos, order: order };
+
+       const checkExclude = $ui.find('#wb-det-exclude-recursion').is(':checked'), checkPrevent = $ui.find('#wb-det-prevent-recursion').is(':checked');
+       if (!e.recursion) e.recursion = { prevent_incoming: false, prevent_outgoing: false, delay_until: null };
+       e.recursion.prevent_incoming = checkExclude; e.recursion.prevent_outgoing = checkPrevent; e.exclude_recursion = checkExclude; e.prevent_recursion = checkPrevent;
+       $ui.find('#wb-detail-view').hide(); $ui.find('#wb-entry-view').fadeIn(200); renderEntryList();
+   });
+
+   $ui.find('#wb-btn-det-cancel').on('click', () => {
+       $ui.find('#wb-detail-view').hide();
+       $ui.find('#wb-entry-view').fadeIn(200);
+   });
+
+   await popup.show();
+   (function initLuLuNativeWbSyncV7() {
+       let groupFoldState = JSON.parse(localStorage.getItem('lulu_wb_native_fold_state') || '{}');
+       const saveFoldState = () => localStorage.setItem('lulu_wb_native_fold_state', JSON.stringify(groupFoldState));
+
+       let currentActiveWbName = null;
+       let cachedWbEntries = [];
+       let isFetching = false;
+
+       setInterval(async () => {
+           const isNativeMagicEnabled = localStorage.getItem('lulu_wb_native_magic_enabled') !== 'false';
+
+           const $entries = $('.world_entry');
+           if ($entries.length === 0) return;
+           const $container = $entries.first().parent();
+           if (!$container.length) return;
+           if (!isNativeMagicEnabled) {
+               if ($container.css('display') === 'flex') {
+                   $container.css({ 'display': '', 'flex-direction': '' });
+                   $('.lulu-native-group-header').remove();
+                   $entries.css({'order': '', 'display': '', 'margin': ''});
+               }
+               return;
+           }
+
+           if (isFetching) return;
+
+           if ($container.css('display') !== 'flex' || $container.css('flex-direction') !== 'column') {
+               $container.css({ 'display': 'flex', 'flex-direction': 'column' });
+           }
+
+           const visibleWbName = $('.move_entry_button').first().attr('data-current-world');
+           if (!visibleWbName) return;
+
+           if (currentActiveWbName !== visibleWbName) {
+               isFetching = true;
+               try {
+                   const rawData = await getWorldbook(visibleWbName);
+                   if (rawData && Array.isArray(rawData)) { cachedWbEntries = rawData; currentActiveWbName = visibleWbName; }
+               } catch (err) {} finally { isFetching = false; }
+               return;
+           }
+
+           if (!cachedWbEntries || cachedWbEntries.length === 0) return;
+
+           const groupCounts = {};
+
+           $entries.each(function(index) {
+               const $entry = $(this);
+               let myGroup = "📁 未分类条目";
+
+               const entryTitle = $entry.find('textarea[name="comment"]').val()?.trim() || "";
+               let foundEntry = cachedWbEntries.find(e => (e.name === entryTitle || e.comment === entryTitle));
+               if (!foundEntry) {
+                   const domUid = parseInt($entry.attr('uid') || $entry.data('id'), 10);
+                   if (!isNaN(domUid) && cachedWbEntries[domUid]) { foundEntry = cachedWbEntries[domUid]; }
+               }
+
+               if (foundEntry && foundEntry.group && foundEntry.group.trim() !== '') myGroup = foundEntry.group.trim();
+
+               if (!groupCounts[myGroup]) groupCounts[myGroup] = 0;
+               groupCounts[myGroup]++;
+
+               $entry.attr('data-lulu-grp', myGroup);
+               $entry.attr('data-lulu-native-index', index);
+           });
+           let luluGroupOrder = JSON.parse(localStorage.getItem('lulu_wb_native_group_order') || '[]');
+           let currentGroups = Object.keys(groupCounts).filter(g => g !== "📁 未分类条目");
+           let orderChanged = false;
+           currentGroups.forEach(g => {
+               if (!luluGroupOrder.includes(g)) { luluGroupOrder.push(g); orderChanged = true; }
+           });
+           if (orderChanged) localStorage.setItem('lulu_wb_native_group_order', JSON.stringify(luluGroupOrder));
+
+           const sortedGroupNames = Object.keys(groupCounts).sort((a, b) => {
+               if (a === "📁 未分类条目") return 1;
+               if (b === "📁 未分类条目") return -1;
+               let idxA = luluGroupOrder.indexOf(a);
+               let idxB = luluGroupOrder.indexOf(b);
+               if (idxA === -1) idxA = 9999;
+               if (idxB === -1) idxB = 9999;
+               return idxA - idxB;
+           });
+
+           sortedGroupNames.forEach((gName, gIndex) => {
+               const baseOrder = (gIndex + 1) * 10000;
+               let $header = $container.children(`.lulu-native-group-header[data-groupname="${gName}"]`);
+               const isFolded = groupFoldState[gName] === true;
+               const isDraggable = gName !== "📁 未分类条目";
+
+               if ($header.length === 0) {
+                   const dragIconHtml = isDraggable ? `<i class="fa-solid fa-hand-paper lulu-drag-handle" style="cursor:grab; font-size:14px; color:gray; padding-right:8px; display:inline-flex; align-items:center;" title="按住拖拽排序分类"></i>` : '';
+                   const sortButtonsHtml = !isDraggable ? '' : `
+                       <div style="display:flex; gap: 6px; margin-right: 15px;" class="lulu-sort-btns">
+                           <i class="fa-solid fa-arrow-up lulu-move-up" title="将此分类上移" style="padding:4px; font-size:14px; color:gray; transition:0.2s; cursor:pointer;"></i>
+                           <i class="fa-solid fa-arrow-down lulu-move-down" title="将此分类下移" style="padding:4px; font-size:14px; color:gray; transition:0.2s; cursor:pointer;"></i>
+                       </div>
+                   `;
+
+                   $header = $(`
+                       <div class="lulu-native-group-header" data-groupname="${gName}" draggable="${isDraggable ? 'true' : 'false'}" style="background: var(--SmartThemeBlurTintColor, rgba(0,0,0,0.15)); padding:10px 14px; margin: 10px 0 6px 0; border-radius:6px; font-weight:bold; color:var(--SmartThemeQuoteColor, #70a1ff); border:1px solid var(--SmartThemeBorderColor, gray); display:flex; justify-content:space-between; align-items:center; user-select:none; transition: 0.2s; flex-shrink: 0; align-content: center;">
+                           <span style="display:flex; align-items:center;">
+                               ${dragIconHtml}
+                               <span class="lulu-click-fold" style="display:flex; align-items:center; cursor:pointer;">
+                                   <i class="fa-solid ${isFolded ? 'fa-chevron-right' : 'fa-chevron-down'} lulu-fold-icon" style="margin-right:8px; width: 16px; text-align:center;"></i>
+                                   <span style="font-size: 14.5px;" class="lulu-g-title">${gName}</span>
+                                   <span style="font-size: 11px; font-weight: normal; color: gray; margin-left: 6px;" class="lulu-g-count">(${groupCounts[gName]}项)</span>
+                               </span>
+                           </span>
+                           <span style="display:flex; align-items:center;">
+                               ${sortButtonsHtml}
+                               <span style="font-size:11.5px; font-weight:normal; color:gray; opacity: 0.6;"><i class="fa-solid fa-link"></i> 分组内会根据选项排序哦</span>
+                           </span>
+                       </div>
+                   `);
+
+                   $header.hover(
+                       function() { $(this).css('background', 'var(--SmartThemeBotMesColor, rgba(125,125,125,0.3))'); },
+                       function() { $(this).css('background', 'var(--SmartThemeBlurTintColor, rgba(0,0,0,0.15))'); }
+                   );
+
+                   $header.find('.lulu-move-up, .lulu-move-down').hover(
+                       function() { $(this).css('color', 'var(--SmartThemeQuoteColor)'); $(this).css('transform', 'scale(1.2)'); },
+                       function() { $(this).css('color', 'gray'); $(this).css('transform', 'scale(1)'); }
+                   );
+
+                   /* 鹿酱修复点：给折叠按钮加上防抖魔法锁，并改用 CSS 类替代原生冲突的 hide() !! */
+                   $header.find('.lulu-click-fold').on('click', function(e) {
+                       e.stopPropagation();
+
+                       if ($(this).data('lulu-click-locked')) return;
+                       $(this).data('lulu-click-locked', true);
+                       setTimeout(() => $(this).data('lulu-click-locked', false), 250);
+
+                       const grp = $header.attr('data-groupname');
+                       const isNowFolded = !groupFoldState[grp];
+                       groupFoldState[grp] = isNowFolded;
+                       saveFoldState();
+
+                       const $icon = $(this).find('.lulu-fold-icon');
+                       if (isNowFolded) $icon.removeClass('fa-chevron-down').addClass('fa-chevron-right');
+                       else $icon.removeClass('fa-chevron-right').addClass('fa-chevron-down');
+
+                       $container.children(`.world_entry[data-lulu-grp="${grp}"]`).each(function() {
+                           if (isNowFolded) {
+                               $(this).addClass('lulu-folded-hide');
+                           } else {
+                               $(this).removeClass('lulu-folded-hide');
+                               $(this).css({'display': '', 'margin': ''});
+                           }
+                       });
+                   });
+
+                   if (isDraggable) {
+                       $header.on('dragstart', function(e) {
+                           e.originalEvent.dataTransfer.setData('text/plain', gName);
+                           $(this).addClass('lulu-drag-ghost');
+                       });
+                       $header.on('dragend', function() {
+                           $(this).removeClass('lulu-drag-ghost');
+                           $('.lulu-drag-over-top, .lulu-drag-over-bottom').removeClass('lulu-drag-over-top lulu-drag-over-bottom');
+                       });
+                       $header.on('dragover', function(e) {
+                           e.preventDefault();
+                           const rect = this.getBoundingClientRect();
+                           const isBottomHalf = e.originalEvent.clientY > rect.top + (rect.height / 2);
+                           if (isBottomHalf) {
+                               $(this).removeClass('lulu-drag-over-top').addClass('lulu-drag-over-bottom');
+                           } else {
+                               $(this).removeClass('lulu-drag-over-bottom').addClass('lulu-drag-over-top');
+                           }
+                       });
+                       $header.on('dragleave', function() {
+                           $(this).removeClass('lulu-drag-over-top lulu-drag-over-bottom');
+                       });
+                       $header.on('drop', function(e) {
+                           e.preventDefault();
+                           $(this).removeClass('lulu-drag-over-top lulu-drag-over-bottom');
+                           const draggedGrp = e.originalEvent.dataTransfer.getData('text/plain');
+                           const targetGrp = $(this).attr('data-groupname');
+                           if (draggedGrp && draggedGrp !== targetGrp && draggedGrp !== "📁 未分类条目" && targetGrp !== "📁 未分类条目") {
+                               let order = JSON.parse(localStorage.getItem('lulu_wb_native_group_order') || '[]');
+                               const fromIdx = order.indexOf(draggedGrp);
+                               if (fromIdx > -1) {
+                                   const rect = this.getBoundingClientRect();
+                                   const isBottomHalf = e.originalEvent.clientY > rect.top + (rect.height / 2);
+                                   order.splice(fromIdx, 1);
+                                   let newToIdx = order.indexOf(targetGrp);
+                                   if (isBottomHalf) newToIdx++;
+                                   order.splice(newToIdx, 0, draggedGrp);
+                                   localStorage.setItem('lulu_wb_native_group_order', JSON.stringify(order));
+                               }
+                           }
+                       });
+                   }
+
+                   // 向上排按钮
+                   $header.find('.lulu-move-up').on('click', function(e) {
+                       e.stopPropagation();
+                       const idx = luluGroupOrder.indexOf(gName);
+                       if (idx > 0) {
+                           [luluGroupOrder[idx - 1], luluGroupOrder[idx]] = [luluGroupOrder[idx], luluGroupOrder[idx - 1]];
+                           localStorage.setItem('lulu_wb_native_group_order', JSON.stringify(luluGroupOrder));
+                       }
+                   });
+
+                   // 向下排按钮
+                   $header.find('.lulu-move-down').on('click', function(e) {
+                       e.stopPropagation();
+                       const idx = luluGroupOrder.indexOf(gName);
+                       if (idx !== -1 && idx < luluGroupOrder.length - 1) {
+                           [luluGroupOrder[idx + 1], luluGroupOrder[idx]] = [luluGroupOrder[idx], luluGroupOrder[idx + 1]];
+                           localStorage.setItem('lulu_wb_native_group_order', JSON.stringify(luluGroupOrder));
+                       }
+                   });
+
+                   $container.append($header);
+               } else {
+                   $header.find('.lulu-g-count').text(`(${groupCounts[gName]}项)`);
+                   const $icon = $header.find('.lulu-fold-icon');
+                   if (isFolded) $icon.removeClass('fa-chevron-down').addClass('fa-chevron-right');
+                   else $icon.removeClass('fa-chevron-right').addClass('fa-chevron-down');
+               }
+
+               $header.css('order', baseOrder);
+
+               /* 鹿酱修复点：使用 CSS 类去控制条目是否乖乖藏起来，再也不打架啦！ */
+               $container.children(`.world_entry[data-lulu-grp="${gName}"]`).each(function() {
+                   const nativeIdx = parseInt($(this).attr('data-lulu-native-index') || 0);
+                   $(this).css('order', baseOrder + 1 + nativeIdx);
+
+                   if (isFolded) {
+                       if (!$(this).hasClass('lulu-folded-hide')) $(this).addClass('lulu-folded-hide');
+                   } else {
+                       if ($(this).hasClass('lulu-folded-hide')) {
+                           $(this).removeClass('lulu-folded-hide');
+                           $(this).css({'display': '', 'margin': ''});
+                       }
+                   }
+               });
+           });
+           $container.children('.lulu-native-group-header').each(function() {
+               const gName = $(this).attr('data-groupname');
+               if (!groupCounts[gName]) $(this).remove();
+           });
+
+       }, 300);
+   })();
 });
