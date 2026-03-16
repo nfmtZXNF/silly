@@ -30,7 +30,6 @@ if ($("#lulu-drag-line-style").length === 0) {
                 transform: scale(0.98) !important;
                 border: 1px dashed #51cf66 !important;
             }
-            /* 鹿酱添加：解决手机浏览器自动闪烁和原生打架的问题 */
             .lulu-folded-hide {
                 display: none !important;
                 margin: 0 !important;
@@ -112,53 +111,65 @@ const rebindPersonaWorldbook = async (newWbName, oldWbToUnbind = null) => {
 };
 
 window.luluWbInitTabType = 'global';
-
-const toggleFloatingButton = (show) => {
+window.luluWbInitTabType = 'global';
+const toggleFloatingButton = (show, forceUpdate = false) => {
     if (!show) {
         $("#lulu-wb-floating-btn").remove();
         $("#lulu-wb-floating-style").remove();
         return;
     }
-    if ($("#lulu-wb-floating-btn").length > 0) return;
+    if ($("#lulu-wb-floating-btn").length > 0 && !forceUpdate) return;
+    if (forceUpdate) {
+        $("#lulu-wb-floating-style").remove(); 
+    }
+    const flConf = JSON.parse(localStorage.getItem('lulu_wb_floating_config') || '{"size": 48, "opacity": 0.8}');
 
-    const styleHtml = `
-        <style id="lulu-wb-floating-style">
-            #lulu-wb-floating-btn {
-                position: fixed !important;
-                top: 45vh !important;
-                right: 15px !important;
-                width: 48px !important;
-                height: 48px !important;
-                background: var(--SmartThemeBotMesColor, #2a2e33) !important;
-                color: var(--SmartThemeQuoteColor, #70a1ff) !important;
-                border: 2px solid var(--SmartThemeQuoteColor, #70a1ff) !important;
-                border-radius: 50% !important;
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-                font-size: 22px !important;
-                cursor: pointer !important;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.6) !important;
-                z-index: 2147483647 !important;
-                user-select: none !important;
-                touch-action: none !important;
-                -webkit-tap-highlight-color: transparent !important;
-                transition: transform 0.2s !important;
-            }
-            #lulu-wb-floating-btn:active {
-                transform: scale(0.9) !important;
-            }
-            .lulu-float-menu-opts {
-                position: absolute; right: 55px; top: 50%; transform: translateY(-50%); display: flex; gap: 8px;
-                background: var(--SmartThemeBlurTintColor); padding: 8px; border-radius: 8px; border: 1px solid var(--SmartThemeBorderColor);
-                box-shadow: 0 4px 8px rgba(0,0,0,0.4); opacity: 0; pointer-events: none; transition: 0.2s; white-space: nowrap;
-            }
-            .lulu-float-menu-opts.show { opacity: 1; pointer-events: auto; }
-            .lulu-float-btn-opt { cursor: pointer; padding: 6px 12px; font-size: 13px; font-weight: bold; color: var(--SmartThemeBodyColor); background: var(--SmartThemeBotMesColor); border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px; }
-            .lulu-float-btn-opt:hover { background: var(--SmartThemeQuoteColor); color: #fff; }
-        </style>
-    `;
-    $("head").append(styleHtml);
+    if ($("#lulu-wb-floating-style").length === 0) {
+        const styleHtml = `
+            <style id="lulu-wb-floating-style">
+                #lulu-wb-floating-btn {
+                    position: fixed !important;
+                    top: 45vh !important;
+                    right: 15px !important;
+                    width: ${flConf.size}px !important;
+                    height: ${flConf.size}px !important;
+                    opacity: ${flConf.opacity} !important;
+                    background: var(--SmartThemeBotMesColor, #2a2e33) !important;
+                    color: var(--SmartThemeQuoteColor, #70a1ff) !important;
+                    border: 2px solid var(--SmartThemeQuoteColor, #70a1ff) !important;
+                    border-radius: 50% !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    font-size: ${flConf.size * 0.45}px !important;
+                    cursor: pointer !important;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.6) !important;
+                    z-index: 2147483647 !important;
+                    user-select: none !important;
+                    touch-action: none !important;
+                    -webkit-tap-highlight-color: transparent !important;
+                    transition: transform 0.2s, opacity 0.2s !important;
+                }
+                #lulu-wb-floating-btn:active {
+                    transform: scale(0.9) !important;
+                }
+                #lulu-wb-floating-btn:hover {
+                    opacity: 1 !important; 
+                }
+                .lulu-float-menu-opts {
+                    position: absolute; right: calc(100% + 10px); top: 50%; transform: translateY(-50%); display: flex; gap: 8px;
+                    background: var(--SmartThemeBlurTintColor); padding: 8px; border-radius: 8px; border: 1px solid var(--SmartThemeBorderColor);
+                    box-shadow: 0 4px 8px rgba(0,0,0,0.4); opacity: 0; pointer-events: none; transition: 0.2s; white-space: nowrap;
+                }
+                .lulu-float-menu-opts.show { opacity: 1; pointer-events: auto; }
+                .lulu-float-btn-opt { cursor: pointer; padding: 6px 12px; font-size: 13px; font-weight: bold; color: var(--SmartThemeBodyColor); background: var(--SmartThemeBotMesColor); border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px; }
+                .lulu-float-btn-opt:hover { background: var(--SmartThemeQuoteColor); color: #fff; }
+            </style>
+        `;
+        $("head").append(styleHtml);
+    }
+
+    if (forceUpdate && $("#lulu-wb-floating-btn").length > 0) return;
 
     const $floatBtn = $("<div>", { id: "lulu-wb-floating-btn" })
         .append($("<i>", { class: "fa-solid fa-book-atlas" }))
@@ -194,7 +205,7 @@ const toggleFloatingButton = (show) => {
         const onPointerUp = (ev) => {
             btnNode.removeEventListener('pointermove', onPointerMove); btnNode.removeEventListener('pointerup', onPointerUp); btnNode.removeEventListener('pointercancel', onPointerUp);
             try { btnNode.releasePointerCapture(ev.pointerId); } catch(err) {}
-            btnNode.style.setProperty('transition', 'transform 0.2s', 'important');
+            btnNode.style.setProperty('transition', 'transform 0.2s, opacity 0.2s', 'important');
         };
 
         btnNode.addEventListener('pointermove', onPointerMove); btnNode.addEventListener('pointerup', onPointerUp); btnNode.addEventListener('pointercancel', onPointerUp);
@@ -813,14 +824,34 @@ $menuBtn.on('click', async () => {
     const isFloatingEnabledNow = localStorage.getItem('lulu_wb_floating_enabled') === 'true';
     $ui.find('#wb-toggle-floating').prop('checked', isFloatingEnabledNow);
 
+    const updateFloatConfig = () => {
+        const sz = $ui.find('#wb-float-size').val();
+        const op = $ui.find('#wb-float-opacity').val();
+        localStorage.setItem('lulu_wb_floating_config', JSON.stringify({ size: sz, opacity: op }));
+        if ($ui.find('#wb-toggle-floating').is(':checked')) toggleFloatingButton(true, true);
+    };
+    $ui.find('#wb-toggle-floating').parent().after(`
+        <div id="lulu-float-config-area" style="display:none; align-items:center; gap:8px; margin-left:10px; flex-wrap:wrap;">
+            <label style="font-size:12px; font-weight:bold; margin:0; color:gray;">大小: <input type="range" id="wb-float-size" min="30" max="70" value="48" style="width:60px; accent-color:var(--SmartThemeQuoteColor); cursor:pointer;"></label>
+            <label style="font-size:12px; font-weight:bold; margin:0; color:gray;">可视度: <input type="range" id="wb-float-opacity" min="0.2" max="1" step="0.1" value="0.8" style="width:60px; accent-color:var(--SmartThemeQuoteColor); cursor:pointer;"></label>
+        </div>
+    `);
+    const curFlConf = JSON.parse(localStorage.getItem('lulu_wb_floating_config') || '{"size": 48, "opacity": 0.8}');
+    $ui.find('#wb-float-size').val(curFlConf.size).on('input', updateFloatConfig);
+    $ui.find('#wb-float-opacity').val(curFlConf.opacity).on('input', updateFloatConfig);
+
     $ui.find('#wb-toggle-floating').on('change', function() {
         const isEnable = $(this).is(':checked');
         localStorage.setItem('lulu_wb_floating_enabled', isEnable);
-        toggleFloatingButton(isEnable);
+        $ui.find('#lulu-float-config-area').css('display', isEnable ? 'flex' : 'none');
+        toggleFloatingButton(isEnable, true);
         if (typeof toastr !== 'undefined') {
-            toastr.success(isEnable ? "✨ 悬浮魔法球已经召唤出来了！您可以点击展开小抽屉，或者拖动它哦。" : "🪄 悬浮魔法球已经安静地收回去了~");
+            toastr.success(isEnable ? "✨ 悬浮球召唤成功！可以在旁边的滑块自由调整它的大小和隐身效果哦~" : "🪄 悬浮球已经听话地躲起来啦~");
         }
     });
+    if ($ui.find('#wb-toggle-floating').is(':checked')) {
+        $ui.find('#lulu-float-config-area').css('display', 'flex');
+    }
     const isNativeMagicEnabledNow = localStorage.getItem('lulu_wb_native_magic_enabled') !== 'false';
     $ui.find('#wb-toggle-native-magic').prop('checked', isNativeMagicEnabledNow);
     $ui.find('#wb-toggle-native-magic').on('change', function() {
@@ -873,8 +904,6 @@ $menuBtn.on('click', async () => {
         catch (error) { toastr.error(`操作失败: ${error.message}`); }
         finally { $overlay.fadeOut('slow'); }
     };
-
-    /* 鹿酱修复点 1：强大的防字符串侵蚀转换魔法！ */
     const getCategories = () => {
         let vars = getVariables({ type: 'global' });
         let cats = vars.wb_categories;
@@ -1098,7 +1127,10 @@ $menuBtn.on('click', async () => {
         name = name.trim();
 
         if (getWorldbookNames().includes(name)) {
-            const btnRes = await SillyTavern.callGenericPopup(`世界书 [${name}] 已存在，您希望作何处理？`, SillyTavern.POPUP_TYPE.TEXT, "", { customButtons:[ {text: "取代原文件", result: 1, classes: ["btn-danger"]}, {text: "重命名新建", result: 2, classes:["btn-primary"]}, {text: "取消操作", result: 0} ] });
+            const btnRes = await SillyTavern.callGenericPopup(`世界书 [${name}] 已存在，您希望作何处理？`, SillyTavern.POPUP_TYPE.TEXT, "", {
+                okButton: "取消操作",
+                customButtons:[ {text: "取代原文件", result: 1, classes: ["btn-danger"]}, {text: "重命名新建", result: 2, classes:["btn-primary"]} ]
+            });
             if (btnRes !== 1) return (btnRes === 2) ? attemptCreateWb(name + "_新") : null;
         }
         await withLoadingOverlay(async () => {
@@ -1290,7 +1322,10 @@ $menuBtn.on('click', async () => {
         newName = newName.trim();
 
         if (getWorldbookNames().includes(newName)) {
-            const btnRes = await SillyTavern.callGenericPopup(`世界书 [${newName}] 已经存在，您希望作何处理？`, SillyTavern.POPUP_TYPE.TEXT, "", { customButtons: [ {text: "覆盖", result: 1, classes: ["btn-danger"]}, {text: "重试", result: 2, classes: ["btn-primary"]}, {text: "取消", result: 0} ] });
+            const btnRes = await SillyTavern.callGenericPopup(`世界书 [${newName}] 已经存在，您希望作何处理？`, SillyTavern.POPUP_TYPE.TEXT, "", {
+                okButton: "取消",
+                customButtons: [ {text: "覆盖", result: 1, classes: ["btn-danger"]}, {text: "重试", result: 2, classes: ["btn-primary"]} ]
+            });
             if (btnRes !== 1) return (btnRes === 2) ? attemptRenameWb(oldName, isBound, bindings, newName + "_1") : null;
         }
         await withLoadingOverlay(async () => {
@@ -1405,7 +1440,6 @@ $menuBtn.on('click', async () => {
     });
 
     const renderCharView = () => {
-        /* 继续鹿酱的防字符串入侵魔法 2 */
         let vars = getVariables({ type: 'global' });
         let charSnaps = vars.wb_char_snapshots;
         if (typeof charSnaps === 'string') {
@@ -1797,8 +1831,6 @@ $menuBtn.on('click', async () => {
 
        const allWbs = getWorldbookNames();
        const activeWbs = getGlobalWorldbookNames();
-
-       /* 鹿酱修复点：防止总快照变成长字符串，导致酒馆读取崩溃 */
        let snapshots = getVariables({ type: 'global' }).wb_snapshots;
        if (typeof snapshots === 'string') {
            try { snapshots = JSON.parse(snapshots); } catch(e) { snapshots = {}; }
@@ -1871,8 +1903,11 @@ $menuBtn.on('click', async () => {
            $tagRow.append($bindTag);
 
            if (myCats && myCats.length > 0) {
-               myCats.forEach(c => $tagRow.append(`<div class="wb-bind-tag wb-cat-tag" style="background: rgba(252, 196, 25, 0.15); border: 1px solid #fcc419; color: #fcc419;" title="当前所在分类"><i class="fa-solid fa-folder"></i> ${c}</div>`));
-           }
+            myCats.forEach(c => {
+                const disp = c === "🌟默认收藏夹" ? "🌟" : `<i class="fa-solid fa-folder"></i> ${c}`;
+                $tagRow.append(`<div class="wb-bind-tag wb-cat-tag" style="background: rgba(252, 196, 25, 0.15); border: 1px solid #fcc419; color: #fcc419;" title="当前所在分类: ${c}">${disp}</div>`);
+            });
+        }
            $bottomBar.append($tagRow);
 
            const $catDrawer = $('<div class="wb-cat-drawer" style="display:none; padding-top:6px; border-top:1px dashed var(--SmartThemeBorderColor); margin-top:6px; flex-direction:column; gap:6px;"></div>');
@@ -1908,7 +1943,10 @@ $menuBtn.on('click', async () => {
                                   renderDrawer();
                                   let allCatsSpan = Object.keys(curD).filter(k => curD[k].includes(wb));
                                   $tagRow.find('.wb-cat-tag').remove();
-                                  allCatsSpan.forEach(c => $tagRow.append(`<div class="wb-bind-tag wb-cat-tag" style="background: rgba(252, 196, 25, 0.15); border: 1px solid #fcc419; color: #fcc419;" title="当前所在分类"><i class="fa-solid fa-folder"></i> ${c}</div>`));
+                                  allCatsSpan.forEach(c => {
+                                      const disp = c === "🌟默认收藏夹" ? "🌟" : `<i class="fa-solid fa-folder"></i> ${c}`;
+                                      $tagRow.append(`<div class="wb-bind-tag wb-cat-tag" style="background: rgba(252, 196, 25, 0.15); border: 1px solid #fcc419; color: #fcc419;" title="当前所在分类: ${c}">${disp}</div>`);
+                                  });
                              });
                              $btnGrp.append($cBtn);
                         });
@@ -1922,7 +1960,8 @@ $menuBtn.on('click', async () => {
                                   if(curD[newCName]) return toastr.warning("名字已经存在咯！");
                                   curD[newCName] = [wb]; saveCategories(curD);
                                   renderDrawer();
-                                  $tagRow.append(`<div class="wb-bind-tag wb-cat-tag" style="background: rgba(252, 196, 25, 0.15); border: 1px solid #fcc419; color: #fcc419;" title="当前所在分类"><i class="fa-solid fa-folder"></i> ${newCName}</div>`);
+                                  const disp = newCName === "🌟默认收藏夹" ? "🌟" : `<i class="fa-solid fa-folder"></i> ${newCName}`;
+                                  $tagRow.append(`<div class="wb-bind-tag wb-cat-tag" style="background: rgba(252, 196, 25, 0.15); border: 1px solid #fcc419; color: #fcc419;" title="当前所在分类: ${newCName}">${disp}</div>`);
                              }
                         });
                         $btnGrp.append($newBtn);
@@ -2625,8 +2664,6 @@ $menuBtn.on('click', async () => {
                        function() { $(this).css('color', 'var(--SmartThemeQuoteColor)'); $(this).css('transform', 'scale(1.2)'); },
                        function() { $(this).css('color', 'gray'); $(this).css('transform', 'scale(1)'); }
                    );
-
-                   /* 鹿酱修复点：给折叠按钮加上防抖魔法锁，并改用 CSS 类替代原生冲突的 hide() !! */
                    $header.find('.lulu-click-fold').on('click', function(e) {
                        e.stopPropagation();
 
@@ -2725,8 +2762,6 @@ $menuBtn.on('click', async () => {
                }
 
                $header.css('order', baseOrder);
-
-               /* 鹿酱修复点：使用 CSS 类去控制条目是否乖乖藏起来，再也不打架啦！ */
                $container.children(`.world_entry[data-lulu-grp="${gName}"]`).each(function() {
                    const nativeIdx = parseInt($(this).attr('data-lulu-native-index') || 0);
                    $(this).css('order', baseOrder + 1 + nativeIdx);
