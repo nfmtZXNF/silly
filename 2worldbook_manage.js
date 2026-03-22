@@ -172,38 +172,98 @@ window.luluOpenQuickSnapshotView = async () => {
   }
   if (!snapshots || typeof snapshots !== "object" || Array.isArray(snapshots))
     snapshots = {};
+  const savedMode = localStorage.getItem("lulu_wb_panel_theme") || "default";
+  const savedCustom = JSON.parse(
+    localStorage.getItem("lulu_wb_panel_custom_colors") ||
+      '{"bg":"#2a2e33", "text":"#ffffff", "alpha":95}',
+  );
+
+  const hexToRgba = (hex, alpha) => {
+    let r = 0,
+      g = 0,
+      b = 0;
+    if (hex.length === 7) {
+      r = parseInt(hex.substring(1, 3), 16);
+      g = parseInt(hex.substring(3, 5), 16);
+      b = parseInt(hex.substring(5, 7), 16);
+    }
+    return `rgba(${r},${g},${b},${alpha / 100})`;
+  };
+
+  let themeOverrideCSS = "";
+  if (savedMode === "dark") {
+    themeOverrideCSS = `
+            dialog.lulu-qs-dialog { background: rgba(22, 24, 28, 1) !important; border: 1px solid #d1c5a1 !important; }
+            dialog.lulu-qs-dialog, #lulu-quick-snap-modal {
+                --SmartThemeBlurTintColor: rgba(22, 24, 28, 1) !important;
+                --SmartThemeBotMesColor: rgba(32, 35, 40, 1) !important;
+                --SmartThemeBodyColor: #c0c2c8 !important;
+                --SmartThemeQuoteColor: #d1c5a1 !important;
+                --SmartThemeBorderColor: #3d414d !important;
+                color: #c0c2c8 !important;
+            }
+        `;
+  } else if (savedMode === "light") {
+    themeOverrideCSS = `
+            dialog.lulu-qs-dialog { background: rgba(253, 246, 227, 1) !important; border: 1px solid #8b5d33 !important; }
+            dialog.lulu-qs-dialog, #lulu-quick-snap-modal {
+                --SmartThemeBlurTintColor: rgba(253, 246, 227, 1) !important;
+                --SmartThemeBotMesColor: rgba(255, 251, 240, 1) !important;
+                --SmartThemeBodyColor: #4a3b32 !important;
+                --SmartThemeQuoteColor: #8b5d33 !important;
+                --SmartThemeBorderColor: #e0d0b8 !important;
+                color: #4a3b32 !important;
+            }
+            dialog.lulu-qs-dialog *, #lulu-quick-snap-modal * { text-shadow: none !important; }
+        `;
+  } else if (savedMode === "custom") {
+    const bgRgba = hexToRgba(savedCustom.bg, savedCustom.alpha);
+    themeOverrideCSS = `
+            dialog.lulu-qs-dialog { background: ${bgRgba} !important; border: 1px solid var(--SmartThemeQuoteColor) !important; }
+            dialog.lulu-qs-dialog, #lulu-quick-snap-modal {
+                --SmartThemeBlurTintColor: ${bgRgba} !important;
+                --SmartThemeBotMesColor: ${savedCustom.bg} !important;
+                --SmartThemeBodyColor: ${savedCustom.text} !important;
+                color: ${savedCustom.text} !important;
+            }
+        `;
+  }
 
   const customCss = `
         <style>
             .lulu-qs-btn-hover:hover { filter: brightness(1.2); }
             .lulu-qs-item { transition: 0.2s; }
             .lulu-qs-item:hover { border-color: var(--SmartThemeQuoteColor) !important; transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+            .lulu-qs-active { border-color: #51cf66 !important; background: rgba(81, 207, 102, 0.05) !important; }
             dialog.lulu-qs-dialog { background: var(--SmartThemeBlurTintColor) !important; border: 1px solid var(--SmartThemeBorderColor) !important; border-radius: 12px; }
             dialog.lulu-qs-dialog::backdrop { background: rgba(0,0,0,0.4) !important; backdrop-filter: blur(4px) !important; }
             @media (max-width: 768px) {
                 #lulu-quick-snap-modal { min-width: unset !important; width: 85vw !important; padding: 5px !important; }
                 .lulu-qs-item { padding: 10px !important; gap: 8px !important; }
             }
+            ${themeOverrideCSS}
         </style>
     `;
 
   let html = `
         ${customCss}
         <div id="lulu-quick-snap-modal" style="padding:10px; font-family:sans-serif; min-width:320px; max-width:550px;">
-            <h3 style="margin-top:0; color:var(--SmartThemeQuoteColor); border-bottom:2px solid var(--SmartThemeBorderColor); padding-bottom:10px; font-size: 16px; display:flex; align-items:center; gap:8px;">
-                <i class="fa-solid fa-bolt" style="color:#fcc419;"></i> 极速快照控制台
+            <h3 style="margin-top:0; color:var(--SmartThemeQuoteColor); border-bottom:2px solid var(--SmartThemeBorderColor); padding-bottom:10px; font-size: 16px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                <span><i class="fa-solid fa-bolt" style="color:#fcc419;"></i> 极速快照控制台</span>
+                <span id="lulu-qs-status-text" style="color:var(--SmartThemeQuoteColor); font-size: 12px; font-weight:normal;">正在检测状态...</span>
             </h3>
-            <div style="margin-bottom:15px;">
-                <button id="lulu-qs-clear-all" class="menu_button interactable btn-danger lulu-qs-btn-hover" style="width:100%; border:none; padding:12px; border-radius:6px; background:rgba(255, 107, 107, 0.1); color:#ff6b6b; font-weight:bold; font-size:14px; display:flex; justify-content:center; align-items:center; gap:8px;">
+            <div style="margin-bottom:10px;">
+                <input type="text" id="lulu-qs-search" class="text_pole" placeholder="🔍 检索快照名称..." style="width:100%; box-sizing:border-box; padding:8px; border-radius:6px; font-size:13px; margin-bottom:10px;">
+                <button id="lulu-qs-clear-all" class="menu_button interactable btn-danger lulu-qs-btn-hover" style="width:100%; margin:0; border:none; padding:10px; border-radius:6px; background:rgba(255, 107, 107, 0.1); color:#ff6b6b; font-weight:bold; font-size:13px; display:flex; justify-content:center; align-items:center; gap:8px;">
                     <i class="fa-solid fa-power-off"></i> 一键关闭当前所有全局世界书
                 </button>
             </div>
-            <div style="font-size:12px; font-weight:bold; margin-bottom:10px; color:gray; padding-left:4px;">📸 选择并应用您的组合预设：</div>
-            <div style="max-height: 55vh; overflow-y: auto; display:flex; flex-direction:column; gap:10px; padding:4px;" class="scrollableInnerFull">
+
+            <div style="max-height: 50vh; overflow-y: auto; display:flex; flex-direction:column; gap:10px; padding:4px;" class="scrollableInnerFull">
     `;
   const snapEntries = Object.entries(snapshots);
   if (snapEntries.length === 0) {
-    html += `<div style="color:gray; text-align:center; padding: 30px; background:rgba(0,0,0,0.1); border-radius:8px; border:1px dashed var(--SmartThemeBorderColor);">存储库目前是空的哦，<br>可以先去主页面的重度面板收纳一些快照进来呀~</div>`;
+    html += `<div style="color:gray; text-align:center; padding: 30px; background:var(--SmartThemeBlurTintColor, rgba(0,0,0,0.1)); border-radius:8px; border:1px dashed var(--SmartThemeBorderColor);">存储库目前是空的哦，<br>可以先去主页面的重度面板收纳一些快照进来呀~</div>`;
   } else {
     snapEntries.forEach(([name, snapData]) => {
       const isDetailed =
@@ -213,18 +273,24 @@ window.luluOpenQuickSnapshotView = async () => {
         : Array.isArray(snapData)
           ? snapData
           : snapData.wbs;
+      const safeName = btoa(unescape(encodeURIComponent(name))).replace(
+        /[^a-zA-Z0-9]/g,
+        "",
+      );
       html += `
-                <div class="lulu-qs-item" style="background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:8px; padding:12px; display:flex; justify-content:space-between; align-items:center; gap: 10px;">
+                <div class="lulu-qs-item" data-itemname="${safeName}" style="background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:8px; padding:12px; display:flex; justify-content:space-between; align-items:center; gap: 10px;">
                     <div style="flex:1; min-width:0;">
                         <div style="font-weight:bold; font-size:14.5px; color:var(--SmartThemeBodyColor); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                             <i class="fa-solid ${isDetailed ? "fa-puzzle-piece" : "fa-camera-retro"}" style="color:var(--SmartThemeQuoteColor);"></i> ${name}
                         </div>
-                        <div style="font-size:11px; color:gray; margin-top:6px;">
-                            ${isDetailed ? "复合场景配置" : "基础开关组合"} | 共涉及 ${wbs.length || 0} 本书
+                        <div style="font-size:11px; color:gray; margin-top:6px; display:flex; align-items:center; gap:6px;">
+                            <span>${isDetailed ? "复合场景" : "基础组合"} | 共涉及 ${wbs.length || 0} 本书</span>
+                        </div>
+                        <div class="lulu-qs-badge" data-badgename="${safeName}" style="display:none; margin-top:6px; font-size:11px; color:#51cf66; font-weight:bold;">
+                            <i class="fa-solid fa-circle-check"></i> 当前全局生效中
                         </div>
                     </div>
-                    <!-- 👇 添加的横向防止换行魔法 👇 -->
-                    <button class="menu_button interactable btn-success lulu-qs-btn-hover lulu-qs-apply-btn" data-snapname="${name}" style="margin:0; border:none; border-radius:6px; font-size:13px; font-weight:bold; padding: 8px 14px; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; gap:6px; white-space:nowrap !important; word-break:keep-all;">
+                    <button class="menu_button interactable btn-success lulu-qs-btn-hover lulu-qs-apply-btn" data-btnname="${safeName}" data-rawname="${encodeURIComponent(name)}" style="margin:0; border:none; border-radius:6px; font-size:13px; font-weight:bold; padding: 8px 14px; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; gap:6px; white-space:nowrap !important; word-break:keep-all;">
                         运行 <i class="fa-solid fa-play"></i>
                     </button>
                 </div>
@@ -242,25 +308,129 @@ window.luluOpenQuickSnapshotView = async () => {
       okButton: "关闭面板",
       onOpen: () => {
         const $dlg = $(popup.dlg);
-        // 👇 在这里挂载刚刚写好的透明磨砂背景与边框样式
         $dlg.addClass("lulu-qs-dialog");
 
+        $dlg.find("#lulu-qs-search").on("input", function () {
+          const kw = $(this).val().toLowerCase();
+          $dlg.find(".lulu-qs-item").each(function () {
+            const name = decodeURIComponent(
+              $(this).find(".lulu-qs-apply-btn").attr("data-rawname"),
+            ).toLowerCase();
+            $(this).toggle(name.includes(kw));
+          });
+        });
+
+        const checkActiveSnapshot = async () => {
+          $dlg
+            .find("#lulu-qs-status-text")
+            .html('<i class="fa-solid fa-spinner fa-spin"></i> 侦测中...');
+          $dlg.find(".lulu-qs-badge").hide();
+          $dlg.find(".lulu-qs-item").removeClass("lulu-qs-active");
+          $dlg
+            .find(".lulu-qs-apply-btn")
+            .removeClass("btn-primary")
+            .addClass("btn-success")
+            .html('运行 <i class="fa-solid fa-play"></i>')
+            .css("opacity", "1");
+
+          const currentGlobals =
+            typeof getGlobalWorldbookNames === "function"
+              ? getGlobalWorldbookNames()
+              : [];
+
+          for (const [name, snapData] of Object.entries(snapshots)) {
+            const safeName = btoa(unescape(encodeURIComponent(name))).replace(
+              /[^a-zA-Z0-9]/g,
+              "",
+            );
+            const isDetailed =
+              !Array.isArray(snapData) && snapData.type === "detailed";
+            let isActive = false;
+
+            if (!isDetailed) {
+              const wbs = Array.isArray(snapData) ? snapData : snapData.wbs;
+              if (currentGlobals.length === (wbs?.length || 0)) {
+                let a = [...currentGlobals].sort();
+                let b = [...(wbs || [])].sort();
+                isActive = a.every((val, index) => val === b[index]);
+              }
+            } else {
+              const targetWbNames = Object.keys(snapData.data);
+              if (currentGlobals.length === targetWbNames.length) {
+                let a = [...currentGlobals].sort();
+                let b = [...targetWbNames].sort();
+                if (a.every((val, index) => val === b[index])) {
+                  let deepMatch = true;
+                  for (const wbName of targetWbNames) {
+                    try {
+                      let wbEntries = await getWorldbook(wbName);
+                      let enabledUIDsInWb = wbEntries
+                        .filter((e) => e.enabled)
+                        .map((e) => e.uid)
+                        .sort();
+                      let targetUIDs = [...snapData.data[wbName]].sort();
+                      if (
+                        enabledUIDsInWb.length !== targetUIDs.length ||
+                        !enabledUIDsInWb.every(
+                          (val, idx) => val === targetUIDs[idx],
+                        )
+                      ) {
+                        deepMatch = false;
+                        break;
+                      }
+                    } catch (e) {
+                      deepMatch = false;
+                      break;
+                    }
+                  }
+                  isActive = deepMatch;
+                }
+              }
+            }
+            if (isActive) {
+              $dlg
+                .find(`.lulu-qs-badge[data-badgename="${safeName}"]`)
+                .fadeIn("fast");
+              $dlg
+                .find(`.lulu-qs-item[data-itemname="${safeName}"]`)
+                .addClass("lulu-qs-active");
+              $dlg
+                .find(`.lulu-qs-apply-btn[data-btnname="${safeName}"]`)
+                .removeClass("btn-success")
+                .addClass("btn-primary")
+                .html('生效中 <i class="fa-solid fa-check"></i>')
+                .css("opacity", "0.7");
+            }
+          }
+          $dlg
+            .find("#lulu-qs-status-text")
+            .html('<i class="fa-solid fa-eye"></i> 状态已同步');
+        };
+
+        checkActiveSnapshot();
+
         $dlg.find("#lulu-qs-clear-all").on("click", async () => {
-          toastr.info("收到！正在为您全力清扫世界书占用的空间...");
+          toastr.info("收到！清扫世界书占用的空间...");
           try {
             await rebindGlobalWorldbooks([]);
-            toastr.success("✨ 所有的全局世界书都已经被乖乖关掉啦~");
+            toastr.success("✨ 所有的全局世界书都关掉啦~");
+            checkActiveSnapshot();
           } catch (e) {
-            toastr.error("卸载失败噜，请查看控制台...");
+            toastr.error("卸载失败...");
           }
         });
 
         $dlg.find(".lulu-qs-apply-btn").on("click", async function () {
-          const sName = $(this).attr("data-snapname");
+          if ($(this).hasClass("btn-primary"))
+            return toastr.info("目前已经应用了，不需要重复应用哦！(๑>؂<๑)");
+
+          const sName = decodeURIComponent($(this).attr("data-rawname"));
           const sData = snapshots[sName];
           const isDetailed = !Array.isArray(sData) && sData.type === "detailed";
 
-          toastr.info(`正在精心为您布置场景 [${sName}] ...请勿操作哦`);
+          toastr.info(`正在为您布置场景 [${sName}] ...请稍后`);
+          $dlg.find(".lulu-qs-apply-btn").css("pointer-events", "none");
+
           try {
             if (isDetailed) {
               const dataFields = sData.data;
@@ -293,9 +463,12 @@ window.luluOpenQuickSnapshotView = async () => {
               const wbs = Array.isArray(sData) ? sData : sData.wbs;
               await rebindGlobalWorldbooks(wbs);
             }
-            toastr.success(`✨ 极速快照 [${sName}] 切换大成功！随时为您待命！`);
+            toastr.success(`✨ 快照 [${sName}] 切换大成功！`);
+            await checkActiveSnapshot();
           } catch (e) {
-            toastr.error(`应用过程中出现了一点小意外：${e.message}`);
+            toastr.error(`出现了小意外：${e.message}`);
+          } finally {
+            $dlg.find(".lulu-qs-apply-btn").css("pointer-events", "auto");
           }
         });
       },
@@ -303,6 +476,9 @@ window.luluOpenQuickSnapshotView = async () => {
   );
   await popup.show();
 };
+
+
+
 window.luluWbInitTabType = "global";
 const toggleFloatingButton = (show, forceUpdate = false) => {
   if (!show) {
@@ -3144,39 +3320,104 @@ $menuBtn.on("click", async () => {
     $ui.find("#wb-tab-strip, #wb-main-view").fadeIn();
   });
 
-  $ui.find("#wb-btn-save-snap").on("click", async () => {
-    let name = await SillyTavern.callGenericPopup(
-      "创建新快照组合名称：",
-      SillyTavern.POPUP_TYPE.INPUT,
-      "新备份组合",
-    );
-    if (!name || !(name = name.trim())) return;
-    updateVariablesWith(
-      (v) => {
-        if (typeof v.wb_snapshots === "string") {
-          try {
-            v.wb_snapshots = JSON.parse(v.wb_snapshots);
-          } catch (e) {
-            v.wb_snapshots = {};
-          }
-        }
-        if (
-          !v.wb_snapshots ||
-          typeof v.wb_snapshots !== "object" ||
-          Array.isArray(v.wb_snapshots)
-        )
-          v.wb_snapshots = {};
-        v.wb_snapshots[name] = {
-          type: "simple",
-          wbs: getGlobalWorldbookNames(),
-        };
-        return v;
-      },
-      { type: "global" },
-    );
-    toastr.success("组合保存完毕。");
-    renderData();
-  });
+   $ui.find("#wb-btn-save-snap").on("click", async () => {
+     let vars = getVariables({ type: "global" });
+     let snapshots = vars.wb_snapshots;
+     if (typeof snapshots === "string") {
+       try {
+         snapshots = JSON.parse(snapshots);
+       } catch (e) {
+         snapshots = {};
+       }
+     }
+     if (
+       !snapshots ||
+       typeof snapshots !== "object" ||
+       Array.isArray(snapshots)
+     )
+       snapshots = {};
+
+     const currentActive = getGlobalWorldbookNames();
+     if (currentActive.length === 0)
+       return toastr.warning("当前没有全局启用的世界书，不能创建空气快照哦~");
+
+     let duplicateSnapName = null;
+     for (const [sName, sData] of Object.entries(snapshots)) {
+       if (sData.type === "simple" || !sData.type) {
+         const wbs = Array.isArray(sData) ? sData : sData.wbs || [];
+         if (wbs.length === currentActive.length) {
+           let a = [...currentActive].sort();
+           let b = [...wbs].sort();
+           if (a.every((val, idx) => val === b[idx])) {
+             duplicateSnapName = sName;
+             break;
+           }
+         }
+       }
+     }
+
+     let snapName = "";
+     if (duplicateSnapName) {
+       const btnRes = await SillyTavern.callGenericPopup(
+         `哎呀，现在的状态和之前存过的快照【 ${duplicateSnapName} 】一模一样呢！\n想要怎么整理呢？`,
+         SillyTavern.POPUP_TYPE.TEXT,
+         "",
+         {
+           okButton: "不用存了",
+           customButtons: [
+             {
+               text: "不管，我要以新名字另外存",
+               result: 888,
+               classes: ["btn-primary"],
+             },
+             {
+               text: "借此机会给它改名",
+               result: 999,
+               classes: ["btn-warning"],
+             },
+           ],
+         },
+       );
+       if (btnRes !== 888 && btnRes !== 999) return;
+       snapName = await SillyTavern.callGenericPopup(
+         "请为这个组合起个响亮的名字吧：",
+         SillyTavern.POPUP_TYPE.INPUT,
+         btnRes === 999 ? duplicateSnapName : "新全局快照",
+       );
+       if (!snapName || !(snapName = snapName.trim())) return;
+
+       if (btnRes === 999 && snapName !== duplicateSnapName) {
+         delete snapshots[duplicateSnapName];
+       }
+     } else {
+       snapName = await SillyTavern.callGenericPopup(
+         "创建新前置组合名称：",
+         SillyTavern.POPUP_TYPE.INPUT,
+         "新备份组合",
+       );
+       if (!snapName || !(snapName = snapName.trim())) return;
+     }
+
+     if (snapshots[snapName] && duplicateSnapName !== snapName) {
+       const overRes = await SillyTavern.callGenericPopup(
+         `名字【${snapName}】已经被占用了哦！要用新配置把它覆盖掉吗？`,
+         SillyTavern.POPUP_TYPE.CONFIRM,
+       );
+       if (overRes !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+     }
+
+     snapshots[snapName] = { type: "simple", wbs: currentActive };
+     updateVariablesWith(
+       (v) => {
+         v.wb_snapshots = snapshots;
+         return v;
+       },
+       { type: "global" },
+     );
+     toastr.success("组合已经存好啦！");
+     renderData();
+   });
+
 
   let snapOldName = "",
     snapTempList = [];
@@ -3452,36 +3693,94 @@ $menuBtn.on("click", async () => {
     .find("#wb-btn-create-detail-snap")
     .on("click", () => openDetailedSnapView());
 
-  $ui.find("#dsnap-save").on("click", () => {
-    const name = $ui.find("#dsnap-name").val().trim();
-    if (!name) return toastr.warning("也要留下好听的名字啊！");
-    updateVariablesWith(
-      (v) => {
-        if (typeof v.wb_snapshots === "string") {
-          try {
-            v.wb_snapshots = JSON.parse(v.wb_snapshots);
-          } catch (e) {
-            v.wb_snapshots = {};
-          }
-        }
-        if (
-          !v.wb_snapshots ||
-          typeof v.wb_snapshots !== "object" ||
-          Array.isArray(v.wb_snapshots)
-        )
-          v.wb_snapshots = {};
-        if (name !== detailedSnapOldName)
-          delete v.wb_snapshots[detailedSnapOldName];
-        v.wb_snapshots[name] = { type: "detailed", data: detailedSnapData };
-        return v;
-      },
-      { type: "global" },
-    );
-    toastr.success(`快照保存好啦。`);
-    $ui.find("#wb-detailed-snap-view").hide();
-    $ui.find("#wb-tab-strip, #wb-main-view").fadeIn(200);
-    renderData();
-  });
+   $ui
+     .find("#dsnap-save")
+     .off("click")
+     .on("click", async () => {
+       const name = $ui.find("#dsnap-name").val().trim();
+       if (!name) return toastr.warning("也要留下好听的名字啊！");
+
+       let vars = getVariables({ type: "global" });
+       let snapshots = vars.wb_snapshots;
+       if (typeof snapshots === "string") {
+         try {
+           snapshots = JSON.parse(snapshots);
+         } catch (e) {
+           snapshots = {};
+         }
+       }
+       if (
+         !snapshots ||
+         typeof snapshots !== "object" ||
+         Array.isArray(snapshots)
+       )
+         snapshots = {};
+
+       let duplicateSnapName = null;
+       for (const [sName, sData] of Object.entries(snapshots)) {
+         if (sData.type === "detailed" && sName !== detailedSnapOldName) {
+           const eData = sData.data;
+           const nData = detailedSnapData;
+           const eKeys = Object.keys(eData);
+           const nKeys = Object.keys(nData);
+
+           if (eKeys.length !== nKeys.length) continue;
+           let isSame = true;
+           for (let k of nKeys) {
+             if (!eData[k] || eData[k].length !== nData[k].length) {
+               isSame = false;
+               break;
+             }
+             let arr1 = [...eData[k]].sort();
+             let arr2 = [...nData[k]].sort();
+             for (let i = 0; i < arr1.length; i++) {
+               if (arr1[i] !== arr2[i]) {
+                 isSame = false;
+                 break;
+               }
+             }
+             if (!isSame) break;
+           }
+           if (isSame) {
+             duplicateSnapName = sName;
+             break;
+           }
+         }
+       }
+
+       if (duplicateSnapName) {
+         const warnRes = await SillyTavern.callGenericPopup(
+           `欸？发现您刚才配好的复合内容，和现有的快照【 ${duplicateSnapName} 】内部细节完全一致呢！\n确定还是要作为一个独立的新快照保存吗？`,
+           SillyTavern.POPUP_TYPE.CONFIRM,
+         );
+         if (warnRes !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+       }
+
+       if (snapshots[name] && name !== detailedSnapOldName) {
+         const overRes = await SillyTavern.callGenericPopup(
+           `名字【${name}】已经被别的快照占用了哦！要覆盖掉它吗？`,
+           SillyTavern.POPUP_TYPE.CONFIRM,
+         );
+         if (overRes !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+       }
+
+       if (name !== detailedSnapOldName && detailedSnapOldName)
+         delete snapshots[detailedSnapOldName];
+       snapshots[name] = { type: "detailed", data: detailedSnapData };
+       updateVariablesWith(
+         (v) => {
+           v.wb_snapshots = snapshots;
+           return v;
+         },
+         { type: "global" },
+       );
+
+       toastr.success(`复合快照保存好啦。`);
+       $ui.find("#wb-detailed-snap-view").hide();
+       $ui.find("#wb-tab-strip, #wb-main-view").fadeIn(200);
+       renderData();
+     });
+
   $ui.find("#dsnap-cancel").on("click", () => {
     $ui.find("#wb-detailed-snap-view").hide();
     $ui.find("#wb-tab-strip, #wb-main-view").fadeIn(200);
