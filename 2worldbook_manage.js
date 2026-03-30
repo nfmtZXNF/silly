@@ -20,6 +20,21 @@ const $menuBtn = $("<a>", {
 $menuBtn.insertBefore($targetHr);
 
 let globalBindingMapCache = {};
+const getWbUiGroups = () => {
+    let vars = getVariables({ type: "global" });
+    let map = vars.lulu_wb_ui_groups;
+    if (typeof map === "string") {
+        try { map = JSON.parse(map); } catch (e) { map = {}; }
+    }
+    return (map && typeof map === "object") ? map : {};
+};
+const saveWbUiGroups = (obj) => {
+    updateVariablesWith((v) => { v.lulu_wb_ui_groups = obj; return v; }, { type: "global" });
+};
+const getEntryUiGroup = (wbName, uid) => {
+    const map = getWbUiGroups();
+    return (map[wbName] && map[wbName][uid]) ? map[wbName][uid] : "";
+};
 let isEntryBatchMode = false;
 let entryBatchSelected = new Set();
 
@@ -42,8 +57,15 @@ if ($("#lulu-drag-line-style").length === 0) {
                 border: 1px dashed #51cf66 !important;
             }
             .lulu-folded-hide {
-                display: none !important;
+                position: absolute !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                z-index: -9999 !important;
+                max-height: 0 !important;
                 margin: 0 !important;
+                overflow: hidden !important;
+                border: none !important;
+                transform: scale(0) !important;
             }
         </style>
     `);
@@ -614,7 +636,7 @@ $menuBtn.on("click", async () => {
             .badge-green { background: rgba(81, 207, 102, 0.15); color: #51cf66; border: 1px solid #51cf66; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; margin-right: 4px; white-space: nowrap; }
             .badge-grey { background: rgba(150, 150, 150, 0.15); color: #999; border: 1px solid #999; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; margin-right: 4px; white-space: nowrap; }
 
-            /* ✨ 鹿酱新增：条目编辑分栏专用核心样式 ✨ */
+            /* 酱新增：条目编辑分栏专用核心样式  */
             #wb-entry-split-wrapper { display: flex; min-height: 55vh; max-height: 65vh; border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px; padding: 10px; background: var(--SmartThemeBotMesColor); gap: 10px; position: relative; overflow: hidden; }
             #wb-entry-list-side { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; transition: 0.3s ease; }
             #wb-entry-detail-side { flex: 1; display: none; flex-direction: column; border-left: 2px solid var(--SmartThemeBorderColor); padding-left: 10px; min-width: 0; transition: 0.3s ease; overflow: hidden; }
@@ -629,6 +651,57 @@ $menuBtn.on("click", async () => {
             #wb-manager-panel.wb-entry-focus #wb-top-control-bar #wb-zoom-val { font-size: 11px !important; }
             #wb-manager-panel.wb-entry-focus #wb-top-control-bar label,
             #wb-manager-panel.wb-entry-focus #wb-top-control-bar button { padding-top: 2px !important; padding-bottom: 2px !important; }
+
+            /*  新增：桌面端特化极限参数区压缩  */
+            @media (min-width: 769px) {
+                #wb-det-ui-compress {
+                    display: flex !important;
+                    flex-wrap: wrap !important;
+                    gap: 8px 10px !important;
+                    align-items: flex-end !important;
+                    padding: 10px !important;
+                    margin-bottom: 8px !important;
+                }
+                #wb-det-ui-compress .wb-form-group {
+                    margin-bottom: 0 !important;
+                    display: flex !important;
+                    flex-direction: column !important;
+                    gap: 4px !important;
+                }
+                #wb-det-ui-compress label {
+                    font-size: 11.2px !important;
+                    margin-bottom: 0 !important;
+                    line-height: 1 !important;
+                }
+                #wb-det-ui-compress .wb-input-dt {
+                    padding: 3px 6px !important;
+                    font-size: 11.6px !important;
+                    height: 26px !important;
+                }
+                #wb-det-ui-compress .wb-re-checks {
+                    display: flex !important;
+                    flex-direction: column !important;
+                    gap: 6px !important;
+                    justify-content: center !important;
+                    padding-bottom: 2px !important;
+                }
+                #wb-det-ui-compress .wb-re-checks label {
+                    font-size: 10.5px !important;
+                    padding: 0 !important;
+                    display: flex !important;
+                    align-items: center !important;
+                }
+                #wb-det-ui-compress input[type="checkbox"] {
+                    transform: scale(0.95) !important;
+                }
+                #wb-det-ui-compress:not(.has-depth) #wb-det-depth-container {
+                    display: none !important;
+                }
+                /* 将正文编辑区加长占比 */
+                #wb-entry-detail-side > .scrollableInnerFull { flex: 1 1 auto; display: flex; flex-direction: column; overflow: hidden; }
+                #wb-entry-detail-side .wb-form-group:last-child { flex: 1 1 auto; overflow: hidden; display: flex; flex-direction: column; }
+                #wb-det-content { height: 100% !important; flex: 1 1 auto !important; margin-bottom: 4px; }
+            }
 
             /* 📱 手机端适配 */
             @media (max-width: 768px) {
@@ -951,7 +1024,13 @@ $menuBtn.on("click", async () => {
             </div>
 
             <div id="wb-main-view">
-                <input type="text" id="wb-search-input" class="text_pole" placeholder="🔍 输入想要查找的世界书名称，或者已经绑定的角色卡或用户名称..." style="width: 100%; box-sizing: border-box; margin-bottom: 10px; padding: 8px; font-size: 14px;">
+                <div style="display:flex; gap:8px; margin-bottom:10px;">
+                     <input type="text" id="wb-search-input" class="text_pole" placeholder="🔍 检索世界书或绑定的角色..." style="flex:1; min-width:0; box-sizing: border-box; padding: 8px; font-size: 13.5px;">
+                     <label style="cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12.5px; margin:0; white-space:nowrap; background:rgba(125,125,125,0.1); padding:4px 10px; border-radius:6px; border:1px solid var(--SmartThemeBorderColor); flex-shrink:0;" title="勾选后，检索将会深入翻看所有世界书的条目正文与关键字（文字极多时可能会有稍微的算力延迟喔）">
+                         <input type="checkbox" id="wb-deep-search-toggle" style="accent-color: var(--SmartThemeQuoteColor); transform: scale(1.1);">
+                         <span style="font-weight: bold; color: var(--SmartThemeQuoteColor);">🔎 深度搜索正文</span>
+                     </label>
+                </div>
 
                 <div class="wb-toolbar">
                     <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
@@ -1117,6 +1196,7 @@ $menuBtn.on("click", async () => {
                                 </label>
                                 <select id="dsnap-entry-sort" class="wb-input-dt" style="width: auto; padding: 4px 6px; font-size: 12px;">
                                     <option value="default">↕ 默认</option>
+                                    <option value="enabled_first">🟢 启用优先</option>
                                     <option value="order_asc">🔢 顺序 (小到大)</option>
                                     <option value="order_desc">🔢 顺序 (大到小)</option>
                                     <option value="depth_asc">🌊 深度 (小到大)</option>
@@ -1142,7 +1222,7 @@ $menuBtn.on("click", async () => {
                 </div>
             </div>
 
-            <!-- ✨ 鹿酱精心改造的条目分栏界面来啦 ✨ -->
+            <!-- 条目分栏界面 -->
             <div id="wb-entry-view" style="display: none; height: 100%; flex-direction: column;">
                 <div style="font-weight: bold; font-size: 16px; margin-bottom: 8px; color: var(--SmartThemeQuoteColor); display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px;">
                     <span style="display:flex; align-items:flex-start; flex:1; min-width:0;">
@@ -1153,11 +1233,18 @@ $menuBtn.on("click", async () => {
                         </span>
                     </span>
 
-                    <!-- 📖 预览开关就在这里哦 -->
-                    <label style="cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 12px; margin: 0; font-weight: normal; background: rgba(125,125,125,0.1); padding: 6px 10px; border-radius: 6px; border: 1px solid var(--SmartThemeBorderColor); flex-shrink: 0; margin-top: 2px;">
-                        <input type="checkbox" id="wb-toggle-entry-preview" style="accent-color: var(--SmartThemeQuoteColor); transform:scale(1.1);">
-                        <span style="color:var(--SmartThemeBodyColor); font-weight:bold;">📖 内容预览</span>
-                    </label>
+                    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                        <!-- ✨ 分组视图切换开关 -->
+                        <label style="cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 12px; margin: 0; font-weight: normal; background: rgba(125,125,125,0.1); padding: 6px 10px; border-radius: 6px; border: 1px solid var(--SmartThemeBorderColor); flex-shrink: 0;">
+                            <input type="checkbox" id="wb-toggle-entry-group" style="accent-color: #51cf66; transform:scale(1.1);">
+                            <span style="color:var(--SmartThemeBodyColor); font-weight:bold;">🗂️ 启用分组</span>
+                        </label>
+                        <!-- 📖 预览开关就在这里哦 -->
+                        <label style="cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 12px; margin: 0; font-weight: normal; background: rgba(125,125,125,0.1); padding: 6px 10px; border-radius: 6px; border: 1px solid var(--SmartThemeBorderColor); flex-shrink: 0;">
+                            <input type="checkbox" id="wb-toggle-entry-preview" style="accent-color: var(--SmartThemeQuoteColor); transform:scale(1.1);">
+                            <span style="color:var(--SmartThemeBodyColor); font-weight:bold;">📖 内容预览</span>
+                        </label>
+                    </div>
                 </div>
 
                 <div id="wb-entry-split-wrapper">
@@ -1166,6 +1253,7 @@ $menuBtn.on("click", async () => {
                             <input type="text" id="wb-entry-search" class="text_pole" placeholder="🔍 检索条目标题或触发关键字..." style="width: 100%; box-sizing: border-box; padding: 8px;">
                             <select id="wb-entry-sort" class="wb-input-dt" style="width: 160px; padding: 8px;">
                                 <option value="default">↕ 默认</option>
+                                <option value="enabled_first">🟢 启用优先</option>
                                 <option value="order_asc">🔢 顺序 (小到大)</option>
                                 <option value="order_desc">🔢 顺序 (大到小)</option>
                                 <option value="depth_asc">🌊 深度 (小到大)</option>
@@ -1211,7 +1299,7 @@ $menuBtn.on("click", async () => {
                             <button class="menu_button interactable wb-nowrap-btn" id="wb-btn-det-close-mobile" style="display: none; margin: 0; padding: 4px 8px; font-size: 11px;"><i class="fa-solid fa-angle-left"></i> 返回列表</button>
                         </div>
                         <div class="scrollableInnerFull" style="display: flex; flex-direction: column; flex: 1; min-height: 0; padding-right: 5px;">
-                            <div style="display: flex; flex-wrap: wrap; gap: 8px; background: rgba(0,0,0,0.1); border-radius: 6px; padding: 10px; border: 1px solid var(--SmartThemeBorderColor); margin-bottom: 10px; flex-shrink: 0; align-items: flex-end;">
+                            <div id="wb-det-ui-compress" style="display: flex; flex-wrap: wrap; gap: 8px; background: rgba(0,0,0,0.1); border-radius: 6px; padding: 10px; border: 1px solid var(--SmartThemeBorderColor); margin-bottom: 10px; flex-shrink: 0; align-items: flex-end;">
                                 <div class="wb-form-group" style="flex: 1; min-width: 120px; margin-bottom: 0;">
                                     <label style="font-size: 12px; font-weight: bold; margin-bottom: 4px; color: var(--SmartThemeQuoteColor);">📖 标签名称</label>
                                     <input type="text" id="wb-det-name" class="wb-input-dt">
@@ -1224,7 +1312,7 @@ $menuBtn.on("click", async () => {
                                     </select>
                                 </div>
                                 <div class="wb-form-group" style="flex: 2; min-width: 160px; margin-bottom: 0;">
-                                    <label style="font-size: 12px; font-weight: bold; margin-bottom: 4px; color: var(--SmartThemeQuoteColor);">🔑 触发关键字 <small>(逗号分隔)</small></label>
+                                    <label style="font-size: 12px; font-weight: bold; margin-bottom: 4px; color: var(--SmartThemeQuoteColor);">🔑 触发关键字</label>
                                     <input type="text" id="wb-det-keys" class="wb-input-dt">
                                 </div>
 
@@ -1251,13 +1339,13 @@ $menuBtn.on("click", async () => {
                                     <input type="number" id="wb-det-order" class="wb-input-dt" value="100">
                                 </div>
 
-                                <div style="display: flex; flex-direction: column; justify-content: center; gap: 4px; margin-bottom: 4px; min-width: 140px;">
+                                <div class="wb-re-checks" style="min-width: 120px;">
                                     <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 11px; margin: 0; white-space: nowrap;">
-                                        <input type="checkbox" id="wb-det-exclude-recursion" style="accent-color: var(--SmartThemeQuoteColor); transform: scale(1.1);">
-                                        <span><strong style="color: var(--SmartThemeBodyColor);">不可递归</strong> <span style="color:gray;">(不被其他条目激活)</span></span>
+                                        <input type="checkbox" id="wb-det-exclude-recursion" style="accent-color: var(--SmartThemeQuoteColor);">
+                                        <span><strong style="color: var(--SmartThemeBodyColor);">不可递归</strong></span>
                                     </label>
                                     <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 11px; margin: 0; white-space: nowrap;">
-                                        <input type="checkbox" id="wb-det-prevent-recursion" style="accent-color: var(--SmartThemeQuoteColor); transform: scale(1.1);">
+                                        <input type="checkbox" id="wb-det-prevent-recursion" style="accent-color: var(--SmartThemeQuoteColor);">
                                         <span><strong style="color: var(--SmartThemeBodyColor);">防止进一步递归</strong></span>
                                     </label>
                                 </div>
@@ -1931,12 +2019,17 @@ $menuBtn.on("click", async () => {
               e.prevent_recursion ||
               (e.recursion && e.recursion.prevent_outgoing) ||
               false;
+            let ext = e.extensions || {};
+            ext.lulu_group =
+              ext.lulu_group || e.lulu_group_tag || e.group || "";
+
             return {
               uid: e.uid || Date.now() + Math.floor(Math.random() * 1000000),
               name: eName,
               enabled: eEnabled,
               content: e.content || e.description || e.text || "",
-              group: e.group || "",
+              group: "", // 彻底清空，防止触发原生抽卡盲盒诅咒
+              extensions: ext, // 🛡️ 藏进官方保险箱
               strategy: strategy,
               position: position,
               recursion: e.recursion || {
@@ -2020,6 +2113,12 @@ $menuBtn.on("click", async () => {
             });
             saveCategories(cData);
           }
+          if (data.lulu_entry_groups) {
+            let grpMap = getWbUiGroups();
+            grpMap[finalName] = data.lulu_entry_groups;
+            saveWbUiGroups(grpMap);
+          }
+
           successCount++;
           newlyImportedNames.push(finalName);
         } catch (err) {
@@ -2144,11 +2243,21 @@ $menuBtn.on("click", async () => {
   let isBatchMode = false;
   let batchSelected = new Set();
   let currentVisibleWbs = [];
+  let globalSearchDebounce = null;
+  $ui.find("#wb-search-input").on("input", () => {
+    let isDeep = $ui.find("#wb-deep-search-toggle").is(":checked");
+    if (isDeep) {
+      clearTimeout(globalSearchDebounce);
+      globalSearchDebounce = setTimeout(() => renderData(), 450); // 防抖，避免打字时疯狂读取磁盘卡掉酒馆
+    } else {
+      renderData();
+    }
+  });
   $ui
     .find(
-      "#wb-search-input, #wb-filter-unbound, #wb-filter-state, #wb-sort-select, #wb-category-filter",
+      "#wb-deep-search-toggle, #wb-filter-unbound, #wb-filter-state, #wb-sort-select, #wb-category-filter",
     )
-    .on("change input", () => renderData());
+    .on("change", () => renderData());
   $ui.find("#wb-btn-batch-toggle").on("click", function () {
     isBatchMode = !isBatchMode;
     if (isBatchMode) {
@@ -2182,7 +2291,12 @@ $menuBtn.on("click", async () => {
           const blob = new Blob(
             [
               JSON.stringify(
-                { entries: entries, name: wb, lulu_categories: myCats },
+                {
+                  entries: entries,
+                  name: wb,
+                  lulu_categories: myCats,
+                  lulu_entry_groups: getWbUiGroups()[wb] || {},
+                },
                 null,
                 2,
               ),
@@ -2850,11 +2964,12 @@ $menuBtn.on("click", async () => {
     renderCharView();
   });
 
-  const renderData = (highlightName = null) => {
+  const renderData = async (highlightName = null) => {
     const keyword = $ui.find("#wb-search-input").val().toLowerCase();
     const showUnboundOnly = $ui.find("#wb-filter-unbound").is(":checked");
     const stateFilter = $ui.find("#wb-filter-state").val();
     const sortMode = $ui.find("#wb-sort-select").val();
+    const isDeepSearch = $ui.find("#wb-deep-search-toggle").is(":checked");
     const wCatSettings = getCategories();
     let currentSelCat = $ui.find("#wb-category-filter").val() || "all";
     let $catDrop = $ui.find("#wb-category-filter").empty();
@@ -2886,8 +3001,56 @@ $menuBtn.on("click", async () => {
     }
     if (!snapshots || typeof snapshots !== "object" || Array.isArray(snapshots))
       snapshots = {};
-    currentVisibleWbs = [...allWbs]
-      .filter((wb) => {
+
+    let filteredWbs = [];
+    if (isDeepSearch && keyword) {
+      $ui
+        .find("#wb-deep-search-toggle")
+        .next()
+        .html('<i class="fa-solid fa-spinner fa-spin"></i> 翻阅全文中...');
+      for (let wb of allWbs) {
+        const bindings = globalBindingMapCache[wb] || [];
+        if (showUnboundOnly && bindings.length > 0) continue;
+        if (stateFilter === "enabled" && !activeWbs.includes(wb)) continue;
+        if (stateFilter === "disabled" && activeWbs.includes(wb)) continue;
+        if (
+          currentSelCat === "unassigned" &&
+          Object.values(wCatSettings).some(
+            (list) => Array.isArray(list) && list.includes(wb),
+          )
+        )
+          continue;
+        else if (
+          currentSelCat !== "all" &&
+          !(wCatSettings[currentSelCat] || []).includes(wb)
+        )
+          continue;
+
+        let matchStr = (
+          wb +
+          " " +
+          bindings.map((c) => c.name).join(" ")
+        ).toLowerCase();
+        let isMatch = matchStr.includes(keyword);
+
+        if (!isMatch) {
+          try {
+            let entries = await getWorldbook(wb);
+            for (let e of entries) {
+              let eStr =
+                `${e.name || ""} ${(e.strategy?.keys || []).join(" ")} ${e.content || ""}`.toLowerCase();
+              if (eStr.includes(keyword)) {
+                isMatch = true;
+                break;
+              }
+            }
+          } catch (err) {}
+        }
+        if (isMatch) filteredWbs.push(wb);
+      }
+      $ui.find("#wb-deep-search-toggle").next().html("🔎 深度搜索正文");
+    } else {
+      filteredWbs = [...allWbs].filter((wb) => {
         const bindings = globalBindingMapCache[wb] || [];
         if (
           keyword &&
@@ -2909,17 +3072,20 @@ $menuBtn.on("click", async () => {
           if (!tList.includes(wb)) return false;
         }
         return true;
-      })
-      .sort((a, b) => {
-        if (sortMode === "az") return a.localeCompare(b, "zh-CN");
-        if (sortMode === "za") return b.localeCompare(a, "zh-CN");
-        const aA = activeWbs.includes(a),
-          bA = activeWbs.includes(b);
-        if (aA === bA) return a.localeCompare(b, "zh-CN");
-        return aA ? -1 : 1;
       });
+    }
+
+    currentVisibleWbs = filteredWbs.sort((a, b) => {
+      if (sortMode === "az") return a.localeCompare(b, "zh-CN");
+      if (sortMode === "za") return b.localeCompare(a, "zh-CN");
+      const aA = activeWbs.includes(a),
+        bA = activeWbs.includes(b);
+      if (aA === bA) return a.localeCompare(b, "zh-CN");
+      return aA ? -1 : 1;
+    });
 
     const $wbContainer = $ui.find("#wb-container").empty();
+
     $ui.find("#wb-batch-count").text(batchSelected.size);
     const $batchList = $ui.find("#wb-batch-selected-list").empty();
     if (batchSelected.size > 0)
@@ -3114,7 +3280,12 @@ $menuBtn.on("click", async () => {
                 const blob = new Blob(
                   [
                     JSON.stringify(
-                      { entries: entries, name: wb, lulu_categories: myCats },
+                      {
+                        entries: entries,
+                        name: wb,
+                        lulu_categories: myCats,
+                        lulu_entry_groups: getWbUiGroups()[wb] || {},
+                      },
                       null,
                       2,
                     ),
@@ -3553,7 +3724,11 @@ $menuBtn.on("click", async () => {
       let displayEntries = [...entries];
       const sortMode = $ui.find("#dsnap-entry-sort").val() || "default";
       const showDsPreview = $ui.find("#dsnap-toggle-preview").is(":checked");
-      if (sortMode === "order_asc")
+      if (sortMode === "enabled_first")
+        displayEntries.sort((a, b) =>
+          a.enabled === b.enabled ? 0 : a.enabled ? -1 : 1,
+        );
+      else if (sortMode === "order_asc")
         displayEntries.sort(
           (a, b) => (a.position?.order ?? 100) - (b.position?.order ?? 100),
         );
@@ -3772,9 +3947,12 @@ $menuBtn.on("click", async () => {
     $ui.find("#wb-entry-search").val("");
     $ui.find("#wb-entry-sort").val("default");
     await withLoadingOverlay(async () => {
-      const fetched = await getWorldbook(wbName);
-      tuneEntries = JSON.parse(JSON.stringify(fetched));
-      originalTuneEntries = JSON.parse(JSON.stringify(fetched));
+        const fetched = await getWorldbook(wbName);
+        tuneEntries = JSON.parse(JSON.stringify(fetched));
+        tuneEntries.forEach((e) => {
+          e._lulu_ui_group = getEntryUiGroup(wbName, e.uid);
+        });
+        originalTuneEntries = JSON.parse(JSON.stringify(tuneEntries));
     }, `提取内容...`);
     isEntryBatchMode = false;
     entryBatchSelected.clear();
@@ -3797,6 +3975,11 @@ $menuBtn.on("click", async () => {
     // 强制触发一次预览开关状态检测
     const isPreview = localStorage.getItem("lulu_wb_entry_preview") === "true";
     $ui.find("#wb-toggle-entry-preview").prop("checked", isPreview);
+    const isGroup =
+      localStorage.getItem("lulu_wb_entry_group_view") !== "false"; // 默认是开启哒
+    $ui.find("#wb-toggle-entry-group").prop("checked", isGroup);
+
+
 
     renderEntryList();
     $ui
@@ -3809,6 +3992,10 @@ $menuBtn.on("click", async () => {
   // 预览开关事件
   $ui.find("#wb-toggle-entry-preview").on("change", function () {
     localStorage.setItem("lulu_wb_entry_preview", $(this).is(":checked"));
+    renderEntryList();
+  });
+  $ui.find("#wb-toggle-entry-group").on("change", function () {
+    localStorage.setItem("lulu_wb_entry_group_view", $(this).is(":checked"));
     renderEntryList();
   });
 
@@ -3859,9 +4046,9 @@ $menuBtn.on("click", async () => {
       "",
     );
     if (newGroup !== null) {
-      entryBatchSelected.forEach(
-        (idx) => (tuneEntries[idx].group = newGroup.trim()),
-      );
+      entryBatchSelected.forEach((idx) => {
+        tuneEntries[idx]._lulu_ui_group = newGroup.trim();
+      });
       entryBatchSelected.clear();
       $ui.find("#wb-entry-batch-count").text("0");
       renderEntryList();
@@ -3885,7 +4072,11 @@ $menuBtn.on("click", async () => {
     });
 
     let sortedEntries = [...filteredEntries];
-    if (sortMode === "order_asc")
+    if (sortMode === "enabled_first")
+      sortedEntries.sort((a, b) =>
+        a.enabled === b.enabled ? 0 : a.enabled ? -1 : 1,
+      );
+    else if (sortMode === "order_asc")
       sortedEntries.sort(
         (a, b) => (a.position?.order ?? 100) - (b.position?.order ?? 100),
       );
@@ -3929,15 +4120,20 @@ $menuBtn.on("click", async () => {
         renderEntryList();
       });
 
+    const isGroupView = $ui.find("#wb-toggle-entry-group").is(":checked");
     const groupedEntries = {};
     sortedEntries.forEach((entry) => {
-      let g =
-        entry.group && entry.group.trim() !== ""
-          ? entry.group.trim()
-          : "📁 未分类条目";
+      let g = "📁 所有条目 (平铺模式)";
+      if (isGroupView) {
+        g =
+          entry._lulu_ui_group && entry._lulu_ui_group.trim() !== ""
+            ? entry._lulu_ui_group.trim()
+            : "📁 未分类条目";
+      }
       if (!groupedEntries[g]) groupedEntries[g] = [];
       groupedEntries[g].push(entry);
     });
+
 
     let sharedOrder = getSharedGroupOrder();
     let orderChanged = false;
@@ -3972,11 +4168,21 @@ $menuBtn.on("click", async () => {
                 <div style="display:flex; gap:6px;" class="lulu-group-ctrls">${isDraggable ? `<i class="fa-solid fa-arrow-up lulu-btn-up" title="上移" style="padding:6px; font-size:12px; color:gray; cursor:pointer; background:rgba(125,125,125,0.15); border-radius:4px; transition:0.2s;"></i><i class="fa-solid fa-arrow-down lulu-btn-down" title="下移" style="padding:6px; font-size:12px; color:gray; cursor:pointer; background:rgba(125,125,125,0.15); border-radius:4px; margin-right:10px; transition:0.2s;"></i>` : ""}
                     <button class="menu_button interactable wb-nowrap-btn wb-group-enable-all" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(81, 207, 102, 0.15); color:#51cf66; border:1px solid rgba(81, 207, 102, 0.5);" title="开启该组所有条目"><i class="fa-solid fa-check"></i> 全开</button>
                     <button class="menu_button interactable wb-nowrap-btn wb-group-disable-all" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(150, 150, 150, 0.15); color:gray; border:1px solid rgba(150, 150, 150, 0.5);" title="关闭该组所有条目"><i class="fa-solid fa-xmark"></i> 全关</button>
+                    ${isDraggable ? `<button class="menu_button interactable wb-nowrap-btn wb-group-rename" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(51, 154, 240, 0.15); color:#339af0; border:1px solid rgba(51, 154, 240, 0.5);" title="重命名该分组"><i class="fa-solid fa-pen"></i> 改名</button>` : ""}
                     ${isDraggable ? `<button class="menu_button interactable wb-nowrap-btn wb-group-delete" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(255, 107, 107, 0.15); color:#ff6b6b; border:1px solid rgba(255, 107, 107, 0.5);" title="删除分组或解散"><i class="fa-solid fa-trash"></i> 删除</button>` : ""}
                 </div></div>`);
       const $gContainer = $(
         `<div style="display:${isCollapsed ? "none" : "flex"}; flex-direction:column; padding-left:10px; margin-top:6px; border-left: 2px solid var(--SmartThemeBorderColor); gap: 4px;"></div>`,
       );
+      if (!isGroupView) {
+        $gHeader.hide();
+        $gContainer.css({
+          display: "flex",
+          "border-left": "none",
+          "padding-left": "0",
+          "margin-top": "0",
+        });
+      }
 
       $gHeader.on("click", (e) => {
         if (
@@ -4074,6 +4280,37 @@ $menuBtn.on("click", async () => {
         gEntries.forEach((entry) => (entry.enabled = false));
         renderEntryList();
       });
+      $gHeader.find(".wb-group-rename").on("click", async (e) => {
+        e.stopPropagation();
+        const newName = await SillyTavern.callGenericPopup(
+          `请为【${groupName}】输入一个新的名字：`,
+          SillyTavern.POPUP_TYPE.INPUT,
+          groupName,
+        );
+        if (newName && newName.trim() && newName.trim() !== groupName) {
+          const finalName = newName.trim();
+          if (finalName === "📁 未分类条目")
+            return toastr.warning("这个名字是系统预留的哦，换一个吧~");
+          gEntries.forEach((entry) => (entry._lulu_ui_group = finalName));
+
+          if (wbEntryGroupState[groupName] !== undefined) {
+            wbEntryGroupState[finalName] = wbEntryGroupState[groupName];
+            delete wbEntryGroupState[groupName];
+          }
+          let order = getSharedGroupOrder();
+          let idx = order.indexOf(groupName);
+          if (idx > -1) {
+            order[idx] = finalName;
+            setSharedGroupOrder(order);
+          }
+
+          renderEntryList();
+          toastr.success(
+            `分组名字已经改成【${finalName}】啦！记得左下角点保存哦~`,
+          );
+        }
+      });
+
       $gHeader.find(".wb-group-delete").on("click", async (e) => {
         e.stopPropagation();
         const btnRes = await SillyTavern.callGenericPopup(
@@ -4108,7 +4345,7 @@ $menuBtn.on("click", async () => {
             `【${groupName}】内容已被彻底扫除干净啦！记得按绿色保存按钮哦~`,
           );
         } else if (btnRes === 999) {
-          gEntries.forEach((entry) => (entry.group = ""));
+          gEntries.forEach((entry) => (entry._lulu_ui_group = ""));
           delete wbEntryGroupState[groupName];
           renderEntryList();
           toastr.success(
@@ -4167,15 +4404,22 @@ $menuBtn.on("click", async () => {
             });
         }
 
-        // ✨ 鹿酱新增：预览内容渲染 ✨
+        // ✨ 预览内容渲染 ✨
         let previewHtml = "";
         if (showPreview && entry.content) {
           previewHtml = `<div class="content-preview">${entry.content.replace(/</g, "<").replace(/>/g, ">")}</div>`;
         }
 
+        // ✨ 把它们的标签变成胸牌别在衣服上！
+        let groupTagHtml = "";
+        if (!isGroupView && entry._lulu_ui_group && entry._lulu_ui_group.trim() !== "") {
+            groupTagHtml = `<span style="font-size:10px; background:rgba(252,196,25,0.15); border:1px solid #fcc419; color:#fcc419; padding:2px 5px; border-radius:4px; margin-right:6px; vertical-align:middle; line-height:1;"><i class="fa-solid fa-folder"></i> ${entry._lulu_ui_group}</span>`;
+        }
+
         const $info = $(
-          `<div style="flex:1; min-width:0; cursor:${isEntryBatchMode ? "pointer" : "default"};"><div style="font-weight:bold; margin-bottom: 5px; font-size:14px; word-break:break-all;">${entry.name || "未定义模块"}</div><div style="font-size:11px;color:gray;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${strategy.type !== "selective" ? '<span class="badge-blue">常驻</span>' : '<span class="badge-green">匹配</span>'}${posBadgeHtml} <span style="margin-left:5px;">${keysInfo}</span></div>${previewHtml}</div>`,
+          `<div style="flex:1; min-width:0; cursor:${isEntryBatchMode ? "pointer" : "default"};"><div style="font-weight:bold; margin-bottom: 5px; font-size:14px; word-break:break-all; display:flex; align-items:center;">${groupTagHtml}${entry.name || "未定义模块"}</div><div style="font-size:11px;color:gray;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${strategy.type !== "selective" ? '<span class="badge-blue">常驻</span>' : '<span class="badge-green">匹配</span>'}${posBadgeHtml} <span style="margin-left:5px;">${keysInfo}</span></div>${previewHtml}</div>`
         );
+
 
         if (isEntryBatchMode)
           $info.on("click", () => {
@@ -4227,6 +4471,7 @@ $menuBtn.on("click", async () => {
         enabled: true,
         content: "",
         group: "",
+        _lulu_ui_group: "", // ✨ 新增给咱们的 UI 使用
         strategy: { type: "constant", keys: [] },
         position: { type: "at_depth", role: "system", depth: 0, order: 100 },
         recursion: {
@@ -4240,15 +4485,29 @@ $menuBtn.on("click", async () => {
       renderEntryList();
       openDetailEditView(0);
     });
-  $ui.find("#wb-btn-entry-save").on("click", async () => {
-    await withLoadingOverlay(async () => {
-      await replaceWorldbook(tuneWbName, tuneEntries);
-    }, `写入中...`);
-    originalTuneEntries = JSON.parse(JSON.stringify(tuneEntries));
-    toastr.success(`[${tuneWbName}] 的修改已经成功保存啦！`);
-    if (tuneReturnView === "#wb-main-view") renderData();
-    else if (tuneReturnView === "#wb-char-view") renderCharView();
-  });
+    $ui.find("#wb-btn-entry-save").on("click", async () => {
+      await withLoadingOverlay(async () => {
+        const uiGroupsMap = getWbUiGroups();
+        if (!uiGroupsMap[tuneWbName]) uiGroupsMap[tuneWbName] = {};
+        const pureEntries = JSON.parse(JSON.stringify(tuneEntries));
+
+        pureEntries.forEach((e) => {
+          if (e._lulu_ui_group && e._lulu_ui_group.trim() !== "") {
+            uiGroupsMap[tuneWbName][e.uid] = e._lulu_ui_group.trim();
+          } else {
+            delete uiGroupsMap[tuneWbName][e.uid]; // 如果设置成了未分类，就移除
+          }
+          delete e._lulu_ui_group;
+        });
+        saveWbUiGroups(uiGroupsMap); // 妥善保管！
+        await replaceWorldbook(tuneWbName, pureEntries);
+      }, `写入并洗礼中...`);
+
+      originalTuneEntries = JSON.parse(JSON.stringify(tuneEntries));
+      toastr.success(`[${tuneWbName}] 的修改已经成功保存啦！`);
+      if (tuneReturnView === "#wb-main-view") renderData();
+      else if (tuneReturnView === "#wb-char-view") renderCharView();
+    });
   $ui.find("#wb-btn-entry-cancel").on("click", async () => {
     const isDirty =
       JSON.stringify(tuneEntries) !== JSON.stringify(originalTuneEntries);
@@ -4313,10 +4572,15 @@ $menuBtn.on("click", async () => {
 
   let tuneDetailIndex = -1;
   $ui.find("#wb-det-position").on("change", function () {
-    $ui
-      .find("#wb-det-depth-container")
-      .toggle($(this).val().startsWith("at_depth_"));
+    const isDepth = $(this).val().startsWith("at_depth_");
+    $ui.find("#wb-det-depth-container").toggle(isDepth);
+    if (isDepth) {
+      $ui.find("#wb-det-ui-compress").addClass("has-depth");
+    } else {
+      $ui.find("#wb-det-ui-compress").removeClass("has-depth");
+    }
   });
+
 
   const openDetailEditView = (index) => {
     tuneDetailIndex = index;
@@ -4414,6 +4678,9 @@ $menuBtn.on("click", async () => {
 
   // ------------ 最下方的原生书组绑定扩展，保持原样接续 ------------
   (function initLuLuNativeWbSyncV7() {
+    if (window.lulu_native_sync_interval)
+      clearInterval(window.lulu_native_sync_interval);
+
     let groupFoldState = JSON.parse(
       localStorage.getItem("lulu_wb_native_fold_state") || "{}",
     );
@@ -4425,7 +4692,7 @@ $menuBtn.on("click", async () => {
     let currentActiveWbName = null;
     let cachedWbEntries = [];
     let isFetching = false;
-    setInterval(async () => {
+    window.lulu_native_sync_interval = setInterval(async () => {
       const isNativeMagicEnabled =
         localStorage.getItem("lulu_wb_native_magic_enabled") !== "false";
       const $entries = $(".world_entry");
@@ -4477,12 +4744,18 @@ $menuBtn.on("click", async () => {
         );
         if (!foundEntry) {
           const domUid = parseInt($entry.attr("uid") || $entry.data("id"), 10);
-          if (!isNaN(domUid) && cachedWbEntries[domUid]) {
-            foundEntry = cachedWbEntries[domUid];
+          if (!isNaN(domUid)) {
+            foundEntry = cachedWbEntries.find(
+              (e) => e.uid === domUid || e.id === domUid,
+            );
           }
         }
-        if (foundEntry && foundEntry.group && foundEntry.group.trim() !== "")
-          myGroup = foundEntry.group.trim();
+
+        // ✨ 当条目存在时，用我们单独储存在全局大地图里的小纸条核对此人的身份！
+        if (foundEntry) {
+          let uiGrpName = getEntryUiGroup(currentActiveWbName, foundEntry.uid);
+          if (uiGrpName && uiGrpName.trim() !== "") myGroup = uiGrpName.trim();
+        }
         if (!groupCounts[myGroup]) groupCounts[myGroup] = 0;
         groupCounts[myGroup]++;
         $entry.attr("data-lulu-grp", myGroup);
@@ -4705,3 +4978,4 @@ $menuBtn.on("click", async () => {
     }, 300);
   })();
 });
+
