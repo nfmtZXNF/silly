@@ -3,7 +3,6 @@ try {
 } catch (e) {}
 $("#option_lulu_wb_manager").remove();
 
-const $targetHr = $(".options-content").find("hr").last();
 const $menuBtn = $("<a>", {
   id: "option_lulu_wb_manager",
   class: "interactable",
@@ -17,23 +16,50 @@ const $menuBtn = $("<a>", {
   )
   .append($("<span>").text("全局世界书管理"));
 
-$menuBtn.insertBefore($targetHr);
+// 1. 优先寻找“删除消息”按钮（SillyTavern 原生基础按钮，基本所有版本都有）
+let $insertTarget = $("#option_delete_mes");
+
+// 2. 如果因为某些原因找不到“删除消息”，退一步寻找最后一条分割线
+if ($insertTarget.length === 0) {
+  $insertTarget = $(".options-content").find("hr").last();
+}
+
+// 3. 执行插入：只要找到了目标，就插在它前面
+if ($insertTarget.length > 0) {
+  $menuBtn.insertBefore($insertTarget);
+} else {
+  // 4. 终极兜底：如果旧版本界面被魔改得面目全非，直接把它追加到菜单列表的最下面，保证必定能看见
+  const $container = $(".options-content").length
+    ? $(".options-content")
+    : $("#options");
+  $container.append($menuBtn);
+}
 
 let globalBindingMapCache = {};
 const getWbUiGroups = () => {
-    let vars = getVariables({ type: "global" });
-    let map = vars.lulu_wb_ui_groups;
-    if (typeof map === "string") {
-        try { map = JSON.parse(map); } catch (e) { map = {}; }
+  let vars = getVariables({ type: "global" });
+  let map = vars.lulu_wb_ui_groups;
+  if (typeof map === "string") {
+    try {
+      map = JSON.parse(map);
+    } catch (e) {
+      map = {};
     }
-    return (map && typeof map === "object") ? map : {};
+  }
+  return map && typeof map === "object" ? map : {};
 };
 const saveWbUiGroups = (obj) => {
-    updateVariablesWith((v) => { v.lulu_wb_ui_groups = obj; return v; }, { type: "global" });
+  updateVariablesWith(
+    (v) => {
+      v.lulu_wb_ui_groups = obj;
+      return v;
+    },
+    { type: "global" },
+  );
 };
 const getEntryUiGroup = (wbName, uid) => {
-    const map = getWbUiGroups();
-    return (map[wbName] && map[wbName][uid]) ? map[wbName][uid] : "";
+  const map = getWbUiGroups();
+  return map[wbName] && map[wbName][uid] ? map[wbName][uid] : "";
 };
 let isEntryBatchMode = false;
 let entryBatchSelected = new Set();
@@ -2028,9 +2054,11 @@ $menuBtn.on("click", async () => {
               name: eName,
               enabled: eEnabled,
               content: e.content || e.description || e.text || "",
-              group: "", // 彻底清空，防止触发原生抽卡盲盒诅咒
-              extensions: ext, // 🛡️ 藏进官方保险箱
+              group: "",
+              extensions: ext,
               strategy: strategy,
+              key: strategy.keys || [], // ✨ 补上这行
+              keys: strategy.keys || [], // ✨ 补上这行
               position: position,
               recursion: e.recursion || {
                 prevent_incoming: prevent_in,
@@ -2288,11 +2316,54 @@ $menuBtn.on("click", async () => {
         );
         setTimeout(async () => {
           const entries = await getWorldbook(wb);
+
+          // ✨ 鹿酱为您特制的全属性扁平化兼容层
+          const entriesDict = {};
+          entries.forEach((e) => {
+            // 将我们直观的位置命名降维翻译成酒馆原生要求的数字枚举
+            let posInt = 4; // 默认为深度
+            let pType = e.position?.type || "at_depth";
+            if (pType === "before_character_definition") posInt = 0;
+            else if (pType === "after_character_definition") posInt = 1;
+            else if (pType === "before_example_messages") posInt = 2;
+            else if (pType === "after_example_messages") posInt = 3;
+            else if (pType === "at_depth" || pType === "outlet") posInt = 4;
+
+            let flatEntry = {
+              ...e,
+              comment: e.name || e.comment || "未命名条目",
+              name: e.name || e.comment || "未命名条目",
+              disable: e.enabled === false,
+              enabled: e.enabled !== false,
+              key: e.strategy?.keys || e.key || [],
+              constant: e.strategy?.type === "constant",
+              selective: e.strategy?.type !== "constant",
+              position: posInt,
+              depth: e.position?.depth !== undefined ? e.position.depth : 4,
+              order: e.position?.order !== undefined ? e.position.order : 100,
+              insertion_order:
+                e.position?.order !== undefined ? e.position.order : 100,
+              exclude_recursion:
+                e.recursion?.prevent_incoming ?? e.exclude_recursion ?? false,
+              prevent_recursion:
+                e.recursion?.prevent_outgoing ?? e.prevent_recursion ?? false,
+            };
+
+            if (!flatEntry.extensions) flatEntry.extensions = {};
+            flatEntry.extensions.lulu_data = {
+              strategy: e.strategy,
+              position: e.position,
+              recursion: e.recursion,
+            };
+
+            entriesDict[e.uid] = flatEntry;
+          });
+
           const blob = new Blob(
             [
               JSON.stringify(
                 {
-                  entries: entries,
+                  entries: entriesDict,
                   name: wb,
                   lulu_categories: myCats,
                   lulu_entry_groups: getWbUiGroups()[wb] || {},
@@ -3277,11 +3348,59 @@ $menuBtn.on("click", async () => {
                 let myCats = Object.keys(allCats).filter((k) =>
                   allCats[k].includes(wb),
                 );
+
+                const entriesDict = {};
+                entries.forEach((e) => {
+                  let posInt = 4;
+                  let pType = e.position?.type || "at_depth";
+                  if (pType === "before_character_definition") posInt = 0;
+                  else if (pType === "after_character_definition") posInt = 1;
+                  else if (pType === "before_example_messages") posInt = 2;
+                  else if (pType === "after_example_messages") posInt = 3;
+                  else if (pType === "at_depth" || pType === "outlet")
+                    posInt = 4;
+
+                  let flatEntry = {
+                    ...e,
+                    comment: e.name || e.comment || "未命名条目",
+                    name: e.name || e.comment || "未命名条目",
+                    disable: e.enabled === false,
+                    enabled: e.enabled !== false,
+                    key: e.strategy?.keys || e.key || [],
+                    constant: e.strategy?.type === "constant",
+                    selective: e.strategy?.type !== "constant",
+                    position: posInt,
+                    depth:
+                      e.position?.depth !== undefined ? e.position.depth : 4,
+                    order:
+                      e.position?.order !== undefined ? e.position.order : 100,
+                    insertion_order:
+                      e.position?.order !== undefined ? e.position.order : 100,
+                    exclude_recursion:
+                      e.recursion?.prevent_incoming ??
+                      e.exclude_recursion ??
+                      false,
+                    prevent_recursion:
+                      e.recursion?.prevent_outgoing ??
+                      e.prevent_recursion ??
+                      false,
+                  };
+
+                  if (!flatEntry.extensions) flatEntry.extensions = {};
+                  flatEntry.extensions.lulu_data = {
+                    strategy: e.strategy,
+                    position: e.position,
+                    recursion: e.recursion,
+                  };
+
+                  entriesDict[e.uid] = flatEntry;
+                });
+
                 const blob = new Blob(
                   [
                     JSON.stringify(
                       {
-                        entries: entries,
+                        entries: entriesDict, // 🪄 同样在这里应用新格式
                         name: wb,
                         lulu_categories: myCats,
                         lulu_entry_groups: getWbUiGroups()[wb] || {},
@@ -3302,7 +3421,7 @@ $menuBtn.on("click", async () => {
                 URL.revokeObjectURL(url);
               }, "正在为您打包这本世界书...");
               if (typeof toastr !== "undefined")
-                toastr.success(`[${wb}] 已经装进小包裹，成功导出啦！`);
+                toastr.success(`[${wb}] 已经装进包裹，成功导出啦！`);
             }),
           )
           .append(
@@ -3947,12 +4066,62 @@ $menuBtn.on("click", async () => {
     $ui.find("#wb-entry-search").val("");
     $ui.find("#wb-entry-sort").val("default");
     await withLoadingOverlay(async () => {
-        const fetched = await getWorldbook(wbName);
-        tuneEntries = JSON.parse(JSON.stringify(fetched));
-        tuneEntries.forEach((e) => {
-          e._lulu_ui_group = getEntryUiGroup(wbName, e.uid);
-        });
-        originalTuneEntries = JSON.parse(JSON.stringify(tuneEntries));
+      let fetched;
+      try {
+        // 1. 尝试正常让酒馆读取
+        fetched = await getWorldbook(wbName);
+      } catch (err) {
+        // 2. 如果酒馆原生读取崩溃（说明遇到了缺少 key 的坏档报错 map）
+        if (err.message && err.message.includes("map")) {
+          if (typeof toastr !== "undefined")
+            toastr.warning("检测到该世界书数据残缺，触发底层抢救机制...");
+
+          // 绕过酒馆前端的报错，直接通过底层 API 把原始文件强行拉出来
+          const res = await $.ajax({
+            url: "/api/worldinfo/get",
+            type: "POST",
+            contentType: "application/json",
+            data: JSON.stringify({ name: wbName }),
+          });
+
+          let rawEntries = [];
+          if (Array.isArray(res)) rawEntries = res;
+          else if (res && res.entries)
+            rawEntries = Array.isArray(res.entries)
+              ? res.entries
+              : Object.values(res.entries);
+          else rawEntries = Object.values(res || {});
+
+          // 抢救：强行补齐缺失的 key 和 keys 字段
+          rawEntries.forEach((e) => {
+            if (!e.key) e.key = e.strategy?.keys || [];
+            if (!e.keys) e.keys = e.strategy?.keys || [];
+          });
+
+          // 将抢救好的数据静默写回硬盘，把坏档修复！
+          await $.ajax({
+            url: "/api/worldinfo/edit",
+            type: "POST",
+            contentType: "application/json",
+            data: JSON.stringify({ name: wbName, entries: rawEntries }),
+          });
+
+          fetched = rawEntries;
+          if (typeof toastr !== "undefined")
+            toastr.success("坏档抢救成功！残缺字段已自动修复。");
+        } else {
+          throw err; // 其他未知报错原样抛出
+        }
+      }
+
+      tuneEntries = JSON.parse(JSON.stringify(fetched));
+      tuneEntries.forEach((e) => {
+        e._lulu_ui_group = getEntryUiGroup(wbName, e.uid);
+        // 再加一道日常保险
+        if (!e.key) e.key = e.strategy?.keys || [];
+        if (!e.keys) e.keys = e.strategy?.keys || [];
+      });
+      originalTuneEntries = JSON.parse(JSON.stringify(tuneEntries));
     }, `提取内容...`);
     isEntryBatchMode = false;
     entryBatchSelected.clear();
@@ -3978,8 +4147,6 @@ $menuBtn.on("click", async () => {
     const isGroup =
       localStorage.getItem("lulu_wb_entry_group_view") !== "false"; // 默认是开启哒
     $ui.find("#wb-toggle-entry-group").prop("checked", isGroup);
-
-
 
     renderEntryList();
     $ui
@@ -4133,7 +4300,6 @@ $menuBtn.on("click", async () => {
       if (!groupedEntries[g]) groupedEntries[g] = [];
       groupedEntries[g].push(entry);
     });
-
 
     let sharedOrder = getSharedGroupOrder();
     let orderChanged = false;
@@ -4412,14 +4578,17 @@ $menuBtn.on("click", async () => {
 
         // ✨ 把它们的标签变成胸牌别在衣服上！
         let groupTagHtml = "";
-        if (!isGroupView && entry._lulu_ui_group && entry._lulu_ui_group.trim() !== "") {
-            groupTagHtml = `<span style="font-size:10px; background:rgba(252,196,25,0.15); border:1px solid #fcc419; color:#fcc419; padding:2px 5px; border-radius:4px; margin-right:6px; vertical-align:middle; line-height:1;"><i class="fa-solid fa-folder"></i> ${entry._lulu_ui_group}</span>`;
+        if (
+          !isGroupView &&
+          entry._lulu_ui_group &&
+          entry._lulu_ui_group.trim() !== ""
+        ) {
+          groupTagHtml = `<span style="font-size:10px; background:rgba(252,196,25,0.15); border:1px solid #fcc419; color:#fcc419; padding:2px 5px; border-radius:4px; margin-right:6px; vertical-align:middle; line-height:1;"><i class="fa-solid fa-folder"></i> ${entry._lulu_ui_group}</span>`;
         }
 
         const $info = $(
-          `<div style="flex:1; min-width:0; cursor:${isEntryBatchMode ? "pointer" : "default"};"><div style="font-weight:bold; margin-bottom: 5px; font-size:14px; word-break:break-all; display:flex; align-items:center;">${groupTagHtml}${entry.name || "未定义模块"}</div><div style="font-size:11px;color:gray;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${strategy.type !== "selective" ? '<span class="badge-blue">常驻</span>' : '<span class="badge-green">匹配</span>'}${posBadgeHtml} <span style="margin-left:5px;">${keysInfo}</span></div>${previewHtml}</div>`
+          `<div style="flex:1; min-width:0; cursor:${isEntryBatchMode ? "pointer" : "default"};"><div style="font-weight:bold; margin-bottom: 5px; font-size:14px; word-break:break-all; display:flex; align-items:center;">${groupTagHtml}${entry.name || "未定义模块"}</div><div style="font-size:11px;color:gray;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${strategy.type !== "selective" ? '<span class="badge-blue">常驻</span>' : '<span class="badge-green">匹配</span>'}${posBadgeHtml} <span style="margin-left:5px;">${keysInfo}</span></div>${previewHtml}</div>`,
         );
-
 
         if (isEntryBatchMode)
           $info.on("click", () => {
@@ -4471,7 +4640,9 @@ $menuBtn.on("click", async () => {
         enabled: true,
         content: "",
         group: "",
-        _lulu_ui_group: "", // ✨ 新增给咱们的 UI 使用
+        key: [], // ✨ 补上这行
+        keys: [], // ✨ 补上这行
+        _lulu_ui_group: "",
         strategy: { type: "constant", keys: [] },
         position: { type: "at_depth", role: "system", depth: 0, order: 100 },
         recursion: {
@@ -4485,29 +4656,29 @@ $menuBtn.on("click", async () => {
       renderEntryList();
       openDetailEditView(0);
     });
-    $ui.find("#wb-btn-entry-save").on("click", async () => {
-      await withLoadingOverlay(async () => {
-        const uiGroupsMap = getWbUiGroups();
-        if (!uiGroupsMap[tuneWbName]) uiGroupsMap[tuneWbName] = {};
-        const pureEntries = JSON.parse(JSON.stringify(tuneEntries));
+  $ui.find("#wb-btn-entry-save").on("click", async () => {
+    await withLoadingOverlay(async () => {
+      const uiGroupsMap = getWbUiGroups();
+      if (!uiGroupsMap[tuneWbName]) uiGroupsMap[tuneWbName] = {};
+      const pureEntries = JSON.parse(JSON.stringify(tuneEntries));
 
-        pureEntries.forEach((e) => {
-          if (e._lulu_ui_group && e._lulu_ui_group.trim() !== "") {
-            uiGroupsMap[tuneWbName][e.uid] = e._lulu_ui_group.trim();
-          } else {
-            delete uiGroupsMap[tuneWbName][e.uid]; // 如果设置成了未分类，就移除
-          }
-          delete e._lulu_ui_group;
-        });
-        saveWbUiGroups(uiGroupsMap); // 妥善保管！
-        await replaceWorldbook(tuneWbName, pureEntries);
-      }, `写入并洗礼中...`);
+      pureEntries.forEach((e) => {
+        if (e._lulu_ui_group && e._lulu_ui_group.trim() !== "") {
+          uiGroupsMap[tuneWbName][e.uid] = e._lulu_ui_group.trim();
+        } else {
+          delete uiGroupsMap[tuneWbName][e.uid]; // 如果设置成了未分类，就移除
+        }
+        delete e._lulu_ui_group;
+      });
+      saveWbUiGroups(uiGroupsMap); // 妥善保管！
+      await replaceWorldbook(tuneWbName, pureEntries);
+    }, `写入并洗礼中...`);
 
-      originalTuneEntries = JSON.parse(JSON.stringify(tuneEntries));
-      toastr.success(`[${tuneWbName}] 的修改已经成功保存啦！`);
-      if (tuneReturnView === "#wb-main-view") renderData();
-      else if (tuneReturnView === "#wb-char-view") renderCharView();
-    });
+    originalTuneEntries = JSON.parse(JSON.stringify(tuneEntries));
+    toastr.success(`[${tuneWbName}] 的修改已经成功保存啦！`);
+    if (tuneReturnView === "#wb-main-view") renderData();
+    else if (tuneReturnView === "#wb-char-view") renderCharView();
+  });
   $ui.find("#wb-btn-entry-cancel").on("click", async () => {
     const isDirty =
       JSON.stringify(tuneEntries) !== JSON.stringify(originalTuneEntries);
@@ -4581,7 +4752,6 @@ $menuBtn.on("click", async () => {
     }
   });
 
-
   const openDetailEditView = (index) => {
     tuneDetailIndex = index;
     const e = tuneEntries[index];
@@ -4628,15 +4798,22 @@ $menuBtn.on("click", async () => {
       order = parseInt($ui.find("#wb-det-order").val()) || 100;
     e.name = $ui.find("#wb-det-name").val();
     e.content = $ui.find("#wb-det-content").val();
+
+    // ✨ --- 改动开始：提取关键字并同步给底层 --- ✨
+    const parsedKeys = $ui
+      .find("#wb-det-keys")
+      .val()
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
     e.strategy = {
       type: $ui.find("#wb-det-strategy").val(),
-      keys: $ui
-        .find("#wb-det-keys")
-        .val()
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
+      keys: parsedKeys,
     };
+    e.key = parsedKeys; // ✨ 补齐给酒馆底层认的字段
+    e.keys = parsedKeys; // ✨ 补齐给酒馆底层认的字段
+    // ✨ --- 改动结束 --- ✨
+
     if (pos.startsWith("at_depth_"))
       e.position = {
         type: "at_depth",
@@ -4978,4 +5155,3 @@ $menuBtn.on("click", async () => {
     }, 300);
   })();
 });
-
