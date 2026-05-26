@@ -16,19 +16,15 @@ const $menuBtn = $("<a>", {
   )
   .append($("<span>").text("全局世界书管理"));
 
-// 1. 优先寻找“删除消息”按钮（SillyTavern 原生基础按钮，基本所有版本都有）
 let $insertTarget = $("#option_delete_mes");
 
-// 2. 如果因为某些原因找不到“删除消息”，退一步寻找最后一条分割线
 if ($insertTarget.length === 0) {
   $insertTarget = $(".options-content").find("hr").last();
 }
 
-// 3. 执行插入：只要找到了目标，就插在它前面
 if ($insertTarget.length > 0) {
   $menuBtn.insertBefore($insertTarget);
 } else {
-  // 4. 终极兜底：如果旧版本界面被魔改得面目全非，直接把它追加到菜单列表的最下面，保证必定能看见
   const $container = $(".options-content").length
     ? $(".options-content")
     : $("#options");
@@ -1002,8 +998,8 @@ $menuBtn.on("click", async () => {
                         <input type="checkbox" id="wb-toggle-native-magic" style="accent-color: #51cf66; transform: scale(1.1);">
                         <span style="font-weight: bold; color: #51cf66;">🪄 原生分类同步</span>
                     </label>
-                    <button id="wb-theme-quick-toggle" class="menu_button interactable" style="margin: 0; padding: 4px 10px; min-width: unset; font-size: 13px; border-radius: 6px; background: rgba(125,125,125,0.1); border: 1px solid var(--SmartThemeBorderColor); flex-shrink: 0; white-space: nowrap;" title="一键切换深色/浅色护眼模式"><i class="fa-solid fa-circle-half-stroke"></i></button>
-                    <button id="wb-theme-toggle-btn" class="menu_button interactable" style="margin: 0; padding: 4px 10px; min-width: unset; font-size: 13px; border-radius: 6px; background: rgba(125,125,125,0.1); border: 1px solid var(--SmartThemeBorderColor); flex-shrink: 0; white-space: nowrap;"><i class="fa-solid fa-palette"></i> 色彩微调</button>
+                    <button id="wb-theme-quick-toggle" class="menu_button interactable btn-primary" style="margin: 0; padding: 4px 10px; min-width: unset; font-size: 13px; border-radius: 6px; flex-shrink: 0; white-space: nowrap;" title="一键切换深色/浅色护眼模式"><i class="fa-solid fa-circle-half-stroke"></i></button>
+                    <button id="wb-theme-toggle-btn" class="menu_button interactable btn-primary" style="margin: 0; padding: 4px 10px; min-width: unset; font-size: 13px; border-radius: 6px; flex-shrink: 0; white-space: nowrap;"><i class="fa-solid fa-palette"></i> 色彩微调</button>
                 </div>
                 <div style="display: flex; gap: 5px; align-items: center; background: var(--SmartThemeBlurTintColor); padding: 3px; border-radius: 6px; border: 1px solid var(--SmartThemeBorderColor); flex-shrink: 0;">
                     <button id="wb-zoom-out" class="menu_button interactable" style="margin:0; padding: 4px 10px; min-width: unset;" title="缩小"><i class="fa-solid fa-minus"></i></button>
@@ -1016,7 +1012,7 @@ $menuBtn.on("click", async () => {
             <div id="wb-theme-config-panel" style="display:none; margin-bottom: 12px; border-radius: 8px; border: 1px dashed var(--SmartThemeQuoteColor); background: rgba(0,0,0,0.1); padding: 12px;">
                 <div style="font-weight: bold; margin-bottom: 10px; color: var(--SmartThemeQuoteColor); display:flex; align-items:center; gap:6px;">
                     <i class="fa-solid fa-paint-roller"></i> 皮肤调色板
-                    <span style="font-weight:normal; font-size:12px; color:gray;">(独立于酒馆全局，随意调整，妈妈再也不用担心我看不清字啦)</span>
+                    <span style="font-weight:normal; font-size:12px; color:gray;">(独立于酒馆全局，随意调整)</span>
                 </div>
                 <div style="display:flex; gap:12px; align-items: center; flex-wrap: wrap;">
                     <label style="font-size: 13px; font-weight: bold; margin-bottom: 0;">当前模式：</label>
@@ -1033,13 +1029,22 @@ $menuBtn.on("click", async () => {
                         </div>
                         <div style="display:flex; align-items:center; gap:6px;">
                             <label style="font-size:12px; font-weight:bold;">文字色:</label>
-                            <input type="color" id="wb-theme-cp-text" value="#ffffff" style="width:32px; height:28px; border:none; padding:0; cursor:pointer;" title="文字及部分边框色">
+                            <input type="color" id="wb-theme-cp-text" value="#ffffff" style="width:32px; height:28px; border:none; padding:0; cursor:pointer;" title="常规文字颜色">
                         </div>
                         <div style="display:flex; align-items:center; gap:6px;">
-                            <label style="font-size:12px; font-weight:bold;">整体背景透明度:</label>
-                            <input type="range" id="wb-theme-cp-alpha" min="0" max="100" value="95" style="width:100px; cursor:pointer;">
+                            <label style="font-size:12px; font-weight:bold; color:var(--SmartThemeQuoteColor);">强调色:</label>
+                            <input type="color" id="wb-theme-cp-accent" value="#70a1ff" style="width:32px; height:28px; border:none; padding:0; cursor:pointer;" title="按钮、边框、图标的高亮颜色！">
+                        </div>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <label style="font-size:12px; font-weight:bold;">输入框:</label>
+                            <input type="color" id="wb-theme-cp-input-bg" value="#1a1c1f" style="width:32px; height:28px; border:none; padding:0; cursor:pointer;" title="搜索框与下拉菜单的底色">
+                        </div>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <label style="font-size:12px; font-weight:bold;">整体透明度:</label>
+                            <input type="range" id="wb-theme-cp-alpha" min="0" max="100" value="95" style="width:70px; cursor:pointer;">
                             <span id="wb-theme-cp-alpha-val" style="font-size:12px; min-width:30px;">95%</span>
                         </div>
+                        <button id="wb-theme-random-btn" class="menu_button interactable btn-warning wb-nowrap-btn" style="margin:0; padding:4px 8px; font-size:12px; border:none; border-radius:4px;"><i class="fa-solid fa-dice"></i> 随机盲盒</button>
                     </div>
                 </div>
             </div>
@@ -1083,17 +1088,17 @@ $menuBtn.on("click", async () => {
                     </div>
 
                     <div class="wb-controls-group">
-                        <button id="wb-btn-force-scan" class="menu_button interactable wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px; background: rgba(51, 154, 240, 0.1); color: #339af0; border: 1px solid #339af0;" title="在面板外部修改了其他没加载卡片的绑定状态？点这里重新翻一遍记忆哦！"><i class="fa-solid fa-rotate-right"></i> 深度重扫</button>
-                        <button id="wb-btn-batch-toggle" class="menu_button interactable wb-nowrap-btn btn-warning" style="margin: 0; padding: 6px 12px; font-size: 12px; color: #fcc419; background: rgba(252, 196, 25, 0.1); border-color: #fcc419;"><i class="fa-solid fa-layer-group"></i> 批量操作模式</button>
-                        <button id="wb-btn-select-all" class="menu_button interactable wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px;"><i class="fa-solid fa-check-double"></i> 全选当前项</button>
-                        <button id="wb-btn-deselect-all" class="menu_button interactable wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px;"><i class="fa-regular fa-square"></i> 撤销当前全选</button>
+                        <button id="wb-btn-force-scan" class="menu_button interactable wb-nowrap-btn btn-primary" style="margin: 0; padding: 6px 12px; font-size: 12px;" title="在面板外部修改了其他没加载卡片的绑定状态？点这里重新翻一遍记忆哦！"><i class="fa-solid fa-rotate-right"></i> 深度重扫</button>
+                        <button id="wb-btn-batch-toggle" class="menu_button interactable wb-nowrap-btn btn-warning" style="margin: 0; padding: 6px 12px; font-size: 12px;"><i class="fa-solid fa-layer-group"></i> 批量操作模式</button>
+                        <button id="wb-btn-select-all" class="menu_button interactable wb-nowrap-btn btn-success" style="margin: 0; padding: 6px 12px; font-size: 12px;"><i class="fa-solid fa-check-double"></i> 全选当前项</button>
+                        <button id="wb-btn-deselect-all" class="menu_button interactable wb-nowrap-btn btn-danger" style="margin: 0; padding: 6px 12px; font-size: 12px;"><i class="fa-regular fa-square"></i> 撤销当前全选</button>
                         <button id="wb-btn-create-wb" class="menu_button interactable btn-success wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px; border:none;"><i class="fa-solid fa-plus"></i> 新建</button>
-                        <button type="button" id="wb-btn-import-wb" class="menu_button interactable btn-success wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px; border:none; background: rgba(32, 201, 151, 0.15); color: #20c997; border: 1px solid rgba(32, 201, 151, 0.5);"><i class="fa-solid fa-file-import"></i> 批量导入</button>
+                        <button type="button" id="wb-btn-import-wb" class="menu_button interactable btn-success wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px; border:none; background: rgba(32, 201, 151, 0.15) !important; color: #20c997 !important; border: 1px solid rgba(32, 201, 151, 0.5) !important;"><i class="fa-solid fa-file-import"></i> 批量导入</button>
                     </div>
                 </div>
 
                 <div class="wb-btn-group" id="wb-main-close-row">
-                    <div class="wb-action-btn wb-nowrap-btn" id="wb-btn-clear" style="color: #888;"><i class="fa-solid fa-power-off"></i> 关闭当前所有全局启用</div>
+                    <div class="wb-action-btn wb-nowrap-btn btn-primary" id="wb-btn-clear"><i class="fa-solid fa-power-off"></i> 关闭当前所有全局启用</div>
                 </div>
 
                 <div class="wb-btn-group" id="wb-main-ops-grid">
@@ -1377,7 +1382,10 @@ $menuBtn.on("click", async () => {
                                 </div>
                             </div>
                             <div class="wb-form-group" style="flex: 1; display: flex; flex-direction: column; margin-bottom: 0;">
-                                <label style="font-size: 13px; font-weight: bold; margin-bottom: 8px; color: var(--SmartThemeQuoteColor);">📜 正文内容</label>
+                                <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px;">
+                                    <label style="font-size: 13px; font-weight: bold; margin-bottom: 0; color: var(--SmartThemeQuoteColor);">📜 正文内容</label>
+                                    <span id="wb-det-token-count" style="font-size: 11px; color: gray; background: rgba(125,125,125,0.15); padding: 2px 6px; border-radius: 4px;">0 Tokens</span>
+                                </div>
                                 <textarea id="wb-det-content" class="wb-input-dt" style="flex: 1; min-height: 150px; font-size: 13px; padding: 10px; resize: none;"></textarea>
                             </div>
                         </div>
@@ -1407,6 +1415,7 @@ $menuBtn.on("click", async () => {
     $("#lulu-theme-override-style").remove();
     let overrideCSS = "";
     const $quickIcon = $ui.find("#wb-theme-quick-toggle i");
+
     if (mode === "light") {
       $quickIcon
         .removeClass("fa-moon fa-circle-half-stroke")
@@ -1424,35 +1433,83 @@ $menuBtn.on("click", async () => {
         .css("color", "var(--SmartThemeBodyColor)");
     }
 
+    let inputBgCss = "";
+    let accentCss = "";
+
+    // 预设主题参数与强调色变量注入
     if (mode === "dark") {
-      overrideCSS = `dialog.wb-manager-dialog { background: rgba(22, 24, 28, 1) !important; border: 1px solid #d1c5a1 !important; } dialog.wb-manager-dialog, #wb-manager-panel { --SmartThemeBlurTintColor: rgba(22, 24, 28, 1) !important; --SmartThemeBotMesColor: rgba(32, 35, 40, 1) !important; --SmartThemeBodyColor: #c0c2c8 !important; --SmartThemeQuoteColor: #d1c5a1 !important; --SmartThemeBorderColor: #3d414d !important; color: #c0c2c8 !important; }`;
+      inputBgCss = `--lulu-input-bg: rgba(35, 38, 43, 1);`;
+      accentCss = `--SmartThemeQuoteColor: #d1c5a1 !important;`;
+      overrideCSS = `dialog.wb-manager-dialog { background: rgba(22, 24, 28, 1) !important; border: 1px solid #d1c5a1 !important; } dialog.wb-manager-dialog, #wb-manager-panel { --SmartThemeBlurTintColor: rgba(22, 24, 28, 1) !important; --SmartThemeBotMesColor: rgba(32, 35, 40, 1) !important; --SmartThemeBodyColor: #c0c2c8 !important; ${accentCss} --SmartThemeBorderColor: #3d414d !important; color: #c0c2c8 !important; }`;
     } else if (mode === "light") {
-      overrideCSS = `dialog.wb-manager-dialog { background: rgba(253, 246, 227, 1) !important; border: 1px solid #8b5d33 !important; } dialog.wb-manager-dialog, #wb-manager-panel { --SmartThemeBlurTintColor: rgba(253, 246, 227, 1) !important; --SmartThemeBotMesColor: rgba(255, 251, 240, 1) !important; --SmartThemeBodyColor: #4a3b32 !important; --SmartThemeQuoteColor: #8b5d33 !important; --SmartThemeBorderColor: #e0d0b8 !important; color: #4a3b32 !important; } dialog.wb-manager-dialog *, #wb-manager-panel * { text-shadow: none !important; }`;
+      inputBgCss = `--lulu-input-bg: rgba(255, 255, 255, 0.7);`;
+      accentCss = `--SmartThemeQuoteColor: #8b5d33 !important;`;
+      overrideCSS = `dialog.wb-manager-dialog { background: rgba(253, 246, 227, 1) !important; border: 1px solid #8b5d33 !important; } dialog.wb-manager-dialog, #wb-manager-panel { --SmartThemeBlurTintColor: rgba(253, 246, 227, 1) !important; --SmartThemeBotMesColor: rgba(255, 251, 240, 1) !important; --SmartThemeBodyColor: #4a3b32 !important; ${accentCss} --SmartThemeBorderColor: #e0d0b8 !important; color: #4a3b32 !important; } dialog.wb-manager-dialog *, #wb-manager-panel * { text-shadow: none !important; }`;
     } else if (mode === "custom") {
+      inputBgCss = `--lulu-input-bg: ${customConfig.inputBg || customConfig.bg};`;
+      // ✨ 核心：截断酒馆的主题高亮，换上我们自己的强调色！
+      accentCss = `--SmartThemeQuoteColor: ${customConfig.accent || "#70a1ff"} !important;`;
       const bgRgba = hexToRgba(customConfig.bg, customConfig.alpha);
-      overrideCSS = `dialog.wb-manager-dialog { background: ${bgRgba} !important; border: 1px solid var(--SmartThemeQuoteColor) !important; } dialog.wb-manager-dialog, #wb-manager-panel { --SmartThemeBlurTintColor: ${bgRgba} !important; --SmartThemeBotMesColor: ${customConfig.bg} !important; --SmartThemeBodyColor: ${customConfig.text} !important; color: ${customConfig.text} !important; }`;
+      overrideCSS = `dialog.wb-manager-dialog { background: ${bgRgba} !important; border: 1px solid var(--SmartThemeQuoteColor) !important; } dialog.wb-manager-dialog, #wb-manager-panel { --SmartThemeBlurTintColor: ${bgRgba} !important; --SmartThemeBotMesColor: ${customConfig.bg} !important; --SmartThemeBodyColor: ${customConfig.text} !important; ${accentCss} color: ${customConfig.text} !important; }`;
       $ui.find("#wb-theme-custom-opts").css("display", "flex");
+    } else {
+      inputBgCss = `--lulu-input-bg: var(--SmartThemeBotMesColor);`;
+      accentCss = "";
     }
 
-    if (mode !== "custom") {
-      $ui.find("#wb-theme-custom-opts").hide();
-    }
-    if (overrideCSS) {
+    if (mode !== "custom") $ui.find("#wb-theme-custom-opts").hide();
+
+    // 强化覆盖：确保所有 primary 按钮与全局高亮卡片绝对服从我们的强调色！
+    overrideCSS += `
+        dialog.wb-manager-dialog { ${inputBgCss} }
+        dialog.wb-manager-dialog input[type="text"], 
+        dialog.wb-manager-dialog input[type="number"], 
+        dialog.wb-manager-dialog select {
+            background: var(--lulu-input-bg) !important;
+            color: var(--SmartThemeBodyColor) !important;
+            border: 1px solid var(--SmartThemeBorderColor) !important;
+        }
+        dialog.wb-manager-dialog input::placeholder { color: gray !important; }
+        
+        .wb-global-active {
+            border: 1px solid var(--SmartThemeQuoteColor) !important;
+            border-left: 4px solid var(--SmartThemeQuoteColor) !important;
+            background: var(--SmartThemeBlurTintColor) !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
+        }
+        .wb-global-active .wb-name-text { font-weight: bold; }
+
+        /* 强制接管按钮，脱离酒馆原生干扰 */
+        dialog.wb-manager-dialog .btn-primary { 
+            color: var(--SmartThemeQuoteColor) !important; 
+            border-color: var(--SmartThemeQuoteColor) !important; 
+            background: rgba(125, 125, 125, 0.08) !important;
+        }
+        dialog.wb-manager-dialog .btn-primary:hover { 
+            background: var(--SmartThemeQuoteColor) !important; 
+            color: var(--SmartThemeBotMesColor) !important; /* 悬浮时字体变为背景色，对比度极佳 */
+        }
+    `;
+
+    if (overrideCSS)
       $ui.append(
         `<style id="lulu-theme-override-style">${overrideCSS}</style>`,
       );
-    }
   };
 
   const loadThemeSettings = () => {
     const savedMode = localStorage.getItem("lulu_wb_panel_theme") || "default";
     const savedCustom = JSON.parse(
       localStorage.getItem("lulu_wb_panel_custom_colors") ||
-        '{"bg":"#2a2e33", "text":"#ffffff", "alpha":95}',
+        '{"bg":"#2a2e33", "text":"#ffffff", "accent":"#70a1ff", "alpha":95, "inputBg":"#1a1c1f"}',
     );
     $ui.find("#wb-theme-select").val(savedMode);
     $ui.find("#wb-theme-cp-bg").val(savedCustom.bg);
     $ui.find("#wb-theme-cp-text").val(savedCustom.text);
+    $ui.find("#wb-theme-cp-accent").val(savedCustom.accent || "#70a1ff");
+    $ui
+      .find("#wb-theme-cp-input-bg")
+      .val(savedCustom.inputBg || savedCustom.bg);
     $ui.find("#wb-theme-cp-alpha").val(savedCustom.alpha);
     $ui.find("#wb-theme-cp-alpha-val").text(savedCustom.alpha + "%");
     applyTheme(savedMode, savedCustom);
@@ -1462,38 +1519,136 @@ $menuBtn.on("click", async () => {
     const mode = $ui.find("#wb-theme-select").val(),
       cBg = $ui.find("#wb-theme-cp-bg").val(),
       cText = $ui.find("#wb-theme-cp-text").val(),
+      cAccent = $ui.find("#wb-theme-cp-accent").val(),
+      cInputBg = $ui.find("#wb-theme-cp-input-bg").val(),
       cAlpha = parseInt($ui.find("#wb-theme-cp-alpha").val());
     $ui.find("#wb-theme-cp-alpha-val").text(cAlpha + "%");
-    const cConf = { bg: cBg, text: cText, alpha: cAlpha };
+    const cConf = {
+      bg: cBg,
+      text: cText,
+      accent: cAccent,
+      alpha: cAlpha,
+      inputBg: cInputBg,
+    };
     localStorage.setItem("lulu_wb_panel_theme", mode);
     localStorage.setItem("lulu_wb_panel_custom_colors", JSON.stringify(cConf));
     applyTheme(mode, cConf);
   };
 
   $ui
-    .find("#wb-theme-toggle-btn")
-    .on("click", () => $ui.find("#wb-theme-config-panel").slideToggle("fast"));
-  $ui
     .find(
-      "#wb-theme-select, #wb-theme-cp-bg, #wb-theme-cp-text, #wb-theme-cp-alpha",
+      "#wb-theme-select, #wb-theme-cp-bg, #wb-theme-cp-text, #wb-theme-cp-accent, #wb-theme-cp-input-bg, #wb-theme-cp-alpha",
     )
     .on("input change", updateThemeAndSave);
-  $ui.find("#wb-theme-quick-toggle").on("click", () => {
-    let currentMode = $ui.find("#wb-theme-select").val();
-    if (
-      currentMode === "default" ||
-      currentMode === "dark" ||
-      currentMode === "custom"
-    ) {
-      $ui.find("#wb-theme-select").val("light").trigger("change");
-      if (typeof toastr !== "undefined")
-        toastr.success("已为您开启：浅色模式 ☀️");
-    } else if (currentMode === "light") {
-      $ui.find("#wb-theme-select").val("dark").trigger("change");
-      if (typeof toastr !== "undefined")
-        toastr.success("已为您开启：深色模式 🌙");
-    }
-  });
+
+  // 🎨 HSL 色彩转换器
+  const hslToHex = (h, s, l) => {
+    l /= 100;
+    const a = (s * Math.min(l, 1 - l)) / 100;
+    const f = (n) => {
+      const k = (n + h / 30) % 12;
+      const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+      return Math.round(255 * color)
+        .toString(16)
+        .padStart(2, "0");
+    };
+    return `#${f(0)}${f(8)}${f(4)}`;
+  };
+
+  // 🎲 高级色彩美学盲盒发生器
+  $ui
+    .find("#wb-theme-random-btn")
+    .off("click")
+    .on("click", () => {
+      const isDark = Math.random() > 0.4;
+      const isContrast = Math.random() > 0.6; // 40% 概率触发绝美撞色系！
+
+      const baseHue = Math.floor(Math.random() * 360);
+      let accentHue = baseHue;
+
+      if (isContrast) {
+        // 撞色逻辑：分裂互补色（偏移150到210度），色彩反差大但极具设计感
+        accentHue = (baseHue + 150 + Math.floor(Math.random() * 60)) % 360;
+      } else {
+        // 同色系逻辑：微微偏移（-20到+20度），色彩非常和谐统一
+        accentHue = (baseHue + Math.floor(Math.random() * 40) - 20 + 360) % 360;
+      }
+
+      let bg, text, inputBg, accent;
+
+      if (isDark) {
+        // 【高级质感暗色调】
+        const bgSat = Math.floor(Math.random() * 20) + 10; // 低饱和度底色 (10-30)
+        const bgLight = Math.floor(Math.random() * 10) + 12; // 极低亮度 (12-22)
+        bg = hslToHex(baseHue, bgSat, bgLight);
+        inputBg = hslToHex(baseHue, bgSat, Math.max(8, bgLight - 4)); // 输入框稍暗
+
+        // 强调色：在深色背景上需要明亮且抢眼
+        const accSat = isContrast
+          ? Math.floor(Math.random() * 30) + 60
+          : Math.floor(Math.random() * 20) + 40;
+        const accLight = Math.floor(Math.random() * 15) + 65;
+        accent = hslToHex(accentHue, accSat, accLight);
+
+        // 文字色：极亮，带着一丝强调色的光晕
+        text = hslToHex(accentHue, 15, 85 + Math.floor(Math.random() * 10));
+      } else {
+        // 【清新淡雅亮色调】
+        const bgSat = Math.floor(Math.random() * 25) + 15; // 中低饱和度底色 (15-40)
+        const bgLight = Math.floor(Math.random() * 8) + 88; // 极高亮度 (88-95)
+        bg = hslToHex(baseHue, bgSat, bgLight);
+        inputBg = hslToHex(baseHue, Math.max(0, bgSat - 10), 98); // 输入框近乎纯白
+
+        // 强调色：在浅色背景上需要浓重且有力量
+        const accSat = isContrast
+          ? Math.floor(Math.random() * 40) + 40
+          : Math.floor(Math.random() * 20) + 30;
+        const accLight = Math.floor(Math.random() * 15) + 30; // 较暗 (30-45)
+        accent = hslToHex(accentHue, accSat, accLight);
+
+        // 文字色：极暗，带着一丝强调色的深邃
+        text = hslToHex(accentHue, 20, 15 + Math.floor(Math.random() * 10));
+      }
+
+      // 将计算出的色彩填入面板并自动保存应用
+      $ui.find("#wb-theme-cp-bg").val(bg);
+      $ui.find("#wb-theme-cp-text").val(text);
+      $ui.find("#wb-theme-cp-accent").val(accent);
+      $ui.find("#wb-theme-cp-input-bg").val(inputBg);
+      $ui
+        .find("#wb-theme-cp-alpha")
+        .val(Math.floor(Math.random() * 15) + 85)
+        .trigger("input");
+
+      if (typeof toastr !== "undefined") {
+        const flavor = isContrast ? "✨ 这次好像是撞色" : "🌿 这次好像是同色";
+        toastr.success(flavor);
+      }
+    });
+
+  $ui
+    .find("#wb-theme-toggle-btn")
+    .off("click")
+    .on("click", () => $ui.find("#wb-theme-config-panel").slideToggle("fast"));
+  $ui
+    .find("#wb-theme-quick-toggle")
+    .off("click")
+    .on("click", () => {
+      let currentMode = $ui.find("#wb-theme-select").val();
+      if (
+        currentMode === "default" ||
+        currentMode === "dark" ||
+        currentMode === "custom"
+      ) {
+        $ui.find("#wb-theme-select").val("light").trigger("change");
+        if (typeof toastr !== "undefined")
+          toastr.success("已为您开启：浅色模式 ☀️");
+      } else if (currentMode === "light") {
+        $ui.find("#wb-theme-select").val("dark").trigger("change");
+        if (typeof toastr !== "undefined")
+          toastr.success("已为您开启：深色模式 🌙");
+      }
+    });
 
   loadThemeSettings();
 
@@ -3175,7 +3330,14 @@ $menuBtn.on("click", async () => {
       const myCats = Object.keys(wCatSettings).filter(
         (k) => Array.isArray(wCatSettings[k]) && wCatSettings[k].includes(wb),
       );
-      const $wrapper = $('<div class="wb-item-wrapper"></div>').attr(
+
+      // ✨ 检查是否开启，如果开启则套上我们在第二步写的高亮类名！
+      const isActiveWb = activeWbs.includes(wb);
+      const wrapperClass = isActiveWb
+        ? "wb-item-wrapper wb-global-active"
+        : "wb-item-wrapper";
+
+      const $wrapper = $(`<div class="${wrapperClass}"></div>`).attr(
         "data-wb-name",
         wb,
       );
@@ -3183,6 +3345,7 @@ $menuBtn.on("click", async () => {
       const $titleArea = $(
         '<label class="wb-item-title-area" style="cursor:pointer;"></label>',
       );
+
       let $chk;
       if (isBatchMode) {
         $chk = $(
@@ -3198,7 +3361,7 @@ $menuBtn.on("click", async () => {
       } else {
         $chk = $(
           '<input type="checkbox" style="transform: scale(1.2); margin-top:2px; flex-shrink:0;">',
-        ).prop("checked", activeWbs.includes(wb));
+        ).prop("checked", isActiveWb);
         $chk.on("change", async function () {
           await withLoadingOverlay(async () => {
             let current = getGlobalWorldbookNames();
@@ -3211,12 +3374,17 @@ $menuBtn.on("click", async () => {
         });
       }
       $titleArea.append($chk);
-      const statusStyle =
-        activeWbs.includes(wb) && !isBatchMode
-          ? "color: var(--SmartThemeQuoteColor);"
-          : "";
+
+      // ✨ 额外增加左侧的启用“✔”图标和小高亮文字
+      const statusStyle = isActiveWb
+        ? "color: var(--SmartThemeQuoteColor);"
+        : "";
+      const activeIcon = isActiveWb
+        ? `<i class="fa-solid fa-circle-check" style="margin-right:4px;"></i>`
+        : "";
+
       $titleArea.append(
-        `<span class="wb-name-text" style="${statusStyle}" title="${wb}">${wb}</span>`,
+        `<span class="wb-name-text" style="${statusStyle}" title="${wb}">${activeIcon}${wb}</span>`,
       );
       $header.append($titleArea);
       const $bottomBar = $('<div class="wb-item-bottom"></div>');
@@ -4672,7 +4840,7 @@ $menuBtn.on("click", async () => {
       });
       saveWbUiGroups(uiGroupsMap); // 妥善保管！
       await replaceWorldbook(tuneWbName, pureEntries);
-    }, `写入并洗礼中...`);
+    }, `写入中...`);
 
     originalTuneEntries = JSON.parse(JSON.stringify(tuneEntries));
     toastr.success(`[${tuneWbName}] 的修改已经成功保存啦！`);
@@ -4680,8 +4848,42 @@ $menuBtn.on("click", async () => {
     else if (tuneReturnView === "#wb-char-view") renderCharView();
   });
   $ui.find("#wb-btn-entry-cancel").on("click", async () => {
-    const isDirty =
+    // 1. 检查是否在条目列表中发生了暂存、勾选、排序等已经写入数组的修改
+    let isDirty =
       JSON.stringify(tuneEntries) !== JSON.stringify(originalTuneEntries);
+
+    // 2. 检查右侧参数编辑面板中，是否有“写了但忘记点暂存”的内容
+    if (!isDirty && tuneDetailIndex !== -1) {
+      const e = tuneEntries[tuneDetailIndex];
+      if (e) {
+        // 获取当前界面上的实时内容
+        const currentName = $ui.find("#wb-det-name").val() || "";
+        const currentContent = $ui.find("#wb-det-content").val() || "";
+        const currentKeys = $ui
+          .find("#wb-det-keys")
+          .val()
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .join(",");
+
+        // 获取条目原本的内容
+        const originalName = e.name || "";
+        const originalContent = e.content || "";
+        const originalKeys = (e.strategy?.keys || []).join(",");
+
+        // 如果界面上的字和源数据不一样，说明有未暂存的修改！
+        if (
+          currentName !== originalName ||
+          currentContent !== originalContent ||
+          currentKeys !== originalKeys
+        ) {
+          isDirty = true;
+        }
+      }
+    }
+
+    // 3. 触发弹窗
     if (isDirty) {
       const confirm = await SillyTavern.callGenericPopup(
         `当前条目的更改还没点击左下角<strong style="color:var(--SmartThemeQuoteColor);">绿色确认按钮</strong>哦！<br>真的要放弃这些修改直接返回吗？`,
@@ -4689,6 +4891,7 @@ $menuBtn.on("click", async () => {
       );
       if (confirm !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
     }
+
     $ui.find("#wb-entry-view").hide();
     $ui.find("#wb-manager-panel").removeClass("wb-entry-focus");
     $ui.find("#wb-tab-strip").show();
@@ -4740,7 +4943,34 @@ $menuBtn.on("click", async () => {
     )
     .on("focus", ensureEntryEditorVisible)
     .on("click", ensureEntryEditorVisible);
+  // ✨ --- 新增：Token计算与防抖逻辑 ---
+  let wbTokenCalcTimer;
+  const updateWbTokenCount = async () => {
+    const text = $ui.find("#wb-det-content").val() || "";
+    if (!text) {
+      $ui.find("#wb-det-token-count").text("0 Tokens");
+      return;
+    }
+    try {
+      let tokens = 0;
+      if (typeof getTokenCount === "function") {
+        tokens = await getTokenCount(text); // 调用酒馆原生的Token计算
+      } else {
+        tokens = Math.ceil(text.length / 2.5); // 如果酒馆未加载完全，用字数粗略估算兜底
+      }
+      $ui.find("#wb-det-token-count").text(`${tokens} Tokens`);
+    } catch (e) {
+      $ui.find("#wb-det-token-count").text("计算失败");
+    }
+  };
 
+  // 监听输入框变化，400毫秒内没有新输入才计算（防止打字卡顿）
+  $ui.find("#wb-det-content").on("input", () => {
+    clearTimeout(wbTokenCalcTimer);
+    $ui.find("#wb-det-token-count").text("...");
+    wbTokenCalcTimer = setTimeout(updateWbTokenCount, 400);
+  });
+  // ✨ --- 新增结束 ---
   let tuneDetailIndex = -1;
   $ui.find("#wb-det-position").on("change", function () {
     const isDepth = $(this).val().startsWith("at_depth_");
@@ -4758,6 +4988,7 @@ $menuBtn.on("click", async () => {
     $ui.find("#wb-detail-title").text(e.name || "空参数");
     $ui.find("#wb-det-name").val(e.name || "");
     $ui.find("#wb-det-content").val(e.content || "");
+    updateWbTokenCount();
     $ui.find("#wb-det-keys").val((e.strategy?.keys || []).join(", "));
     $ui.find("#wb-det-strategy").val(e.strategy?.type || "constant");
     let p = e.position?.type || "at_depth";
@@ -4799,7 +5030,7 @@ $menuBtn.on("click", async () => {
     e.name = $ui.find("#wb-det-name").val();
     e.content = $ui.find("#wb-det-content").val();
 
-    // ✨ --- 改动开始：提取关键字并同步给底层 --- ✨
+    // 提取关键字并同步给底层
     const parsedKeys = $ui
       .find("#wb-det-keys")
       .val()
@@ -4810,9 +5041,8 @@ $menuBtn.on("click", async () => {
       type: $ui.find("#wb-det-strategy").val(),
       keys: parsedKeys,
     };
-    e.key = parsedKeys; // ✨ 补齐给酒馆底层认的字段
-    e.keys = parsedKeys; // ✨ 补齐给酒馆底层认的字段
-    // ✨ --- 改动结束 --- ✨
+    e.key = parsedKeys;
+    e.keys = parsedKeys;
 
     if (pos.startsWith("at_depth_"))
       e.position = {
@@ -4835,22 +5065,83 @@ $menuBtn.on("click", async () => {
     e.exclude_recursion = checkExclude;
     e.prevent_recursion = checkPrevent;
 
-    // 保存后：手机端保持上下同屏；桌面端关闭右侧分栏
+    // ✨ 【新增】：弹窗反馈告诉用户已暂存
+    if (typeof toastr !== "undefined") {
+      toastr.info("当前内容已暂存，彻底保存还要另外点绿色的【确认】哦！");
+    }
+
+    // 保存后：桌面端关闭右侧分栏
     if (window.innerWidth > 768) {
       $ui.find("#wb-entry-detail-side").hide();
+      tuneDetailIndex = -1; // 退出编辑焦点
     }
     renderEntryList();
   });
+  // 关闭分栏按钮：针对单个条目的撤销和退出
+  $ui
+    .find("#wb-btn-det-cancel, #wb-btn-det-close-mobile")
+    .off("click")
+    .on("click", async () => {
+      try {
+        if (tuneDetailIndex !== -1) {
+          const e = tuneEntries[tuneDetailIndex];
+          if (e) {
+            // 稳妥获取数据，防止 undefined，并统一换行符
+            const currentName = $ui.find("#wb-det-name").val() || "";
+            const currentContent = (
+              $ui.find("#wb-det-content").val() || ""
+            ).replace(/\r\n/g, "\n");
+            const originalContent = (e.content || "").replace(/\r\n/g, "\n");
 
-  // 关闭分栏按钮：手机端保持同屏不隐藏，只撤销视觉焦点；桌面端关闭右侧分栏
-  $ui.find("#wb-btn-det-cancel, #wb-btn-det-close-mobile").on("click", () => {
-    if (window.innerWidth > 768) {
-      $ui.find("#wb-entry-detail-side").hide();
-    } else {
-      $ui.find("#wb-entry-detail-side").css("display", "flex");
-    }
-  });
+            const rawKeys = $ui.find("#wb-det-keys").val() || "";
+            const currentKeys = rawKeys
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean)
+              .join(",");
+            const originalKeys = (e.strategy?.keys || []).join(",");
 
+            // 如果发现有改动，触发拦截！
+            if (
+              currentName !== (e.name || "") ||
+              currentContent !== originalContent ||
+              currentKeys !== originalKeys
+            ) {
+              const confirm = await SillyTavern.callGenericPopup(
+                `参数面板里还有没点击“暂存修改”的内容哦！<br>直接撤销将丢失当前修改，确定吗？`,
+                SillyTavern.POPUP_TYPE.CONFIRM,
+              );
+              if (confirm !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+            }
+
+            // ✨ 【核心修复】：将文本框完美回退到修改之前的内容！
+            $ui.find("#wb-det-name").val(e.name || "");
+            $ui.find("#wb-det-content").val(e.content || "");
+            $ui.find("#wb-det-keys").val((e.strategy?.keys || []).join(", "));
+            $ui.find("#wb-detail-title").text(e.name || "未命名条目");
+
+            // 顺手把 Token 计算器也恢复到修改前的字数
+            if (typeof updateWbTokenCount === "function") {
+              updateWbTokenCount();
+            }
+          }
+        }
+
+        // 执行关闭与焦点控制
+        if (window.innerWidth > 768) {
+          // 桌面端：隐藏右侧分栏，并彻底清空当前选中的焦点
+          $ui.find("#wb-entry-detail-side").hide();
+          tuneDetailIndex = -1;
+        } else {
+          // 手机端：因为是上下同屏，没法隐藏，所以保留焦点，但内容已经成功回退了！
+          $ui.find("#wb-entry-detail-side").css("display", "flex");
+        }
+      } catch (err) {
+        console.error("Lulu WB Editor: 撤销按钮发生错误", err);
+        // 如果依然有未知报错，强制兜底关闭，保证界面不卡死
+        if (window.innerWidth > 768) $ui.find("#wb-entry-detail-side").hide();
+      }
+    });
   await popup.show();
 
   // ------------ 最下方的原生书组绑定扩展，保持原样接续 ------------
