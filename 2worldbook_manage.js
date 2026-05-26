@@ -1459,17 +1459,34 @@ $menuBtn.on("click", async () => {
 
     if (mode !== "custom") $ui.find("#wb-theme-custom-opts").hide();
 
-    // 强化覆盖：确保所有 primary 按钮与全局高亮卡片绝对服从我们的强调色！
+    // 强化覆盖：确保所有输入框、大文本框以及聚焦状态绝对服从我们的强调色！
     overrideCSS += `
         dialog.wb-manager-dialog { ${inputBgCss} }
+        
+        /* 基础状态：加入对 textarea 的颜色绑定 */
         dialog.wb-manager-dialog input[type="text"], 
         dialog.wb-manager-dialog input[type="number"], 
-        dialog.wb-manager-dialog select {
+        dialog.wb-manager-dialog select,
+        dialog.wb-manager-dialog textarea {
             background: var(--lulu-input-bg) !important;
             color: var(--SmartThemeBodyColor) !important;
             border: 1px solid var(--SmartThemeBorderColor) !important;
+            transition: border-color 0.15s ease-in-out !important;
         }
-        dialog.wb-manager-dialog input::placeholder { color: gray !important; }
+        
+        /* ✨ 新增：聚焦编辑状态（点进去编辑时，背景依然护眼，且边框亮起你设定的强调色！） */
+        dialog.wb-manager-dialog input[type="text"]:focus, 
+        dialog.wb-manager-dialog input[type="number"]:focus, 
+        dialog.wb-manager-dialog select:focus,
+        dialog.wb-manager-dialog textarea:focus {
+            background: var(--lulu-input-bg) !important;
+            color: var(--SmartThemeBodyColor) !important;
+            border: 1px solid var(--SmartThemeQuoteColor) !important; 
+            outline: none !important;
+        }
+        
+        dialog.wb-manager-dialog input::placeholder,
+        dialog.wb-manager-dialog textarea::placeholder { color: gray !important; }
         
         .wb-global-active {
             border: 1px solid var(--SmartThemeQuoteColor) !important;
@@ -1495,7 +1512,7 @@ $menuBtn.on("click", async () => {
       $ui.append(
         `<style id="lulu-theme-override-style">${overrideCSS}</style>`,
       );
-  };
+  };;
 
   const loadThemeSettings = () => {
     const savedMode = localStorage.getItem("lulu_wb_panel_theme") || "default";
