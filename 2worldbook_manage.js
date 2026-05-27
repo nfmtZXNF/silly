@@ -1053,7 +1053,7 @@ $menuBtn.on("click", async () => {
                             <button id="wb-theme-random-btn" class="menu_button interactable btn-warning wb-nowrap-btn" style="margin:0; padding:4px 8px; font-size:12px; border:none; border-radius:4px;" title="生成随机配色方案"><i class="fa-solid fa-dice"></i> 随机盲盒</button>
                         </div>
                     </div>
-                    
+
                     <!-- 自定义配方盒面板（修复文字遮挡并新增重命名按钮） -->
                     <div id="wb-theme-presets-area" style="display:none; margin-top: 10px; align-items:center; gap:10px; flex-wrap: wrap; background:var(--SmartThemeBotMesColor); padding:6px 12px; border-radius:6px; border:1px solid var(--SmartThemeBorderColor); width: 100%;">
                         <label style="font-size:12px; font-weight:bold;"><i class="fa-solid fa-box-archive" style="color:var(--SmartThemeQuoteColor);"></i> 自定义配方盒:</label>
@@ -1401,6 +1401,28 @@ $menuBtn.on("click", async () => {
                                         <span><strong style="color: var(--SmartThemeBodyColor);">防止进一步递归</strong></span>
                                     </label>
                                 </div>
+                                <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 11px; margin: 0; white-space: nowrap; background: rgba(125,125,125,0.1); padding: 4px 8px; border-radius: 5px; border: 1px solid var(--SmartThemeBorderColor);">
+                                    <input type="checkbox" id="wb-det-advanced-toggle" style="accent-color: var(--SmartThemeQuoteColor);">
+                                    <span><strong style="color: var(--SmartThemeBodyColor);">详细参数</strong></span>
+                                </label>
+                                <div id="wb-det-advanced-panel" style="display:none; flex-wrap: wrap; gap: 8px; align-items: flex-end;">
+                                    <div class="wb-form-group" style="width: 70px; margin-bottom: 0;">
+                                        <label style="font-size: 12px; font-weight: bold; margin-bottom: 4px; color: var(--SmartThemeQuoteColor);">🎲 概率%</label>
+                                        <input type="number" id="wb-det-probability" class="wb-input-dt" min="0" max="100" placeholder="100">
+                                    </div>
+                                    <div class="wb-form-group" style="width: 60px; margin-bottom: 0;">
+                                        <label style="font-size: 12px; font-weight: bold; margin-bottom: 4px; color: var(--SmartThemeQuoteColor);">🧲 黏性</label>
+                                        <input type="number" id="wb-det-sticky" class="wb-input-dt" min="0" placeholder="0">
+                                    </div>
+                                    <div class="wb-form-group" style="width: 60px; margin-bottom: 0;">
+                                        <label style="font-size: 12px; font-weight: bold; margin-bottom: 4px; color: var(--SmartThemeQuoteColor);">❄️ 冷却</label>
+                                        <input type="number" id="wb-det-cooldown" class="wb-input-dt" min="0" placeholder="0">
+                                    </div>
+                                    <div class="wb-form-group" style="width: 60px; margin-bottom: 0;">
+                                        <label style="font-size: 12px; font-weight: bold; margin-bottom: 4px; color: var(--SmartThemeQuoteColor);">⏳ 延迟</label>
+                                        <input type="number" id="wb-det-delay" class="wb-input-dt" min="0" placeholder="0">
+                                    </div>
+                                </div>
                             </div>
                             <div class="wb-form-group" style="flex: 1; display: flex; flex-direction: column; margin-bottom: 0;">
                                 <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px;">
@@ -1485,10 +1507,10 @@ $menuBtn.on("click", async () => {
 
     overrideCSS += `
         dialog.wb-manager-dialog { ${inputBgCss} }
-        
+
         /* 1. 基础状态：加入对 textarea 的颜色绑定 */
-        dialog.wb-manager-dialog input[type="text"], 
-        dialog.wb-manager-dialog input[type="number"], 
+        dialog.wb-manager-dialog input[type="text"],
+        dialog.wb-manager-dialog input[type="number"],
         dialog.wb-manager-dialog select,
         dialog.wb-manager-dialog textarea {
             background: var(--lulu-input-bg) !important;
@@ -1496,20 +1518,20 @@ $menuBtn.on("click", async () => {
             border: 1px solid var(--SmartThemeBorderColor) !important;
             transition: border-color 0.15s ease-in-out !important;
         }
-        
+
         /* 2. 聚焦编辑状态 */
-        dialog.wb-manager-dialog input[type="text"]:focus, 
-        dialog.wb-manager-dialog input[type="number"]:focus, 
+        dialog.wb-manager-dialog input[type="text"]:focus,
+        dialog.wb-manager-dialog input[type="number"]:focus,
         dialog.wb-manager-dialog select:focus,
         dialog.wb-manager-dialog textarea:focus {
             background: var(--lulu-input-bg) !important;
             color: var(--SmartThemeBodyColor) !important;
-            border: 1px solid var(--SmartThemeQuoteColor) !important; 
+            border: 1px solid var(--SmartThemeQuoteColor) !important;
             outline: none !important;
         }
-        
+
         dialog.wb-manager-dialog input::placeholder,
-        dialog.wb-manager-dialog textarea::placeholder { color: gray !important; }        
+        dialog.wb-manager-dialog textarea::placeholder { color: gray !important; }
         dialog.wb-manager-dialog input[type="checkbox"] {
             appearance: none !important;
             -webkit-appearance: none !important;
@@ -1527,27 +1549,27 @@ $menuBtn.on("click", async () => {
             flex-shrink: 0 !important;
             margin: 0 !important;
         }
-        
+
         /* 未选中时悬浮，边框稍微发光提示 */
         dialog.wb-manager-dialog input[type="checkbox"]:hover {
             border-color: var(--SmartThemeQuoteColor) !important;
         }
-        
+
         /* 选中状态：背景变成强调色，边框也变成强调色 */
         dialog.wb-manager-dialog input[type="checkbox"]:checked {
             background: var(--SmartThemeQuoteColor) !important;
             border-color: var(--SmartThemeQuoteColor) !important;
         }
-        
+
         /* 自定义勾号 */
         dialog.wb-manager-dialog input[type="checkbox"]:checked::after {
             content: "✓" !important;
-            color: var(--SmartThemeBotMesColor) !important; 
+            color: var(--SmartThemeBotMesColor) !important;
             font-size: 13px !important;
             font-weight: 900 !important;
             line-height: 1 !important;
         }
-        
+
         /* 批量操作模式下的复选框特化：醒目的红底白勾 */
         dialog.wb-manager-dialog input[type="checkbox"].wb-batch-chk:checked {
             background: #ff6b6b !important;
@@ -1560,7 +1582,7 @@ $menuBtn.on("click", async () => {
         dialog.wb-manager-dialog input[type="checkbox"].wb-batch-chk:checked::after {
             color: #ffffff !important;
         }
-        
+
         .wb-global-active {
             border: 1px solid var(--SmartThemeQuoteColor) !important;
             border-left: 4px solid var(--SmartThemeQuoteColor) !important;
@@ -1569,13 +1591,13 @@ $menuBtn.on("click", async () => {
         }
         .wb-global-active .wb-name-text { font-weight: bold; }
 
-        dialog.wb-manager-dialog .btn-primary { 
-            color: var(--SmartThemeQuoteColor) !important; 
-            border-color: var(--SmartThemeQuoteColor) !important; 
+        dialog.wb-manager-dialog .btn-primary {
+            color: var(--SmartThemeQuoteColor) !important;
+            border-color: var(--SmartThemeQuoteColor) !important;
             background: rgba(125, 125, 125, 0.08) !important;
         }
-        dialog.wb-manager-dialog .btn-primary:hover { 
-            background: var(--SmartThemeQuoteColor) !important; 
+        dialog.wb-manager-dialog .btn-primary:hover {
+            background: var(--SmartThemeQuoteColor) !important;
             color: var(--SmartThemeBotMesColor) !important;
         }
     `;
@@ -2482,89 +2504,262 @@ $menuBtn.on("click", async () => {
             rawEntries = Object.values(data).filter(
               (item) => typeof item === "object" && item !== null,
             );
-          let entries = rawEntries.map((e) => {
-            let eName = e.name || e.comment || e.title || "未定名条目";
-            let eEnabled = true;
-            if (e.enabled !== undefined) eEnabled = e.enabled;
-            else if (e.disable !== undefined) eEnabled = !e.disable;
-            else if (e.disabled !== undefined) eEnabled = !e.disabled;
-            let strategy = e.strategy;
-            if (!strategy) {
-              let keys = [];
-              if (Array.isArray(e.keys)) keys = e.keys;
-              else if (Array.isArray(e.key)) keys = e.key;
-              else if (typeof e.key === "string")
-                keys = e.key
-                  .split(",")
-                  .map((s) => s.trim())
-                  .filter(Boolean);
-              else if (typeof e.keys === "string")
-                keys = e.keys
-                  .split(",")
-                  .map((s) => s.trim())
-                  .filter(Boolean);
-              let isConstant = e.constant;
-              if (isConstant === undefined) isConstant = keys.length === 0;
-              strategy = {
-                type: isConstant ? "constant" : "selective",
-                keys: keys,
-              };
+          const toNum = (value, fallback = undefined) => {
+            if (value === undefined || value === null || value === "")
+              return fallback;
+            const num = Number(value);
+            return Number.isNaN(num) ? fallback : num;
+          };
+          const parseKeys = (value) => {
+            if (Array.isArray(value)) return [...value];
+            if (typeof value === "string")
+              return value
+                .split(",")
+                .map((s) => s.trim())
+                .filter(Boolean);
+            return [];
+          };
+          const nativeRoleToText = (value) => {
+            if (value === 0 || value === "0") return "system";
+            if (value === 1 || value === "1") return "user";
+            if (value === 2 || value === "2") return "assistant";
+            if (value === "user" || value === "assistant" || value === "system")
+              return value;
+            return "system";
+          };
+          const nativeRoleToNumber = (value) => {
+            if (value === 1 || value === "1" || value === "user") return 1;
+            if (value === 2 || value === "2" || value === "assistant") return 2;
+            return 0;
+          };
+          const nativePositionToObject = (entry) => {
+            if (entry.position && typeof entry.position === "object") {
+              const posObj = { ...entry.position };
+              if (posObj.type === "outlet") posObj.type = "at_depth";
+              if (posObj.type === undefined && posObj.position !== undefined)
+                posObj.type = nativePositionToObject({
+                  position: posObj.position,
+                }).type;
+              posObj.role = nativeRoleToText(
+                posObj.role ??
+                  entry.role ??
+                  entry.depth_role ??
+                  entry.depthRole,
+              );
+              posObj.depth = toNum(
+                posObj.depth ??
+                  entry.depth ??
+                  entry.scan_depth ??
+                  entry.scanDepth,
+                0,
+              );
+              posObj.order = toNum(
+                posObj.order ??
+                  entry.order ??
+                  entry.insertion_order ??
+                  entry.insertionOrder,
+                100,
+              );
+              return posObj;
             }
-            let position = e.position;
-            if (!position || typeof position !== "object") {
-              let pType = "at_depth";
-              let posInt =
-                typeof e.position === "number"
-                  ? e.position
-                  : parseInt(e.position);
-              if (posInt === 0) pType = "before_character_definition";
-              else if (posInt === 1) pType = "after_character_definition";
-              else if (posInt === 2) pType = "before_example_messages";
-              else if (posInt === 3) pType = "after_example_messages";
-              else if (posInt === 4) pType = "at_depth";
-              position = {
-                type: pType,
-                role: e.role || "system",
-                depth: e.depth !== undefined ? parseInt(e.depth) : 4,
-                order:
-                  e.order !== undefined
-                    ? parseInt(e.order)
-                    : e.insertion_order !== undefined
-                      ? parseInt(e.insertion_order)
-                      : 100,
-              };
-            }
-            let prevent_in =
-              e.exclude_recursion ||
-              (e.recursion && e.recursion.prevent_incoming) ||
-              false;
-            let prevent_out =
-              e.prevent_recursion ||
-              (e.recursion && e.recursion.prevent_outgoing) ||
-              false;
-            let ext = e.extensions || {};
-            ext.lulu_group =
-              ext.lulu_group || e.lulu_group_tag || e.group || "";
 
+            const posInt = toNum(
+              entry.position ??
+                entry.insertion_position ??
+                entry.insertionPosition,
+              4,
+            );
+            let type = "at_depth";
+            if (posInt === 0) type = "before_character_definition";
+            else if (posInt === 1) type = "after_character_definition";
+            else if (posInt === 2) type = "before_example_messages";
+            else if (posInt === 3) type = "after_example_messages";
+            else if (posInt === 5) type = "before_author_note";
+            else if (posInt === 6) type = "after_author_note";
             return {
-              uid: e.uid || Date.now() + Math.floor(Math.random() * 1000000),
-              name: eName,
-              enabled: eEnabled,
-              content: e.content || e.description || e.text || "",
-              group: "",
-              extensions: ext,
-              strategy: strategy,
-              key: strategy.keys || [],
-              keys: strategy.keys || [],
-              position: position,
-              recursion: e.recursion || {
-                prevent_incoming: prevent_in,
-                prevent_outgoing: prevent_out,
-                delay_until: null,
-              },
-              exclude_recursion: prevent_in,
-              prevent_recursion: prevent_out,
+              type: type,
+              role: nativeRoleToText(
+                entry.role ?? entry.depth_role ?? entry.depthRole,
+              ),
+              depth: toNum(
+                entry.depth ?? entry.scan_depth ?? entry.scanDepth,
+                0,
+              ),
+              order: toNum(
+                entry.order ?? entry.insertion_order ?? entry.insertionOrder,
+                100,
+              ),
             };
+          };
+          let entries = rawEntries.map((e, entryIndex) => {
+            const safeEntry =
+              e && typeof e === "object" ? JSON.parse(JSON.stringify(e)) : {};
+            const entry = { ...safeEntry };
+            const sourceRecursion =
+              safeEntry.recursion && typeof safeEntry.recursion === "object"
+                ? { ...safeEntry.recursion }
+                : {};
+            const sourceExt =
+              safeEntry.extensions && typeof safeEntry.extensions === "object"
+                ? { ...safeEntry.extensions }
+                : {};
+
+            const eName =
+              safeEntry.name ||
+              safeEntry.comment ||
+              safeEntry.title ||
+              "未定名条目";
+            const uid =
+              safeEntry.uid ??
+              safeEntry.id ??
+              safeEntry.entry_id ??
+              safeEntry.entryId ??
+              safeEntry.uuid ??
+              safeEntry._id ??
+              safeEntry.index ??
+              Date.now() + i * 100000 + entryIndex;
+            const eEnabled =
+              safeEntry.enabled !== undefined
+                ? !!safeEntry.enabled
+                : safeEntry.disable !== undefined
+                  ? !safeEntry.disable
+                  : safeEntry.disabled !== undefined
+                    ? !safeEntry.disabled
+                    : true;
+            const keys =
+              parseKeys(safeEntry.key).length > 0
+                ? parseKeys(safeEntry.key)
+                : parseKeys(safeEntry.keys).length > 0
+                  ? parseKeys(safeEntry.keys)
+                  : parseKeys(safeEntry.strategy?.keys);
+            const isConstant =
+              safeEntry.constant !== undefined
+                ? !!safeEntry.constant
+                : safeEntry.selective !== undefined
+                  ? !safeEntry.selective
+                  : safeEntry.strategy?.type === "constant" ||
+                    keys.length === 0;
+            const strategy =
+              safeEntry.strategy && typeof safeEntry.strategy === "object"
+                ? {
+                    ...safeEntry.strategy,
+                    keys: Array.isArray(safeEntry.strategy.keys)
+                      ? [...safeEntry.strategy.keys]
+                      : keys,
+                  }
+                : { type: isConstant ? "constant" : "selective", keys: keys };
+            if (!strategy.type)
+              strategy.type = isConstant ? "constant" : "selective";
+            if (!Array.isArray(strategy.keys)) strategy.keys = keys;
+
+            const positionObj = nativePositionToObject(safeEntry);
+            const numericRole = nativeRoleToNumber(
+              safeEntry.role ?? positionObj.role,
+            );
+            const preventIn =
+              safeEntry.exclude_recursion ??
+              safeEntry.excludeRecursion ??
+              safeEntry.prevent_incoming ??
+              safeEntry.preventIncoming ??
+              sourceRecursion.prevent_incoming ??
+              sourceRecursion.preventIncoming ??
+              false;
+            const preventOut =
+              safeEntry.prevent_recursion ??
+              safeEntry.preventRecursion ??
+              safeEntry.prevent_outgoing ??
+              safeEntry.preventOutgoing ??
+              sourceRecursion.prevent_outgoing ??
+              sourceRecursion.preventOutgoing ??
+              false;
+            const delayUntil =
+              safeEntry.delay_until ??
+              safeEntry.delayUntil ??
+              sourceRecursion.delay_until ??
+              sourceRecursion.delayUntil ??
+              null;
+            const sticky =
+              safeEntry.sticky ??
+              safeEntry.effect?.sticky ??
+              sourceExt.sticky ??
+              null;
+            const cooldown =
+              safeEntry.cooldown ??
+              safeEntry.effect?.cooldown ??
+              sourceExt.cooldown ??
+              null;
+            const delay =
+              safeEntry.delay ??
+              safeEntry.effect?.delay ??
+              sourceExt.delay ??
+              null;
+            const probability =
+              safeEntry.probability ?? sourceExt.probability ?? null;
+            const ext = { ...sourceExt };
+            ext.lulu_group =
+              ext.lulu_group ||
+              safeEntry.lulu_group_tag ||
+              safeEntry.group ||
+              "";
+            if (probability !== null) ext.probability = probability;
+            if (sticky !== null) ext.sticky = sticky;
+            if (cooldown !== null) ext.cooldown = cooldown;
+            if (delay !== null) ext.delay = delay;
+
+            entry.uid = uid;
+            entry.id = safeEntry.id ?? uid;
+            entry.name = eName;
+            entry.comment = safeEntry.comment || eName;
+            entry.title = safeEntry.title || eName;
+            entry.enabled = eEnabled;
+            entry.disable = !eEnabled;
+            entry.disabled = !eEnabled;
+            entry.content =
+              safeEntry.content ??
+              safeEntry.description ??
+              safeEntry.text ??
+              "";
+            entry.group = safeEntry.group || "";
+            entry.extensions = ext;
+            entry.strategy = strategy;
+            entry.key = keys;
+            entry.keys = keys;
+            entry.constant = isConstant;
+            entry.selective =
+              safeEntry.selective !== undefined
+                ? !!safeEntry.selective
+                : !isConstant;
+            entry.position = positionObj;
+            entry.depth = positionObj.depth;
+            entry.order = positionObj.order;
+            entry.insertion_order = positionObj.order;
+            entry.role = numericRole;
+            entry.probability =
+              probability !== null
+                ? probability
+                : (safeEntry.probability ?? 100);
+            entry.recursion = {
+              ...sourceRecursion,
+              prevent_incoming: preventIn,
+              prevent_outgoing: preventOut,
+              delay_until: delayUntil,
+            };
+            entry.effect = {
+              ...(safeEntry.effect && typeof safeEntry.effect === "object"
+                ? safeEntry.effect
+                : {}),
+              sticky: sticky,
+              cooldown: cooldown,
+              delay: delay,
+            };
+            entry.exclude_recursion = preventIn;
+            entry.prevent_recursion = preventOut;
+            entry.delayUntilRecursion = delayUntil;
+            entry.sticky = sticky;
+            entry.cooldown = cooldown;
+            entry.delay = delay;
+            entry.delay_until = delayUntil;
+            return entry;
           });
           let rawName = file.name.replace(/\.[^/.]+$/, "");
           let finalName = rawName.trim() || `未命名世界书_${Date.now()}`;
@@ -2812,63 +3007,186 @@ $menuBtn.on("click", async () => {
           allCats[k].includes(wb),
         );
         setTimeout(async () => {
-          const entries = await getWorldbook(wb);
+          // 修复：直接向酒馆底层请求完整数据，完美保留原生高级参数（如扫描深度等）！
+          let rootObj = {};
+          try {
+            rootObj = await $.ajax({
+              url: "/api/worldinfo/get",
+              type: "POST",
+              contentType: "application/json",
+              data: JSON.stringify({ name: wb }),
+            });
+          } catch (e) {
+            rootObj = { name: wb, entries: {} }; // 兜底
+          }
+
+          let entriesRaw = rootObj.entries || rootObj.data?.entries || rootObj;
+          let entriesArray = Array.isArray(entriesRaw)
+            ? entriesRaw
+            : Object.values(entriesRaw);
 
           const entriesDict = {};
-          entries.forEach((e) => {
-            let posInt = 4;
-            let pType = e.position?.type || "at_depth";
-            if (pType === "before_character_definition") posInt = 0;
-            else if (pType === "after_character_definition") posInt = 1;
-            else if (pType === "before_example_messages") posInt = 2;
-            else if (pType === "after_example_messages") posInt = 3;
-            else if (pType === "at_depth" || pType === "outlet") posInt = 4;
+          entriesArray.forEach((e) => {
+            const safeEntry =
+              e && typeof e === "object" ? JSON.parse(JSON.stringify(e)) : {};
+            const sourcePos = safeEntry.position;
+            const sourceRecursion =
+              safeEntry.recursion && typeof safeEntry.recursion === "object"
+                ? { ...safeEntry.recursion }
+                : null;
+            const sourceExt =
+              safeEntry.extensions && typeof safeEntry.extensions === "object"
+                ? { ...safeEntry.extensions }
+                : {};
 
-            let flatEntry = {
-              ...e,
-              comment: e.name || e.comment || "未命名条目",
-              name: e.name || e.comment || "未命名条目",
-              disable: e.enabled === false,
-              enabled: e.enabled !== false,
-              key: e.strategy?.keys || e.key || [],
-              constant: e.strategy?.type === "constant",
-              selective: e.strategy?.type !== "constant",
-              position: posInt,
-              depth: e.position?.depth !== undefined ? e.position.depth : 4,
-              order: e.position?.order !== undefined ? e.position.order : 100,
-              insertion_order:
-                e.position?.order !== undefined ? e.position.order : 100,
-              exclude_recursion:
-                e.recursion?.prevent_incoming ?? e.exclude_recursion ?? false,
-              prevent_recursion:
-                e.recursion?.prevent_outgoing ?? e.prevent_recursion ?? false,
+            let posObj = null;
+            if (sourcePos && typeof sourcePos === "object") {
+              posObj = { ...sourcePos };
+              if (posObj.type === "outlet") posObj.type = "at_depth";
+              if (posObj.role === 0) posObj.role = "system";
+              else if (posObj.role === 1) posObj.role = "user";
+              else if (posObj.role === 2) posObj.role = "assistant";
+              if (posObj.depth === undefined && safeEntry.depth !== undefined)
+                posObj.depth = parseInt(safeEntry.depth);
+              if (posObj.order === undefined) {
+                posObj.order =
+                  safeEntry.order !== undefined
+                    ? parseInt(safeEntry.order)
+                    : safeEntry.insertion_order !== undefined
+                      ? parseInt(safeEntry.insertion_order)
+                      : 100;
+              }
+            } else {
+              let pType = "at_depth";
+              const posInt =
+                typeof safeEntry.position === "number"
+                  ? safeEntry.position
+                  : parseInt(safeEntry.position);
+              if (posInt === 0) pType = "before_character_definition";
+              else if (posInt === 1) pType = "after_character_definition";
+              else if (posInt === 2) pType = "before_example_messages";
+              else if (posInt === 3) pType = "after_example_messages";
+              else if (posInt === 4 || Number.isNaN(posInt)) pType = "at_depth";
+              posObj = {
+                type: pType,
+                role: safeEntry.role || "system",
+                depth:
+                  safeEntry.depth !== undefined ? parseInt(safeEntry.depth) : 0,
+                order:
+                  safeEntry.order !== undefined
+                    ? parseInt(safeEntry.order)
+                    : safeEntry.insertion_order !== undefined
+                      ? parseInt(safeEntry.insertion_order)
+                      : 100,
+              };
+            }
+
+            let keysArr = [];
+            if (Array.isArray(safeEntry.key) && safeEntry.key.length > 0)
+              keysArr = [...safeEntry.key];
+            else if (Array.isArray(safeEntry.keys) && safeEntry.keys.length > 0)
+              keysArr = [...safeEntry.keys];
+            else if (Array.isArray(safeEntry.strategy?.keys))
+              keysArr = [...safeEntry.strategy.keys];
+
+            const preventIn =
+              safeEntry.exclude_recursion ??
+              safeEntry.excludeRecursion ??
+              safeEntry.recursion?.prevent_incoming ??
+              safeEntry.prevent_incoming ??
+              safeEntry.preventIncoming ??
+              false;
+            const preventOut =
+              safeEntry.prevent_recursion ??
+              safeEntry.preventRecursion ??
+              safeEntry.recursion?.prevent_outgoing ??
+              safeEntry.prevent_outgoing ??
+              safeEntry.preventOutgoing ??
+              false;
+            const delayUntil =
+              safeEntry.delay_until ??
+              sourceRecursion?.delay_until ??
+              sourceRecursion?.delayUntil ??
+              safeEntry.recursion?.delay_until ??
+              null;
+            const sticky =
+              safeEntry.sticky ?? safeEntry.recursion?.sticky ?? false;
+            const cooldown =
+              safeEntry.cooldown ??
+              safeEntry.recursion?.cooldown ??
+              safeEntry.recursion?.delay ??
+              null;
+
+            const flatEntry = {
+              ...safeEntry,
+              comment: safeEntry.name || safeEntry.comment || "未命名条目",
+              name: safeEntry.name || safeEntry.comment || "未命名条目",
+              disable: safeEntry.enabled === false,
+              enabled: safeEntry.enabled !== false,
+              key: keysArr,
+              keys: keysArr,
+              constant:
+                safeEntry.constant !== undefined
+                  ? !!safeEntry.constant
+                  : safeEntry.strategy?.type === "constant" ||
+                    keysArr.length === 0,
+              selective:
+                safeEntry.selective !== undefined
+                  ? !!safeEntry.selective
+                  : safeEntry.strategy?.type !== "constant",
+              position: posObj,
+              depth: posObj?.depth,
+              order: posObj?.order,
+              insertion_order: posObj?.order,
+              role: posObj?.role,
+              recursion: sourceRecursion || {
+                prevent_incoming: preventIn,
+                prevent_outgoing: preventOut,
+                delay_until: delayUntil,
+                sticky: sticky,
+                cooldown: cooldown,
+              },
+              exclude_recursion: preventIn,
+              prevent_recursion: preventOut,
+              sticky: sticky,
+              cooldown: cooldown,
+              delay_until: delayUntil,
             };
 
             if (!flatEntry.extensions) flatEntry.extensions = {};
+            flatEntry.extensions = { ...sourceExt, ...flatEntry.extensions };
             flatEntry.extensions.lulu_data = {
-              strategy: e.strategy,
-              position: e.position,
-              recursion: e.recursion,
+              strategy: safeEntry.strategy || {
+                type: flatEntry.constant ? "constant" : "selective",
+                keys: keysArr,
+              },
+              position: posObj,
+              recursion: flatEntry.recursion,
             };
 
-            entriesDict[e.uid] = flatEntry;
+            const uid =
+              safeEntry.uid ??
+              safeEntry.id ??
+              safeEntry.entry_id ??
+              safeEntry.uuid ??
+              safeEntry._id ??
+              safeEntry.index;
+            flatEntry.uid =
+              uid !== undefined && uid !== null
+                ? uid
+                : Date.now() + Math.floor(Math.random() * 1000000);
+            entriesDict[flatEntry.uid] = flatEntry;
           });
 
-          const blob = new Blob(
-            [
-              JSON.stringify(
-                {
-                  entries: entriesDict,
-                  name: wb,
-                  lulu_categories: myCats,
-                  lulu_entry_groups: getWbUiGroups()[wb] || {},
-                },
-                null,
-                2,
-              ),
-            ],
-            { type: "application/json" },
-          );
+          // 把重组好的条目塞回完整的原生对象里
+          rootObj.entries = entriesDict;
+          rootObj.name = wb;
+          rootObj.lulu_categories = myCats;
+          rootObj.lulu_entry_groups = getWbUiGroups()[wb] || {};
+
+          const blob = new Blob([JSON.stringify(rootObj, null, 2)], {
+            type: "application/json",
+          });
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
           a.href = url;
@@ -3849,74 +4167,163 @@ $menuBtn.on("click", async () => {
               '<div class="wb-icon-btn hover-blue" title="打包导出这本世界书 (会保留您的所有分组哦！)"><i class="fa-solid fa-download"></i></div>',
             ).on("click", async () => {
               await withLoadingOverlay(async () => {
-                const entries = await getWorldbook(wb);
                 let allCats = getCategories();
                 let myCats = Object.keys(allCats).filter((k) =>
                   allCats[k].includes(wb),
                 );
 
-                const entriesDict = {};
-                entries.forEach((e) => {
-                  let posInt = 4;
-                  let pType = e.position?.type || "at_depth";
-                  if (pType === "before_character_definition") posInt = 0;
-                  else if (pType === "after_character_definition") posInt = 1;
-                  else if (pType === "before_example_messages") posInt = 2;
-                  else if (pType === "after_example_messages") posInt = 3;
-                  else if (pType === "at_depth" || pType === "outlet")
-                    posInt = 4;
+                let rootObj = {};
+                try {
+                  rootObj = await $.ajax({
+                    url: "/api/worldinfo/get",
+                    type: "POST",
+                    contentType: "application/json",
+                    data: JSON.stringify({ name: wb }),
+                  });
+                } catch (e) {
+                  rootObj = { name: wb, entries: {} };
+                }
 
+                let entriesRaw =
+                  rootObj.entries || rootObj.data?.entries || rootObj;
+                let entriesArray = Array.isArray(entriesRaw)
+                  ? entriesRaw
+                  : Object.values(entriesRaw);
+
+                const entriesDict = {};
+                entriesArray.forEach((e) => {
+                  // 1. 提取位置信息 (完美兼容原生数字格式与脚本特化格式)
+                  let posInt = 4;
+                  if (typeof e.position === "number") {
+                    posInt = e.position;
+                  } else if (e.position && typeof e.position === "object") {
+                    let pType = e.position.type;
+                    if (pType === "before_character_definition") posInt = 0;
+                    else if (pType === "after_character_definition") posInt = 1;
+                    else if (pType === "before_example_messages") posInt = 2;
+                    else if (pType === "after_example_messages") posInt = 3;
+                  }
+
+                  // 2. 提取深度与顺序 (优先读原生属性，读不到再读脚本特化属性)
+                  let depthVal =
+                    e.depth !== undefined
+                      ? e.depth
+                      : e.position?.depth !== undefined
+                        ? e.position.depth
+                        : 4;
+                  let orderVal =
+                    e.order !== undefined
+                      ? e.order
+                      : e.insertion_order !== undefined
+                        ? e.insertion_order
+                        : e.position?.order !== undefined
+                          ? e.position.order
+                          : 100;
+
+                  // 3. 提取角色深度 (0:系统, 1:用户, 2:助手)
+                  let roleVal = 0;
+                  if (typeof e.role === "number") {
+                    roleVal = e.role;
+                  } else if (e.position?.role) {
+                    if (e.position.role === "user") roleVal = 1;
+                    else if (e.position.role === "assistant") roleVal = 2;
+                  }
+
+                  // 4. 提取触发策略
+                  let isConstant =
+                    e.constant !== undefined
+                      ? e.constant
+                      : e.strategy?.type === "constant";
+                  let isSelective =
+                    e.selective !== undefined
+                      ? e.selective
+                      : e.strategy?.type !== "constant";
+
+                  // 5. 提取关键字
+                  let keysArr = [];
+                  if (Array.isArray(e.key) && e.key.length > 0) keysArr = e.key;
+                  else if (Array.isArray(e.keys) && e.keys.length > 0)
+                    keysArr = e.keys;
+                  else if (e.strategy?.keys) keysArr = e.strategy.keys;
+
+                  // 6. 提取递归开关
+                  let preventIn =
+                    e.exclude_recursion ??
+                    e.recursion?.prevent_incoming ??
+                    false;
+                  let preventOut =
+                    e.prevent_recursion ??
+                    e.recursion?.prevent_outgoing ??
+                    false;
+
+                  // 7. 组装为最纯净的原生条目
                   let flatEntry = {
-                    ...e,
+                    ...e, // 保留原生高级参数（概率 probability, 自动化ID, 组权重 groupWeight 等统统无损继承！）
                     comment: e.name || e.comment || "未命名条目",
                     name: e.name || e.comment || "未命名条目",
                     disable: e.enabled === false,
                     enabled: e.enabled !== false,
-                    key: e.strategy?.keys || e.key || [],
-                    constant: e.strategy?.type === "constant",
-                    selective: e.strategy?.type !== "constant",
+                    key: keysArr,
+                    keys: keysArr,
+                    constant: isConstant,
+                    selective: isSelective,
                     position: posInt,
-                    depth:
-                      e.position?.depth !== undefined ? e.position.depth : 4,
-                    order:
-                      e.position?.order !== undefined ? e.position.order : 100,
-                    insertion_order:
-                      e.position?.order !== undefined ? e.position.order : 100,
-                    exclude_recursion:
-                      e.recursion?.prevent_incoming ??
-                      e.exclude_recursion ??
-                      false,
-                    prevent_recursion:
-                      e.recursion?.prevent_outgoing ??
-                      e.prevent_recursion ??
-                      false,
+                    depth: depthVal,
+                    order: orderVal,
+                    insertion_order: orderVal,
+                    role: roleVal,
+                    exclude_recursion: preventIn,
+                    prevent_recursion: preventOut,
                   };
 
+                  // 给脚本自用的缓存数据，防止下次读取面板时出错
                   if (!flatEntry.extensions) flatEntry.extensions = {};
                   flatEntry.extensions.lulu_data = {
-                    strategy: e.strategy,
-                    position: e.position,
-                    recursion: e.recursion,
+                    strategy: e.strategy || {
+                      type: isConstant ? "constant" : "selective",
+                      keys: keysArr,
+                    },
+                    position: e.position || {
+                      type:
+                        posInt === 0
+                          ? "before_character_definition"
+                          : posInt === 1
+                            ? "after_character_definition"
+                            : posInt === 2
+                              ? "before_example_messages"
+                              : posInt === 3
+                                ? "after_example_messages"
+                                : "at_depth",
+                      depth: depthVal,
+                      order: orderVal,
+                      role:
+                        roleVal === 1
+                          ? "user"
+                          : roleVal === 2
+                            ? "assistant"
+                            : "system",
+                    },
+                    recursion: e.recursion || {
+                      prevent_incoming: preventIn,
+                      prevent_outgoing: preventOut,
+                    },
                   };
 
-                  entriesDict[e.uid] = flatEntry;
+                  let uid = e.uid !== undefined ? e.uid : e.id;
+                  if (uid === undefined)
+                    uid = Date.now() + Math.floor(Math.random() * 1000000);
+                  flatEntry.uid = uid;
+                  entriesDict[uid] = flatEntry;
                 });
 
-                const blob = new Blob(
-                  [
-                    JSON.stringify(
-                      {
-                        entries: entriesDict,
-                        name: wb,
-                        lulu_categories: myCats,
-                        lulu_entry_groups: getWbUiGroups()[wb] || {},
-                      },
-                      null,
-                      2,
-                    ),
-                  ],
-                  { type: "application/json" },
-                );
+                rootObj.entries = entriesDict;
+                rootObj.name = wb;
+                rootObj.lulu_categories = myCats;
+                rootObj.lulu_entry_groups = getWbUiGroups()[wb] || {};
+
+                const blob = new Blob([JSON.stringify(rootObj, null, 2)], {
+                  type: "application/json",
+                });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = url;
@@ -5302,6 +5709,29 @@ $menuBtn.on("click", async () => {
     }
   });
 
+  const getEntryNumberParam = (entry, keys, fallback = "") => {
+    for (const key of keys) {
+      const parts = key.split(".");
+      let value = entry;
+      for (const part of parts) value = value?.[part];
+      if (value !== undefined && value !== null && value !== "") return value;
+    }
+    return fallback;
+  };
+  const applyAdvancedParamVisibility = () => {
+    const isDetailed = $ui.find("#wb-det-advanced-toggle").is(":checked");
+    $ui
+      .find("#wb-det-advanced-panel")
+      .css("display", isDetailed ? "flex" : "none");
+  };
+  $ui.find("#wb-det-advanced-toggle").on("change", () => {
+    localStorage.setItem(
+      "lulu_wb_detail_params_enabled",
+      $ui.find("#wb-det-advanced-toggle").is(":checked") ? "true" : "false",
+    );
+    applyAdvancedParamVisibility();
+  });
+
   const openDetailEditView = (index) => {
     tuneDetailIndex = index;
     const e = tuneEntries[index];
@@ -5329,6 +5759,45 @@ $menuBtn.on("click", async () => {
         false;
     $ui.find("#wb-det-exclude-recursion").prop("checked", !!isExclude);
     $ui.find("#wb-det-prevent-recursion").prop("checked", !!isPrevent);
+    $ui
+      .find("#wb-det-probability")
+      .val(
+        getEntryNumberParam(e, ["probability", "extensions.probability"], 100),
+      );
+    $ui
+      .find("#wb-det-sticky")
+      .val(
+        getEntryNumberParam(
+          e,
+          ["sticky", "effect.sticky", "extensions.sticky"],
+          "",
+        ),
+      );
+    $ui
+      .find("#wb-det-cooldown")
+      .val(
+        getEntryNumberParam(
+          e,
+          ["cooldown", "effect.cooldown", "extensions.cooldown"],
+          "",
+        ),
+      );
+    $ui
+      .find("#wb-det-delay")
+      .val(
+        getEntryNumberParam(
+          e,
+          ["delay", "effect.delay", "extensions.delay"],
+          "",
+        ),
+      );
+    $ui
+      .find("#wb-det-advanced-toggle")
+      .prop(
+        "checked",
+        localStorage.getItem("lulu_wb_detail_params_enabled") === "true",
+      );
+    applyAdvancedParamVisibility();
 
     if (window.innerWidth <= 768) {
       $ui.find("#wb-entry-detail-side").css("display", "flex");
@@ -5382,6 +5851,47 @@ $menuBtn.on("click", async () => {
     e.recursion.prevent_outgoing = checkPrevent;
     e.exclude_recursion = checkExclude;
     e.prevent_recursion = checkPrevent;
+
+    const parseOptionalNumber = (value) => {
+      if (value === undefined || value === null || `${value}`.trim() === "")
+        return null;
+      const num = Number(value);
+      return Number.isNaN(num) ? null : num;
+    };
+    const probabilityVal = parseOptionalNumber(
+      $ui.find("#wb-det-probability").val(),
+    );
+    const stickyVal = parseOptionalNumber($ui.find("#wb-det-sticky").val());
+    const cooldownVal = parseOptionalNumber($ui.find("#wb-det-cooldown").val());
+    const delayVal = parseOptionalNumber($ui.find("#wb-det-delay").val());
+    if (probabilityVal !== null) {
+      e.probability = Math.min(100, Math.max(0, probabilityVal));
+      if (!e.extensions || typeof e.extensions !== "object") e.extensions = {};
+      e.extensions.probability = e.probability;
+    }
+    if (!e.effect || typeof e.effect !== "object") e.effect = {};
+    if (stickyVal !== null) {
+      e.sticky = stickyVal;
+      e.effect.sticky = stickyVal;
+      if (!e.extensions || typeof e.extensions !== "object") e.extensions = {};
+      e.extensions.sticky = stickyVal;
+    }
+    if (cooldownVal !== null) {
+      e.cooldown = cooldownVal;
+      e.effect.cooldown = cooldownVal;
+      if (!e.extensions || typeof e.extensions !== "object") e.extensions = {};
+      e.extensions.cooldown = cooldownVal;
+    }
+    if (delayVal !== null) {
+      e.delay = delayVal;
+      e.effect.delay = delayVal;
+      if (!e.extensions || typeof e.extensions !== "object") e.extensions = {};
+      e.extensions.delay = delayVal;
+    }
+    localStorage.setItem(
+      "lulu_wb_detail_params_enabled",
+      $ui.find("#wb-det-advanced-toggle").is(":checked") ? "true" : "false",
+    );
 
     if (typeof toastr !== "undefined") {
       toastr.info("当前内容已暂存，彻底保存还要另外点绿色的【确认】哦！");
