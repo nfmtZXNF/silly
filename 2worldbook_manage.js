@@ -1033,7 +1033,7 @@ $menuBtn.on("click", async () => {
                         </div>
                         <div style="display:flex; align-items:center; gap:6px;">
                             <label style="font-size:12px; font-weight:bold; color:var(--SmartThemeQuoteColor);">强调色:</label>
-                            <input type="color" id="wb-theme-cp-accent" value="#70a1ff" style="width:32px; height:28px; border:none; padding:0; cursor:pointer;" title="按钮、边框、图标的高亮颜色！">
+                            <input type="color" id="wb-theme-cp-accent" value="#70a1ff" style="width:32px; height:28px; border:none; padding:0; cursor:pointer;" title="按钮、边框、图标的高亮颜色">
                         </div>
                         <div style="display:flex; align-items:center; gap:6px;">
                             <label style="font-size:12px; font-weight:bold;">输入框:</label>
@@ -1041,10 +1041,31 @@ $menuBtn.on("click", async () => {
                         </div>
                         <div style="display:flex; align-items:center; gap:6px;">
                             <label style="font-size:12px; font-weight:bold;">整体透明度:</label>
-                            <input type="range" id="wb-theme-cp-alpha" min="0" max="100" value="95" style="width:70px; cursor:pointer;">
+                            <input type="range" id="wb-theme-cp-alpha" min="0" max="100" value="95" style="width:60px; cursor:pointer;">
                             <span id="wb-theme-cp-alpha-val" style="font-size:12px; min-width:30px;">95%</span>
                         </div>
-                        <button id="wb-theme-random-btn" class="menu_button interactable btn-warning wb-nowrap-btn" style="margin:0; padding:4px 8px; font-size:12px; border:none; border-radius:4px;"><i class="fa-solid fa-dice"></i> 随机盲盒</button>
+                        <!-- 🎲 盲盒控制区 -->
+                        <div style="display:flex; align-items:center; gap:6px; border-left: 1px dashed var(--SmartThemeBorderColor); padding-left: 10px;">
+                            <select id="wb-theme-random-mode" class="wb-input-dt" style="width: auto; padding: 4px; font-size: 11.5px; height: 26px;" title="设定你想Roll出的色彩范围">
+                                <option value="random">🎲 随机配色</option>
+                                <option value="dark">🌙 仅Roll深色系</option>
+                                <option value="light">☀️ 仅Roll浅色系</option>
+                            </select>
+                            <button id="wb-theme-random-btn" class="menu_button interactable btn-warning wb-nowrap-btn" style="margin:0; padding:4px 8px; font-size:12px; border:none; border-radius:4px;" title="生成随机配色方案"><i class="fa-solid fa-dice"></i> 随机盲盒</button>
+                        </div>
+                    </div>
+                    
+                    <!-- 💾 新增：自定义配方盒面板 -->
+                    <div id="wb-theme-presets-area" style="display:none; margin-top: 10px; align-items:center; gap:10px; flex-wrap: wrap; background:var(--SmartThemeBotMesColor); padding:6px 12px; border-radius:6px; border:1px solid var(--SmartThemeBorderColor); width: 100%;">
+                        <label style="font-size:12px; font-weight:bold;"><i class="fa-solid fa-box-archive" style="color:var(--SmartThemeQuoteColor);"></i> 自定义配方盒:</label>
+                        <select id="wb-theme-preset-select" class="wb-input-dt" style="width: auto; padding: 4px; min-width: 140px; height: 26px;">
+                            <option value="">-- 选择已存配方 --</option>
+                        </select>
+                        <button id="wb-theme-preset-del" class="menu_button interactable btn-danger wb-nowrap-btn" style="margin:0; padding:4px 8px; font-size:11px; border:none; display:none;" title="抛弃这个配色配方"><i class="fa-solid fa-trash-can"></i> 删除</button>
+                        <div style="display:flex; align-items:center; gap:6px; border-left: 1px dashed var(--SmartThemeBorderColor); padding-left: 10px; margin-left: auto;">
+                            <input type="text" id="wb-theme-preset-name" class="wb-input-dt" placeholder="配方命名..." style="width:130px; padding:4px; height: 26px; font-size:11.5px;">
+                            <button id="wb-theme-preset-save" class="menu_button interactable btn-success wb-nowrap-btn" style="margin:0; padding:4px 8px; font-size:11px; border:none;" title="保存当前配色方案"><i class="fa-solid fa-bookmark"></i> 存进配方盒</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1417,26 +1438,16 @@ $menuBtn.on("click", async () => {
     const $quickIcon = $ui.find("#wb-theme-quick-toggle i");
 
     if (mode === "light") {
-      $quickIcon
-        .removeClass("fa-moon fa-circle-half-stroke")
-        .addClass("fa-sun")
-        .css("color", "#ff9f43");
+      $quickIcon.removeClass("fa-moon fa-circle-half-stroke").addClass("fa-sun").css("color", "#ff9f43");
     } else if (mode === "dark") {
-      $quickIcon
-        .removeClass("fa-sun fa-circle-half-stroke")
-        .addClass("fa-moon")
-        .css("color", "#70a1ff");
+      $quickIcon.removeClass("fa-sun fa-circle-half-stroke").addClass("fa-moon").css("color", "#70a1ff");
     } else {
-      $quickIcon
-        .removeClass("fa-sun fa-moon")
-        .addClass("fa-circle-half-stroke")
-        .css("color", "var(--SmartThemeBodyColor)");
+      $quickIcon.removeClass("fa-sun fa-moon").addClass("fa-circle-half-stroke").css("color", "var(--SmartThemeBodyColor)");
     }
 
     let inputBgCss = "";
     let accentCss = "";
 
-    // 预设主题参数与强调色变量注入
     if (mode === "dark") {
       inputBgCss = `--lulu-input-bg: rgba(35, 38, 43, 1);`;
       accentCss = `--SmartThemeQuoteColor: #d1c5a1 !important;`;
@@ -1447,23 +1458,22 @@ $menuBtn.on("click", async () => {
       overrideCSS = `dialog.wb-manager-dialog { background: rgba(253, 246, 227, 1) !important; border: 1px solid #8b5d33 !important; } dialog.wb-manager-dialog, #wb-manager-panel { --SmartThemeBlurTintColor: rgba(253, 246, 227, 1) !important; --SmartThemeBotMesColor: rgba(255, 251, 240, 1) !important; --SmartThemeBodyColor: #4a3b32 !important; ${accentCss} --SmartThemeBorderColor: #e0d0b8 !important; color: #4a3b32 !important; } dialog.wb-manager-dialog *, #wb-manager-panel * { text-shadow: none !important; }`;
     } else if (mode === "custom") {
       inputBgCss = `--lulu-input-bg: ${customConfig.inputBg || customConfig.bg};`;
-      // ✨ 核心：截断酒馆的主题高亮，换上我们自己的强调色！
-      accentCss = `--SmartThemeQuoteColor: ${customConfig.accent || "#70a1ff"} !important;`;
+      accentCss = `--SmartThemeQuoteColor: ${customConfig.accent || '#70a1ff'} !important;`;
       const bgRgba = hexToRgba(customConfig.bg, customConfig.alpha);
       overrideCSS = `dialog.wb-manager-dialog { background: ${bgRgba} !important; border: 1px solid var(--SmartThemeQuoteColor) !important; } dialog.wb-manager-dialog, #wb-manager-panel { --SmartThemeBlurTintColor: ${bgRgba} !important; --SmartThemeBotMesColor: ${customConfig.bg} !important; --SmartThemeBodyColor: ${customConfig.text} !important; ${accentCss} color: ${customConfig.text} !important; }`;
-      $ui.find("#wb-theme-custom-opts").css("display", "flex");
+      // 同步显示自定义面板与配方盒
+      $ui.find("#wb-theme-custom-opts, #wb-theme-presets-area").css("display", "flex");
     } else {
       inputBgCss = `--lulu-input-bg: var(--SmartThemeBotMesColor);`;
-      accentCss = "";
+      accentCss = ""; 
     }
 
-    if (mode !== "custom") $ui.find("#wb-theme-custom-opts").hide();
+    if (mode !== "custom") {
+      $ui.find("#wb-theme-custom-opts, #wb-theme-presets-area").hide();
+    }
 
-    // 强化覆盖：确保所有输入框、大文本框以及聚焦状态绝对服从我们的强调色！
     overrideCSS += `
         dialog.wb-manager-dialog { ${inputBgCss} }
-        
-        /* 基础状态：加入对 textarea 的颜色绑定 */
         dialog.wb-manager-dialog input[type="text"], 
         dialog.wb-manager-dialog input[type="number"], 
         dialog.wb-manager-dialog select,
@@ -1473,8 +1483,6 @@ $menuBtn.on("click", async () => {
             border: 1px solid var(--SmartThemeBorderColor) !important;
             transition: border-color 0.15s ease-in-out !important;
         }
-        
-        /* ✨ 新增：聚焦编辑状态（点进去编辑时，背景依然护眼，且边框亮起你设定的强调色！） */
         dialog.wb-manager-dialog input[type="text"]:focus, 
         dialog.wb-manager-dialog input[type="number"]:focus, 
         dialog.wb-manager-dialog select:focus,
@@ -1484,7 +1492,6 @@ $menuBtn.on("click", async () => {
             border: 1px solid var(--SmartThemeQuoteColor) !important; 
             outline: none !important;
         }
-        
         dialog.wb-manager-dialog input::placeholder,
         dialog.wb-manager-dialog textarea::placeholder { color: gray !important; }
         
@@ -1496,7 +1503,6 @@ $menuBtn.on("click", async () => {
         }
         .wb-global-active .wb-name-text { font-weight: bold; }
 
-        /* 强制接管按钮，脱离酒馆原生干扰 */
         dialog.wb-manager-dialog .btn-primary { 
             color: var(--SmartThemeQuoteColor) !important; 
             border-color: var(--SmartThemeQuoteColor) !important; 
@@ -1504,15 +1510,35 @@ $menuBtn.on("click", async () => {
         }
         dialog.wb-manager-dialog .btn-primary:hover { 
             background: var(--SmartThemeQuoteColor) !important; 
-            color: var(--SmartThemeBotMesColor) !important; /* 悬浮时字体变为背景色，对比度极佳 */
+            color: var(--SmartThemeBotMesColor) !important;
         }
     `;
 
-    if (overrideCSS)
-      $ui.append(
-        `<style id="lulu-theme-override-style">${overrideCSS}</style>`,
-      );
-  };;
+    if (overrideCSS) $ui.append(`<style id="lulu-theme-override-style">${overrideCSS}</style>`);
+  };
+
+  // 💾 配方盒 LocalStorage 数据读写工具
+  const getSavedUserThemes = () => {
+    try {
+      return JSON.parse(localStorage.getItem("lulu_wb_user_themes") || "{}");
+    } catch(e) {
+      return {};
+    }
+  };
+  const saveUserThemes = (themes) => {
+    localStorage.setItem("lulu_wb_user_themes", JSON.stringify(themes));
+  };
+
+  // 💾 渲染配方下拉框
+  const renderPresetSelect = () => {
+    const themes = getSavedUserThemes();
+    const $select = $ui.find("#wb-theme-preset-select").empty();
+    $select.append('<option value="">-- 选择已存配方 --</option>');
+    Object.keys(themes).forEach(name => {
+        $select.append($("<option>", { value: name, text: name }));
+    });
+    $ui.find("#wb-theme-preset-del").hide();
+  };
 
   const loadThemeSettings = () => {
     const savedMode = localStorage.getItem("lulu_wb_panel_theme") || "default";
@@ -1524,12 +1550,12 @@ $menuBtn.on("click", async () => {
     $ui.find("#wb-theme-cp-bg").val(savedCustom.bg);
     $ui.find("#wb-theme-cp-text").val(savedCustom.text);
     $ui.find("#wb-theme-cp-accent").val(savedCustom.accent || "#70a1ff");
-    $ui
-      .find("#wb-theme-cp-input-bg")
-      .val(savedCustom.inputBg || savedCustom.bg);
+    $ui.find("#wb-theme-cp-input-bg").val(savedCustom.inputBg || savedCustom.bg);
     $ui.find("#wb-theme-cp-alpha").val(savedCustom.alpha);
     $ui.find("#wb-theme-cp-alpha-val").text(savedCustom.alpha + "%");
+    
     applyTheme(savedMode, savedCustom);
+    renderPresetSelect(); // 初始化配方盒下拉列表
   };
 
   const updateThemeAndSave = () => {
@@ -1540,132 +1566,185 @@ $menuBtn.on("click", async () => {
       cInputBg = $ui.find("#wb-theme-cp-input-bg").val(),
       cAlpha = parseInt($ui.find("#wb-theme-cp-alpha").val());
     $ui.find("#wb-theme-cp-alpha-val").text(cAlpha + "%");
-    const cConf = {
-      bg: cBg,
-      text: cText,
-      accent: cAccent,
-      alpha: cAlpha,
-      inputBg: cInputBg,
-    };
+    const cConf = { bg: cBg, text: cText, accent: cAccent, alpha: cAlpha, inputBg: cInputBg };
     localStorage.setItem("lulu_wb_panel_theme", mode);
     localStorage.setItem("lulu_wb_panel_custom_colors", JSON.stringify(cConf));
     applyTheme(mode, cConf);
   };
 
-  $ui
-    .find(
-      "#wb-theme-select, #wb-theme-cp-bg, #wb-theme-cp-text, #wb-theme-cp-accent, #wb-theme-cp-input-bg, #wb-theme-cp-alpha",
-    )
-    .on("input change", updateThemeAndSave);
+  $ui.find("#wb-theme-select, #wb-theme-cp-bg, #wb-theme-cp-text, #wb-theme-cp-accent, #wb-theme-cp-input-bg, #wb-theme-cp-alpha").on("input change", updateThemeAndSave);
 
-  // 🎨 HSL 色彩转换器
+  // 🎨 HSL 空间转HEX
   const hslToHex = (h, s, l) => {
-    l /= 100;
-    const a = (s * Math.min(l, 1 - l)) / 100;
-    const f = (n) => {
-      const k = (n + h / 30) % 12;
-      const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-      return Math.round(255 * color)
-        .toString(16)
-        .padStart(2, "0");
-    };
-    return `#${f(0)}${f(8)}${f(4)}`;
+      l /= 100;
+      const a = s * Math.min(l, 1 - l) / 100;
+      const f = n => {
+          const k = (n + h / 30) % 12;
+          const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+          return Math.round(255 * color).toString(16).padStart(2, '0');
+      };
+      return `#${f(0)}${f(8)}${f(4)}`;
   };
 
-  // 🎲 高级色彩美学盲盒发生器
-  $ui
-    .find("#wb-theme-random-btn")
-    .off("click")
-    .on("click", () => {
-      const isDark = Math.random() > 0.4;
-      const isContrast = Math.random() > 0.6; // 40% 概率触发绝美撞色系！
+  // 🎲 精心调校的极高质感经典“撞色”与“同色”设计预设库
+  const curatedContrasts = [
+      { bg: "#101622", text: "#e2e8f0", accent: "#fcc419", inputBg: "#172030", isDark: true, name: "深蓝金曜" },
+      { bg: "#151b18", text: "#e8ede9", accent: "#ff6b6b", inputBg: "#1d2521", isDark: true, name: "抹茶绯红" },
+      { bg: "#19141f", text: "#f1edf5", accent: "#a9e34b", inputBg: "#221c2a", isDark: true, name: "暗夜香橼" },
+      { bg: "#151a1a", text: "#eef6f6", accent: "#ffa94d", inputBg: "#1d2424", isDark: true, name: "冷炭珊瑚" },
+      { bg: "#1c1613", text: "#fcf5f2", accent: "#20c997", inputBg: "#261f1a", isDark: true, name: "沉香薄荷" },
+      { bg: "#121a1d", text: "#edf4f6", accent: "#ff922b", inputBg: "#192429", isDark: true, name: "深海暖阳" },
+      { bg: "#1a1012", text: "#fcf0f2", accent: "#3bc9db", inputBg: "#24171a", isDark: true, name: "绛红冰川" },
+      { bg: "#25121b", text: "#fbf2f6", accent: "#ffc078", inputBg: "#331a26", isDark: true, name: "浆果奶酪" },
+      { bg: "#121c25", text: "#eef5fc", accent: "#ff8787", inputBg: "#1b2835", isDark: true, name: "极夜晚霞" },
+      
+      { bg: "#fcf8f2", text: "#2c1c0c", accent: "#4c6ef5", inputBg: "#ffffff", isDark: false, name: "暖沙群青" },
+      { bg: "#f0fdf4", text: "#143019", accent: "#fa5252", inputBg: "#ffffff", isDark: false, name: "竹青竹红" },
+      { bg: "#fcf5f7", text: "#30141c", accent: "#0ca678", inputBg: "#ffffff", isDark: false, name: "晚樱黛绿" },
+      { bg: "#f1f3f5", text: "#1a202c", accent: "#fd7e14", inputBg: "#ffffff", isDark: false, name: "冷灰暖橘" },
+      { bg: "#f5f0fa", text: "#2d1b4e", accent: "#fab005", inputBg: "#ffffff", isDark: false, name: "香芋奶黄" },
+      { bg: "#edfcf9", text: "#0c3029", accent: "#e8590c", inputBg: "#ffffff", isDark: false, name: "松石暖柿" }
+  ];
 
-      const baseHue = Math.floor(Math.random() * 360);
-      let accentHue = baseHue;
+  // 🎲 盲盒抽取主程序（去除了 Toast 弹窗，支持高级撞色概率机制）
+  $ui.find("#wb-theme-random-btn").off("click").on("click", () => {
+      const rollMode = $ui.find("#wb-theme-random-mode").val() || "random"; 
+      
+      let isDark = true;
+      if (rollMode === "dark") isDark = true;
+      else if (rollMode === "light") isDark = false;
+      else isDark = Math.random() > 0.45; // 随机模式下：55% 概率出暗色，45% 概率出亮色
 
-      if (isContrast) {
-        // 撞色逻辑：分裂互补色（偏移150到210度），色彩反差大但极具设计感
-        accentHue = (baseHue + 150 + Math.floor(Math.random() * 60)) % 360;
-      } else {
-        // 同色系逻辑：微微偏移（-20到+20度），色彩非常和谐统一
-        accentHue = (baseHue + Math.floor(Math.random() * 40) - 20 + 360) % 360;
-      }
-
+      // 55% 概率直接应用设计师经典配方，45% 概率由算法高阶渲染，保证无限抽取也始终耐看
+      const useCurated = Math.random() > 0.45;
+      
       let bg, text, inputBg, accent;
-
-      if (isDark) {
-        // 【高级质感暗色调】
-        const bgSat = Math.floor(Math.random() * 20) + 10; // 低饱和度底色 (10-30)
-        const bgLight = Math.floor(Math.random() * 10) + 12; // 极低亮度 (12-22)
-        bg = hslToHex(baseHue, bgSat, bgLight);
-        inputBg = hslToHex(baseHue, bgSat, Math.max(8, bgLight - 4)); // 输入框稍暗
-
-        // 强调色：在深色背景上需要明亮且抢眼
-        const accSat = isContrast
-          ? Math.floor(Math.random() * 30) + 60
-          : Math.floor(Math.random() * 20) + 40;
-        const accLight = Math.floor(Math.random() * 15) + 65;
-        accent = hslToHex(accentHue, accSat, accLight);
-
-        // 文字色：极亮，带着一丝强调色的光晕
-        text = hslToHex(accentHue, 15, 85 + Math.floor(Math.random() * 10));
+      
+      if (useCurated) {
+          const matchingCurated = curatedContrasts.filter(p => p.isDark === isDark);
+          const chosen = matchingCurated[Math.floor(Math.random() * matchingCurated.length)];
+          bg = chosen.bg;
+          text = chosen.text;
+          accent = chosen.accent;
+          inputBg = chosen.inputBg;
       } else {
-        // 【清新淡雅亮色调】
-        const bgSat = Math.floor(Math.random() * 25) + 15; // 中低饱和度底色 (15-40)
-        const bgLight = Math.floor(Math.random() * 8) + 88; // 极高亮度 (88-95)
-        bg = hslToHex(baseHue, bgSat, bgLight);
-        inputBg = hslToHex(baseHue, Math.max(0, bgSat - 10), 98); // 输入框近乎纯白
+          // 🎲 数学美学算法：动态比例色相/亮度和饱和度
+          const isContrast = Math.random() > 0.45; // 45% 概率触发分裂撞色，55% 概率触发温和同色
+          const baseHue = Math.floor(Math.random() * 360);
+          let accentHue = baseHue;
 
-        // 强调色：在浅色背景上需要浓重且有力量
-        const accSat = isContrast
-          ? Math.floor(Math.random() * 40) + 40
-          : Math.floor(Math.random() * 20) + 30;
-        const accLight = Math.floor(Math.random() * 15) + 30; // 较暗 (30-45)
-        accent = hslToHex(accentHue, accSat, accLight);
+          if (isContrast) {
+              // 撞色公式：精确在 140 - 220 度的跨度，既能产生惊艳反差，又完全不刺眼
+              accentHue = (baseHue + 140 + Math.floor(Math.random() * 80)) % 360;
+          } else {
+              // 同色/邻色：-20 到 +20 色相微漂移
+              accentHue = (baseHue + Math.floor(Math.random() * 40) - 20 + 360) % 360;
+          }
 
-        // 文字色：极暗，带着一丝强调色的深邃
-        text = hslToHex(accentHue, 20, 15 + Math.floor(Math.random() * 10));
+          if (isDark) {
+              // 极简暗调：控制极低底色亮度，防止刺眼
+              const bgSat = Math.floor(Math.random() * 15) + 10; // 10-25
+              const bgLight = Math.floor(Math.random() * 8) + 12; // 12-20
+              bg = hslToHex(baseHue, bgSat, bgLight);
+              inputBg = hslToHex(baseHue, bgSat, Math.max(8, bgLight - 4)); // 输入框稍微凹陷显质感
+
+              // 强调色在黑底上必须明艳。同色系稍柔和，撞色系给高饱和度！
+              const accSat = isContrast ? (Math.floor(Math.random() * 25) + 65) : (Math.floor(Math.random() * 20) + 40); 
+              const accLight = Math.floor(Math.random() * 15) + 65; 
+              accent = hslToHex(accentHue, accSat, accLight);
+
+              text = hslToHex(accentHue, 15, 85 + Math.floor(Math.random() * 10)); // 柔白带微弱主调色温
+          } else {
+              // 温暖明调：限制最高亮度，让其看起来像纸张或柔光面板
+              const bgSat = Math.floor(Math.random() * 20) + 15; // 15-35
+              const bgLight = Math.floor(Math.random() * 8) + 88; // 88-96
+              bg = hslToHex(baseHue, bgSat, bgLight);
+              inputBg = hslToHex(baseHue, Math.max(0, bgSat - 10), 98); // 接近极纯白输入框
+
+              // 强调色在白底上必须有深度与骨骼感
+              const accSat = isContrast ? (Math.floor(Math.random() * 30) + 50) : (Math.floor(Math.random() * 20) + 35);
+              const accLight = Math.floor(Math.random() * 15) + 30; // 30-45
+              accent = hslToHex(accentHue, accSat, accLight);
+
+              text = hslToHex(accentHue, 20, 15 + Math.floor(Math.random() * 10)); // 墨色深邃
+          }
       }
 
-      // 将计算出的色彩填入面板并自动保存应用
       $ui.find("#wb-theme-cp-bg").val(bg);
       $ui.find("#wb-theme-cp-text").val(text);
       $ui.find("#wb-theme-cp-accent").val(accent);
       $ui.find("#wb-theme-cp-input-bg").val(inputBg);
-      $ui
-        .find("#wb-theme-cp-alpha")
-        .val(Math.floor(Math.random() * 15) + 85)
-        .trigger("input");
+      $ui.find("#wb-theme-cp-alpha").val(Math.floor(Math.random() * 15) + 85).trigger("input");
+      
+      // 提示已取消，实现丝滑连续盲盒体验！
+  });
 
-      if (typeof toastr !== "undefined") {
-        const flavor = isContrast ? "✨ 这次好像是撞色" : "🌿 这次好像是同色";
-        toastr.success(flavor);
-      }
-    });
+  // 💾 配方盒：保存当前配置
+  $ui.find("#wb-theme-preset-save").off("click").on("click", () => {
+      const name = $ui.find("#wb-theme-preset-name").val().trim();
+      if (!name) return toastr.warning("请先给这个配方起一个名字哦");
+      
+      const currentCustom = {
+          bg: $ui.find("#wb-theme-cp-bg").val(),
+          text: $ui.find("#wb-theme-cp-text").val(),
+          accent: $ui.find("#wb-theme-cp-accent").val(),
+          inputBg: $ui.find("#wb-theme-cp-input-bg").val(),
+          alpha: parseInt($ui.find("#wb-theme-cp-alpha").val()) || 95
+      };
+      
+      const themes = getSavedUserThemes();
+      themes[name] = currentCustom;
+      saveUserThemes(themes);
+      
+      $ui.find("#wb-theme-preset-name").val("");
+      renderPresetSelect();
+      $ui.find("#wb-theme-preset-select").val(name).trigger("change");
+      toastr.success(`配方 [${name}] 已妥善收进配方盒啦！`);
+  });
 
-  $ui
-    .find("#wb-theme-toggle-btn")
-    .off("click")
-    .on("click", () => $ui.find("#wb-theme-config-panel").slideToggle("fast"));
-  $ui
-    .find("#wb-theme-quick-toggle")
-    .off("click")
-    .on("click", () => {
-      let currentMode = $ui.find("#wb-theme-select").val();
-      if (
-        currentMode === "default" ||
-        currentMode === "dark" ||
-        currentMode === "custom"
-      ) {
-        $ui.find("#wb-theme-select").val("light").trigger("change");
-        if (typeof toastr !== "undefined")
-          toastr.success("已为您开启：浅色模式 ☀️");
-      } else if (currentMode === "light") {
-        $ui.find("#wb-theme-select").val("dark").trigger("change");
-        if (typeof toastr !== "undefined")
-          toastr.success("已为您开启：深色模式 🌙");
+  // 💾 配方盒：选择并加载配色
+  $ui.find("#wb-theme-preset-select").off("change").on("change", function() {
+      const name = $(this).val();
+      if (!name) {
+          $ui.find("#wb-theme-preset-del").hide();
+          return;
       }
-    });
+      const themes = getSavedUserThemes();
+      const config = themes[name];
+      if (config) {
+          $ui.find("#wb-theme-cp-bg").val(config.bg);
+          $ui.find("#wb-theme-cp-text").val(config.text);
+          $ui.find("#wb-theme-cp-accent").val(config.accent || "#70a1ff");
+          $ui.find("#wb-theme-cp-input-bg").val(config.inputBg || config.bg);
+          $ui.find("#wb-theme-cp-alpha").val(config.alpha || 95);
+          updateThemeAndSave();
+          $ui.find("#wb-theme-preset-del").show();
+      }
+  });
+
+  // 💾 配方盒：删除配方
+  $ui.find("#wb-theme-preset-del").off("click").on("click", () => {
+      const name = $ui.find("#wb-theme-preset-select").val();
+      if (!name) return;
+      const themes = getSavedUserThemes();
+      delete themes[name];
+      saveUserThemes(themes);
+      renderPresetSelect();
+      updateThemeAndSave();
+      toastr.info(`配方 [${name}] 已丢弃。`);
+  });
+
+  $ui.find("#wb-theme-toggle-btn").off("click").on("click", () => $ui.find("#wb-theme-config-panel").slideToggle("fast"));
+  $ui.find("#wb-theme-quick-toggle").off("click").on("click", () => {
+    let currentMode = $ui.find("#wb-theme-select").val();
+    if (currentMode === "default" || currentMode === "dark" || currentMode === "custom") {
+      $ui.find("#wb-theme-select").val("light").trigger("change");
+      if (typeof toastr !== "undefined") toastr.success("已为您开启：浅色模式 ☀️");
+    } else if (currentMode === "light") {
+      $ui.find("#wb-theme-select").val("dark").trigger("change");
+      if (typeof toastr !== "undefined") toastr.success("已为您开启：深色模式 🌙");
+    }
+  });
 
   loadThemeSettings();
 
