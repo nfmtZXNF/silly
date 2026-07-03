@@ -495,6 +495,62 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
     )
     .appendTo("#app_container, body");
   const btnNode = $floatBtn[0];
+    // ✨ 贴边后 hover 自动露出 / 移开缩回
+  const edgeGapHover = 12;
+  let hoverCollapseTimer = null; // 缩回的定时器
+
+  const getRealWinW = () => {
+    const realWin =
+      window.parent && window.parent !== window ? window.parent : window;
+    return realWin.innerWidth || document.documentElement.clientWidth;
+  };
+
+  // 滑出来
+  const slideOut = () => {
+    const edge = btnNode.dataset.dockedEdge;
+    if (!edge) return;
+    const winW = getRealWinW();
+    const btnW = btnNode.offsetWidth || 48;
+    btnNode.style.setProperty("transition", "left 0.22s ease", "important");
+    if (edge === "left") {
+      btnNode.style.setProperty("left", "2px", "important");
+    } else {
+      btnNode.style.setProperty("left", winW - btnW - 2 + "px", "important");
+    }
+  };
+
+  // 缩回去
+  const slideBack = () => {
+    const edge = btnNode.dataset.dockedEdge;
+    if (!edge) return;
+    const winW = getRealWinW();
+    const btnW = btnNode.offsetWidth || 48;
+    btnNode.style.setProperty("transition", "left 0.22s ease", "important");
+    if (edge === "left") {
+      btnNode.style.setProperty("left", edgeGapHover - btnW + "px", "important");
+    } else {
+      btnNode.style.setProperty("left", winW - edgeGapHover + "px", "important");
+    }
+  };
+
+  btnNode.addEventListener("mouseenter", () => {
+    // 鼠标回来了，取消掉正在等待的"缩回"
+    if (hoverCollapseTimer) {
+      clearTimeout(hoverCollapseTimer);
+      hoverCollapseTimer = null;
+    }
+    slideOut();
+  });
+
+  btnNode.addEventListener("mouseleave", () => {
+    // 不立刻缩回，等 200 毫秒。如果这期间鼠标又进来，上面会 clear 掉
+    if (hoverCollapseTimer) clearTimeout(hoverCollapseTimer);
+    hoverCollapseTimer = setTimeout(() => {
+      slideBack();
+      hoverCollapseTimer = null;
+    }, 200);
+  });
+
   let isDragging = false;
   let startX, startY, initX, initY, clickTimer;
   btnNode.addEventListener("pointerdown", (e) => {
@@ -509,31 +565,94 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
     const rect = btnNode.getBoundingClientRect();
     initX = rect.left;
     initY = rect.top;
+    let lastLeft = initX;   // 新增：记录当前left
+    let lastTop = initY;    // 新增：记录当前top
+
     const onPointerMove = (ev) => {
       const dx = (ev.clientX || 0) - startX;
       const dy = (ev.clientY || 0) - startY;
       if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
         isDragging = true;
         $floatBtn.find(".lulu-float-menu-opts").removeClass("show");
+        lastLeft = initX + dx;   // 新增：存起来
+        lastTop = initY + dy;    // 新增：存起来
         btnNode.style.setProperty("left", initX + dx + "px", "important");
         btnNode.style.setProperty("top", initY + dy + "px", "important");
         btnNode.style.setProperty("right", "auto", "important");
         btnNode.style.setProperty("transition", "none", "important");
       }
     };
-    const onPointerUp = (ev) => {
+        const onPointerUp = (ev) => {
+      console.log("松手，isDragging =", isDragging);
       btnNode.removeEventListener("pointermove", onPointerMove);
       btnNode.removeEventListener("pointerup", onPointerUp);
       btnNode.removeEventListener("pointercancel", onPointerUp);
       try {
         btnNode.releasePointerCapture(ev.pointerId);
       } catch (err) {}
+
+      // 没拖动就啥也不干，直接返回，保持原样
+      if (!isDragging) {
+        btnNode.style.setProperty(
+          "transition",
+          "transform 0.2s, opacity 0.2s",
+          "important",
+        );
+        return;
+      }
+
+      const btnW = btnNode.offsetWidth || 48;
+      const realWin =
+        window.parent && window.parent !== window ? window.parent : window;
+      const winW = realWin.innerWidth || document.documentElement.clientWidth;
+      const winH = realWin.innerHeight || document.documentElement.clientHeight;
+      const edgeGap = 12;
+
+      // 保护：lastLeft/lastTop 必须是正常数字，否则用当前位置兜底
+      let curLeft = Number(lastLeft);
+      let curTop = Number(lastTop);
+      if (!Number.isFinite(curLeft)) curLeft = winW - btnW - 15;
+      if (!Number.isFinite(curTop)) curTop = winH * 0.45;
+
+      // 算吸附
+      const distLeft = curLeft;
+      const distRight = winW - (curLeft + btnW);
+      let finalLeft = curLeft;
+      let dockedEdge = null; // 记录贴哪边：'left' / 'right' / null(没贴)
+      if (Math.min(distLeft, distRight) <= 40) {
+        if (distLeft <= distRight) {
+          finalLeft = edgeGap - btnW;
+          dockedEdge = "left";
+        } else {
+          finalLeft = winW - edgeGap;
+          dockedEdge = "right";
+        }
+      }
+      // 把状态存到球的属性上，供 hover 时读取
+      btnNode.dataset.dockedEdge = dockedEdge || "";
+
+      // 【关键防呆】强制夹进合理范围，物理上不许飞
+      const minLeft = edgeGap - btnW;      // 最左（贴左边露一点）
+      const maxLeft = winW - edgeGap;      // 最右
+      if (finalLeft < minLeft) finalLeft = minLeft;
+      if (finalLeft > maxLeft) finalLeft = maxLeft;
+
+      let finalTop = curTop;
+      if (finalTop < 6) finalTop = 6;
+      if (finalTop > winH - btnW - 6) finalTop = winH - btnW - 6;
+
+      console.log("最终落点：", { finalLeft, finalTop, btnW, winW });
+
       btnNode.style.setProperty(
         "transition",
-        "transform 0.2s, opacity 0.2s",
+        "left 0.25s ease, top 0.25s ease, transform 0.2s, opacity 0.2s",
         "important",
       );
+      btnNode.style.setProperty("left", finalLeft + "px", "important");
+      btnNode.style.setProperty("top", finalTop + "px", "important");
+      btnNode.style.setProperty("right", "auto", "important");
     };
+
     btnNode.addEventListener("pointermove", onPointerMove);
     btnNode.addEventListener("pointerup", onPointerUp);
     btnNode.addEventListener("pointercancel", onPointerUp);
@@ -545,6 +664,23 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
       e.stopPropagation();
     } else {
       const $menu = $floatBtn.find(".lulu-float-menu-opts");
+
+      // 看球现在在屏幕的左半区还是右半区，决定面板弹出方向
+      const realWin =
+        window.parent && window.parent !== window ? window.parent : window;
+      const winW =
+        realWin.innerWidth || document.documentElement.clientWidth;
+      const rect = btnNode.getBoundingClientRect();
+      const btnCenterX = rect.left + rect.width / 2; // 球的中心点横坐标
+
+      if (btnCenterX < winW / 2) {
+        // 球在左半区 → 面板朝右弹
+        $menu.css({ right: "auto", left: "calc(100% + 10px)" });
+      } else {
+        // 球在右半区 → 面板朝左弹
+        $menu.css({ left: "auto", right: "calc(100% + 10px)" });
+      }
+
       $menu.toggleClass("show");
       clearTimeout(clickTimer);
       if ($menu.hasClass("show")) {
