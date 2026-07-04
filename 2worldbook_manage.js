@@ -341,7 +341,45 @@ window.luluOpenQuickSnapshotView = async () => {
     themeOverrideCSS = `dialog.lulu-qs-dialog { background: ${bgRgba} !important; border: 1px solid var(--SmartThemeQuoteColor) !important; } dialog.lulu-qs-dialog, #lulu-quick-snap-modal { --SmartThemeBlurTintColor: ${bgRgba} !important; --SmartThemeBotMesColor: ${savedCustom.bg} !important; --SmartThemeBodyColor: ${savedCustom.text} !important; color: ${savedCustom.text} !important; }`;
   }
 
-  const customCss = `<style>.lulu-qs-btn-hover:hover { filter: brightness(1.2); } .lulu-qs-item { transition: 0.2s; } .lulu-qs-item:hover { border-color: var(--SmartThemeQuoteColor) !important; transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,0.1); } .lulu-qs-active { border-color: #51cf66 !important; background: rgba(81, 207, 102, 0.05) !important; } dialog.lulu-qs-dialog { background: var(--SmartThemeBlurTintColor) !important; border: 1px solid var(--SmartThemeBorderColor) !important; border-radius: 12px; } dialog.lulu-qs-dialog::backdrop { background: rgba(0,0,0,0.4) !important; backdrop-filter: blur(4px) !important; } @media (max-width: 768px) { #lulu-quick-snap-modal { min-width: unset !important; width: 85vw !important; padding: 5px !important; } .lulu-qs-item { padding: 10px !important; gap: 8px !important; } } ${themeOverrideCSS} </style>`;
+  const customCss = `<style>.lulu-qs-btn-hover:hover { filter: brightness(1.2); } .lulu-qs-item { transition: 0.2s; } .lulu-qs-item:hover { border-color: var(--SmartThemeQuoteColor) !important; transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,0.1); } .lulu-qs-active { border-color: #51cf66 !important; background: rgba(81, 207, 102, 0.05) !important; } dialog.lulu-qs-dialog { background: var(--SmartThemeBlurTintColor) !important; border: 1px solid var(--SmartThemeBorderColor) !important; border-radius: 12px; } dialog.lulu-qs-dialog::backdrop { background: rgba(0,0,0,0.4) !important; backdrop-filter: blur(4px) !important; } @media (max-width: 768px) { #lulu-quick-snap-modal { min-width: unset !important; width: 85vw !important; padding: 5px !important; } .lulu-qs-item { padding: 10px !important; gap: 8px !important; } } #lulu-quick-snap-modal input[type="text"] { background: var(--SmartThemeBotMesColor) !important; color: var(--SmartThemeBodyColor) !important; border: 1px solid var(--SmartThemeBorderColor) !important; } dialog.lulu-qs-dialog .popup-controls .menu_button, dialog.lulu-qs-dialog .popup-button-ok { background: var(--SmartThemeBotMesColor) !important; color: var(--SmartThemeBodyColor) !important; border: 1px solid var(--SmartThemeQuoteColor) !important; } dialog.lulu-qs-dialog .popup-controls .menu_button:hover, dialog.lulu-qs-dialog .popup-button-ok:hover { background: var(--SmartThemeQuoteColor) !important; color: #fff !important; }
+/* 极速快照面板内部：上下排序等普通按钮统一跟随主题 */
+#lulu-quick-snap-modal .menu_button:not(.btn-success):not(.btn-primary):not(.btn-danger) {
+  background: var(--SmartThemeBotMesColor) !important;
+  color: var(--SmartThemeBodyColor) !important;
+  border: 1px solid var(--SmartThemeBorderColor) !important;
+}
+#lulu-quick-snap-modal .menu_button:not(.btn-success):not(.btn-primary):not(.btn-danger):hover {
+  background: var(--SmartThemeQuoteColor) !important;
+  color: #fff !important;
+  border-color: var(--SmartThemeQuoteColor) !important;
+}
+/* “一键关闭当前所有全局世界书”按钮（红色危险款） */
+#lulu-quick-snap-modal #lulu-qs-clear-all {
+  background: rgba(255,107,107,0.12) !important;
+  color: #ff6b6b !important;
+  border: 1px solid #ff6b6b !important;
+}
+#lulu-quick-snap-modal #lulu-qs-clear-all:hover {
+  background: #ff6b6b !important;
+  color: #fff !important;
+}
+/* “运行”按钮：绿色（未生效）/ 强调色（生效中） */
+#lulu-quick-snap-modal .lulu-qs-apply-btn.btn-success {
+  background: rgba(81,207,102,0.12) !important;
+  color: #51cf66 !important;
+  border: 1px solid #51cf66 !important;
+}
+#lulu-quick-snap-modal .lulu-qs-apply-btn.btn-success:hover {
+  background: #51cf66 !important;
+  color: #fff !important;
+}
+#lulu-quick-snap-modal .lulu-qs-apply-btn.btn-primary {
+  background: rgba(125,125,125,0.12) !important;
+  color: var(--SmartThemeQuoteColor) !important;
+  border: 1px solid var(--SmartThemeQuoteColor) !important;
+}
+${themeOverrideCSS} </style>`;
+
 
   let html = `${customCss}<div id="lulu-quick-snap-modal" style="padding:10px; font-family:sans-serif; min-width:320px; max-width:550px;"><h3 style="margin-top:0; color:var(--SmartThemeQuoteColor); border-bottom:2px solid var(--SmartThemeBorderColor); padding-bottom:10px; font-size: 16px; display:flex; align-items:center; justify-content:space-between; gap:8px;"><span><i class="fa-solid fa-bolt" style="color:#fcc419;"></i> 极速快照控制台</span><span id="lulu-qs-status-text" style="color:var(--SmartThemeQuoteColor); font-size: 12px; font-weight:normal;">正在检测状态...</span></h3><div style="margin-bottom:10px;"><input type="text" id="lulu-qs-search" class="text_pole" placeholder="🔍 检索快照名称..." style="width:100%; box-sizing:border-box; padding:8px; border-radius:6px; font-size:13px; margin-bottom:10px;"><button id="lulu-qs-clear-all" class="menu_button interactable btn-danger lulu-qs-btn-hover" style="width:100%; margin:0; border:none; padding:10px; border-radius:6px; background:rgba(255, 107, 107, 0.1); color:#ff6b6b; font-weight:bold; font-size:13px; display:flex; justify-content:center; align-items:center; gap:8px;"><i class="fa-solid fa-power-off"></i> 一键关闭当前所有全局世界书</button></div><div style="max-height: 50vh; overflow-y: auto; display:flex; flex-direction:column; gap:10px; padding:4px;" class="scrollableInnerFull">`;
   let __quickOrder = getSnapshotOrder();
@@ -1364,11 +1402,6 @@ $menuBtn.on("click", async () => {
                     <button id="wb-theme-quick-toggle" class="menu_button interactable btn-primary" style="margin: 0; padding: 4px 10px; min-width: unset; font-size: 13px; border-radius: 6px; flex-shrink: 0; white-space: nowrap;" title="一键切换深色/浅色护眼模式"><i class="fa-solid fa-circle-half-stroke"></i></button>
                     <button id="wb-theme-toggle-btn" class="menu_button interactable btn-primary" style="margin: 0; padding: 4px 10px; min-width: unset; font-size: 13px; border-radius: 6px; flex-shrink: 0; white-space: nowrap;"><i class="fa-solid fa-palette"></i> 色彩微调</button>
                 </div>
-                <div style="display: flex; gap: 5px; align-items: center; background: var(--SmartThemeBlurTintColor); padding: 3px; border-radius: 6px; border: 1px solid var(--SmartThemeBorderColor); flex-shrink: 0;">
-                    <button id="wb-zoom-out" class="menu_button interactable" style="margin:0; padding: 4px 10px; min-width: unset;" title="缩小"><i class="fa-solid fa-minus"></i></button>
-                    <span id="wb-zoom-val" style="font-size: 13.5px; font-weight: bold; min-width: 50px; text-align: center;">100%</span>
-                    <button id="wb-zoom-in" class="menu_button interactable" style="margin:0; padding: 4px 10px; min-width: unset;" title="放大"><i class="fa-solid fa-plus"></i></button>
-                </div>
             </div>
 
             <!-- 皮肤设定的下拉内容区域 -->
@@ -2025,6 +2058,19 @@ $menuBtn.on("click", async () => {
             background: var(--SmartThemeQuoteColor) !important;
             color: var(--SmartThemeBotMesColor) !important;
         }
+
+        /* 底部“关闭面板”按钮统一跟随主题 */
+        dialog.wb-manager-dialog .popup-controls .menu_button,
+        dialog.wb-manager-dialog .popup-button-ok {
+            background: var(--SmartThemeBotMesColor) !important;
+            color: var(--SmartThemeBodyColor) !important;
+            border: 1px solid var(--SmartThemeQuoteColor) !important;
+        }
+        dialog.wb-manager-dialog .popup-controls .menu_button:hover,
+        dialog.wb-manager-dialog .popup-button-ok:hover {
+            background: var(--SmartThemeQuoteColor) !important;
+            color: var(--SmartThemeBotMesColor) !important;
+        }
     `;
 
     if (overrideCSS)
@@ -2506,16 +2552,6 @@ $menuBtn.on("click", async () => {
       );
     }
   });
-
-  let currentScale = 1.0;
-  const updateZoom = (scale) => {
-    currentScale = Math.max(0.5, Math.min(2.0, scale));
-    $(popup.dlg).css("zoom", currentScale);
-    $ui.find("#wb-zoom-val").text(Math.round(currentScale * 100) + "%");
-  };
-  $ui.find("#wb-zoom-in").on("click", () => updateZoom(currentScale + 0.1));
-  $ui.find("#wb-zoom-out").on("click", () => updateZoom(currentScale - 0.1));
-
   const showTab = (tabName) => {
     $ui.find(".wb-tab-btn").removeClass("active");
     $ui.find("#wb-manager-panel").removeClass("wb-entry-focus");
@@ -2941,6 +2977,109 @@ $menuBtn.on("click", async () => {
       if ($ui.find("#wb-char-view").is(":visible")) renderCharView();
     }
   };
+  // ========== 【通用】给弹窗生成跟随主题的 CSS ==========
+  const buildPopupThemeCSS = (selector) => {
+    const mode = localStorage.getItem("lulu_wb_panel_theme") || "default";
+    const custom = JSON.parse(
+      localStorage.getItem("lulu_wb_panel_custom_colors") ||
+        '{"bg":"#2a2e33", "text":"#ffffff", "accent":"#70a1ff", "alpha":95, "inputBg":"#1a1c1f"}',
+    );
+    const toRgba = (hex, alpha) => {
+      let r = 0,
+        g = 0,
+        b = 0;
+      if (hex && hex.length === 7) {
+        r = parseInt(hex.substring(1, 3), 16);
+        g = parseInt(hex.substring(3, 5), 16);
+        b = parseInt(hex.substring(5, 7), 16);
+      }
+      return `rgba(${r},${g},${b},${alpha / 100})`;
+    };
+
+    let bg, botMes, body, quote, border, inputBg;
+
+    if (mode === "dark") {
+      bg = "rgba(22,24,28,1)";
+      botMes = "rgba(32,35,40,1)";
+      body = "#c0c2c8";
+      quote = "#d1c5a1";
+      border = "#3d414d";
+      inputBg = "rgba(35,38,43,1)";
+    } else if (mode === "light") {
+      bg = "rgba(253,246,227,1)";
+      botMes = "rgba(255,251,240,1)";
+      body = "#4a3b32";
+      quote = "#8b5d33";
+      border = "#e0d0b8";
+      inputBg = "rgba(255,255,255,0.7)";
+    } else if (mode === "custom") {
+      bg = toRgba(custom.bg, custom.alpha);
+      botMes = custom.bg;
+      body = custom.text;
+      quote = custom.accent || "#70a1ff";
+      border = custom.inputBg || custom.bg;
+      inputBg = custom.inputBg || custom.bg;
+    } else {
+      // default 模式跟随酒馆，不强改，只统一输入框和按钮
+      return `
+        ${selector} input[type="text"],
+        ${selector} input[type="number"],
+        ${selector} select,
+        ${selector} textarea {
+          background: var(--SmartThemeBotMesColor) !important;
+          color: var(--SmartThemeBodyColor) !important;
+          border: 1px solid var(--SmartThemeBorderColor) !important;
+        }
+        ${selector} .menu_button:not(.btn-danger):not(.btn-success):not(.btn-warning):not(.btn-primary) {
+          background: var(--SmartThemeBotMesColor) !important;
+          color: var(--SmartThemeBodyColor) !important;
+          border: 1px solid var(--SmartThemeBorderColor) !important;
+        }
+      `;
+    }
+
+    return `
+      ${selector} {
+        background: ${bg} !important;
+        border: 1px solid ${quote} !important;
+        --SmartThemeBlurTintColor: ${bg} !important;
+        --SmartThemeBotMesColor: ${botMes} !important;
+        --SmartThemeBodyColor: ${body} !important;
+        --SmartThemeQuoteColor: ${quote} !important;
+        --SmartThemeBorderColor: ${border} !important;
+        color: ${body} !important;
+      }
+      ${selector} h3, ${selector} label, ${selector} span, ${selector} div {
+        color: ${body};
+      }
+      ${selector} input[type="text"],
+      ${selector} input[type="number"],
+      ${selector} select,
+      ${selector} textarea {
+        background: ${inputBg} !important;
+        color: ${body} !important;
+        border: 1px solid ${border} !important;
+      }
+      ${selector} input::placeholder, ${selector} textarea::placeholder {
+        color: gray !important;
+      }
+      ${selector} .menu_button:not(.btn-danger):not(.btn-success):not(.btn-warning):not(.btn-primary) {
+        background: ${botMes} !important;
+        color: ${body} !important;
+        border: 1px solid ${border} !important;
+      }
+      ${selector} .btn-primary {
+        color: ${quote} !important;
+        border-color: ${quote} !important;
+        background: rgba(125,125,125,0.08) !important;
+      }
+      ${selector} .btn-primary:hover {
+        background: ${quote} !important;
+        color: ${botMes} !important;
+      }
+    `;
+  };
+  // ========== 【通用】主题函数结束 ==========
   // ---- 回收站弹窗（功能1）----
   $ui.find("#wb-btn-recycle").on("click", async () => {
     const renderRecycleList = () => {
@@ -4364,6 +4503,11 @@ $menuBtn.on("click", async () => {
     `;
 
     const $dialog = $(dialogHtml);
+    $dialog
+      .attr("id", "lulu-batch-grp-dialog")
+      .prepend(
+        `<style>${buildPopupThemeCSS("dialog:has(#lulu-batch-grp-dialog)")}</style>`,
+      );
 
     // 让下拉和输入框互斥：选了下拉就清空输入框，反之亦然
     $dialog.find("#lulu-batch-grp-select").on("change", function () {
@@ -6777,7 +6921,7 @@ $menuBtn.on("click", async () => {
         return toastr.warning("这本书还没有条目可以替换哦~");
 
       const dialogHtml = `
-      <div style="padding:6px; font-family:sans-serif; min-width:300px; max-width:460px; text-align:left;">
+      <div style="padding:6px; font-family:sans-serif; min-width:300px; max-width:460px; text-align:left; max-height:70vh; overflow-y:auto;">
         <h3 style="margin-top:0; color:var(--SmartThemeQuoteColor); border-bottom:2px solid var(--SmartThemeBorderColor); padding-bottom:10px;">
           <i class="fa-solid fa-magnifying-glass-arrow-right"></i> 查找替换
           <span style="font-size:12px; font-weight:normal; color:gray;">当前书：${tuneWbName}</span>
@@ -6810,89 +6954,245 @@ $menuBtn.on("click", async () => {
           <input type="checkbox" id="lulu-rep-case" style="accent-color:var(--SmartThemeQuoteColor);"> <span>区分大小写</span>
         </label>
 
+        <div id="lulu-rep-nav" style="display:none; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; padding:8px 10px; background:rgba(81,207,102,0.08); border:1px solid rgba(81,207,102,0.4); border-radius:6px;">
+          <div style="display:flex; align-items:center; gap:6px;">
+            <button id="lulu-rep-nav-prev" class="menu_button interactable wb-nowrap-btn" style="margin:0; padding:4px 10px; font-size:12px;" title="上一处"><i class="fa-solid fa-chevron-up"></i></button>
+            <button id="lulu-rep-nav-next" class="menu_button interactable wb-nowrap-btn" style="margin:0; padding:4px 10px; font-size:12px;" title="下一处"><i class="fa-solid fa-chevron-down"></i></button>
+            <span id="lulu-rep-nav-info" style="font-size:12px; font-weight:bold; color:var(--SmartThemeQuoteColor); white-space:nowrap;">第 0 / 0 处</span>
+          </div>
+          <button id="lulu-rep-nav-do" class="menu_button interactable btn-success wb-nowrap-btn" style="margin:0; padding:4px 12px; font-size:12px; border:none;"><i class="fa-solid fa-check"></i> 替换这一处</button>
+        </div>
+
         <div id="lulu-rep-preview" style="font-size:13px; padding:10px; border-radius:6px; background:var(--SmartThemeBotMesColor); border:1px dashed var(--SmartThemeBorderColor); text-align:center; color:gray; margin-bottom:12px; max-height:260px; overflow-y:auto;">
           点击下方「预览匹配」看看会替换多少处~
         </div>
 
         <div style="display:flex; gap:8px;">
           <button id="lulu-rep-preview-btn" class="menu_button interactable btn-primary wb-nowrap-btn" style="flex:1; margin:0; padding:8px; border:none;"><i class="fa-solid fa-eye"></i> 预览匹配</button>
-          <button id="lulu-rep-do-btn" class="menu_button interactable btn-success wb-nowrap-btn" style="flex:1; margin:0; padding:8px; border:none;" disabled><i class="fa-solid fa-wand-magic-sparkles"></i> 执行替换</button>
+          <button id="lulu-rep-do-btn" class="menu_button interactable btn-success wb-nowrap-btn" style="flex:1; margin:0; padding:8px; border:none;" disabled><i class="fa-solid fa-wand-magic-sparkles"></i> 全部替换</button>
         </div>
       </div>`;
 
       const $dlg = $(dialogHtml);
+      $dlg
+        .attr("id", "lulu-rep-dialog")
+        .prepend(
+          `<style>${buildPopupThemeCSS("dialog:has(#lulu-rep-dialog)")}</style>`,
+        );
 
-      // 工具：转义正则特殊字符，让查找当作纯文本
       const escapeReg = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const escapeHtml = (s) =>
+        String(s).replace(/</g, "<").replace(/>/g, ">");
 
-      // 转义 HTML，防止条目内容里的尖括号乱套
-      const escapeHtml = (s) => String(s).replace(/</g, "<").replace(/>/g, ">");
+      let matchList = [];
+      let curMatchIdx = -1;
 
-      // 从一段文本里，找出所有匹配并生成"前文【词】后文"的高亮片段
-      const collectSnippets = (text, reg, fieldLabel, snippets) => {
-        if (!text) return 0;
-        const CTX = 18; // 关键词前后各取多少个字
-        let count = 0;
+      const collectField = (
+        entryIdx,
+        field,
+        keyIndex,
+        text,
+        reg,
+        fieldLabel,
+        out,
+      ) => {
+        if (!text) return;
         let m;
         reg.lastIndex = 0;
         while ((m = reg.exec(text)) !== null) {
-          count++;
-          const start = m.index;
-          const end = m.index + m[0].length;
-          const before = text.slice(Math.max(0, start - CTX), start);
-          const after = text.slice(end, end + CTX);
-          const prefix = start - CTX > 0 ? "…" : "";
-          const suffix = end + CTX < text.length ? "…" : "";
-          // 只收集前 200 个片段，防止极端情况卡死
-          if (snippets.length < 200) {
-            snippets.push(
-              `<div style="padding:2px 0; line-height:1.5;"><span style="font-size:10px; color:var(--SmartThemeQuoteColor); background:rgba(125,125,125,0.15); padding:1px 4px; border-radius:3px; margin-right:4px;">${fieldLabel}</span>${prefix}${escapeHtml(before)}<mark style="background:#fcc419; color:#000; padding:0 2px; border-radius:2px; font-weight:bold;">${escapeHtml(m[0])}</mark>${escapeHtml(after)}${suffix}</div>`,
-            );
-          }
-          if (m[0].length === 0) reg.lastIndex++; // 防空匹配死循环
+          out.push({
+            entryIdx,
+            field,
+            keyIndex,
+            start: m.index,
+            length: m[0].length,
+            matchText: m[0],
+            fieldLabel,
+          });
+          if (m[0].length === 0) reg.lastIndex++;
         }
-        return count;
       };
 
-      // 统计匹配 + 收集上下文片段
-      const countMatches = () => {
+      const buildMatchList = () => {
+        matchList = [];
         const find = $dlg.find("#lulu-rep-find").val();
-        if (!find) return { total: 0, entryCount: 0, details: [] };
+        if (!find) return;
         const caseSensitive = $dlg.find("#lulu-rep-case").is(":checked");
         const doContent = $dlg.find("#lulu-rep-content").is(":checked");
         const doKeys = $dlg.find("#lulu-rep-keys").is(":checked");
         const doName = $dlg.find("#lulu-rep-name").is(":checked");
         const flags = caseSensitive ? "g" : "gi";
-        const reg = new RegExp(escapeReg(find), flags);
 
-        let total = 0;
-        let entryCount = 0;
-        const details = []; // 每个命中条目：{name, snippets:[]}
-
-        tuneEntries.forEach((e) => {
-          const snippets = [];
-          let hit = 0;
+        tuneEntries.forEach((e, entryIdx) => {
           if (doName && e.name) {
-            hit += collectSnippets(e.name, reg, "名称", snippets);
+            collectField(
+              entryIdx,
+              "name",
+              -1,
+              e.name,
+              new RegExp(escapeReg(find), flags),
+              "名称",
+              matchList,
+            );
           }
           if (doKeys && e.strategy?.keys) {
-            e.strategy.keys.forEach((k) => {
-              hit += collectSnippets(String(k), reg, "关键字", snippets);
+            e.strategy.keys.forEach((k, ki) => {
+              collectField(
+                entryIdx,
+                "keys",
+                ki,
+                String(k),
+                new RegExp(escapeReg(find), flags),
+                "关键字",
+                matchList,
+              );
             });
           }
           if (doContent && e.content) {
-            hit += collectSnippets(e.content, reg, "正文", snippets);
-          }
-          if (hit > 0) {
-            total += hit;
-            entryCount++;
-            details.push({ name: e.name || "(未命名条目)", snippets });
+            collectField(
+              entryIdx,
+              "content",
+              -1,
+              e.content,
+              new RegExp(escapeReg(find), flags),
+              "正文",
+              matchList,
+            );
           }
         });
-        return { total, entryCount, details };
       };
 
-      // 预览按钮
+      const getFieldText = (mt) => {
+        const e = tuneEntries[mt.entryIdx];
+        if (!e) return "";
+        if (mt.field === "name") return e.name || "";
+        if (mt.field === "content") return e.content || "";
+        if (mt.field === "keys")
+          return String(e.strategy?.keys?.[mt.keyIndex] ?? "");
+        return "";
+      };
+
+      const renderPreviewList = () => {
+        if (matchList.length === 0) {
+          $dlg
+            .find("#lulu-rep-preview")
+            .html(
+              '<span style="color:gray;">没有找到任何匹配的内容呢 (´･ω･`)</span>',
+            );
+          $dlg.find("#lulu-rep-nav").css("display", "none");
+          $dlg.find("#lulu-rep-do-btn").prop("disabled", true);
+          return;
+        }
+
+        const find = $dlg.find("#lulu-rep-find").val();
+        const to = $dlg.find("#lulu-rep-to").val();
+        const CTX = 18;
+
+        const byEntry = {};
+        matchList.forEach((mt, globalIdx) => {
+          if (!byEntry[mt.entryIdx]) byEntry[mt.entryIdx] = [];
+          byEntry[mt.entryIdx].push({ ...mt, globalIdx });
+        });
+
+        let html = `<div style="text-align:center; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid rgba(125,125,125,0.2);">共找到 <strong style="color:var(--SmartThemeQuoteColor); font-size:15px;">${matchList.length}</strong> 处匹配<br><span style="font-size:12px; color:gray;">[${escapeHtml(find)}] → [${escapeHtml(to) || "（空，即删除）"}]</span></div>`;
+        html += '<div style="text-align:left;">';
+
+        Object.keys(byEntry).forEach((eIdx) => {
+          const e = tuneEntries[eIdx];
+          const items = byEntry[eIdx];
+          html += `<div style="margin-bottom:8px;"><div style="font-weight:bold; font-size:12.5px; color:var(--SmartThemeBodyColor); margin-bottom:2px;"><i class="fa-solid fa-file-lines" style="color:var(--SmartThemeQuoteColor); margin-right:4px;"></i>${escapeHtml(e.name || "(未命名条目)")} <span style="color:gray; font-weight:normal;">(${items.length}处)</span></div>`;
+          items.forEach((mt) => {
+            const text = getFieldText(mt);
+            const start = mt.start;
+            const end = mt.start + mt.length;
+            const before = text.slice(Math.max(0, start - CTX), start);
+            const after = text.slice(end, end + CTX);
+            const prefix = start - CTX > 0 ? "…" : "";
+            const suffix = end + CTX < text.length ? "…" : "";
+            const isActive = mt.globalIdx === curMatchIdx;
+            const markColor = isActive ? "#ff922b" : "#fcc419";
+            html += `<div class="lulu-rep-snippet" data-gidx="${mt.globalIdx}" style="padding:4px 6px; line-height:1.5; border-radius:4px; cursor:pointer; margin-bottom:2px; ${isActive ? "background:rgba(255,146,43,0.15); border:1px solid #ff922b;" : "border:1px solid transparent;"}"><span style="font-size:10px; color:var(--SmartThemeQuoteColor); background:rgba(125,125,125,0.15); padding:1px 4px; border-radius:3px; margin-right:4px;">${mt.fieldLabel}</span>${prefix}${escapeHtml(before)}<mark style="background:${markColor}; color:#000; padding:0 2px; border-radius:2px; font-weight:bold;">${escapeHtml(mt.matchText)}</mark>${escapeHtml(after)}${suffix} <i class="fa-solid fa-pen-to-square lulu-rep-one" data-gidx="${mt.globalIdx}" style="color:#51cf66; margin-left:4px;" title="替换这一处"></i></div>`;
+          });
+          html += "</div>";
+        });
+        html += "</div>";
+        $dlg.find("#lulu-rep-preview").html(html);
+
+        $dlg.find("#lulu-rep-nav").css("display", "flex");
+        $dlg
+          .find("#lulu-rep-nav-info")
+          .text(`第 ${curMatchIdx + 1} / ${matchList.length} 处`);
+        $dlg.find("#lulu-rep-do-btn").prop("disabled", false);
+
+        $dlg
+          .find(".lulu-rep-snippet")
+          .off("click")
+          .on("click", function (ev) {
+            if ($(ev.target).hasClass("lulu-rep-one")) return;
+            curMatchIdx = parseInt($(this).attr("data-gidx"));
+            renderPreviewList();
+            scrollToActive();
+          });
+        $dlg
+          .find(".lulu-rep-one")
+          .off("click")
+          .on("click", function (ev) {
+            ev.stopPropagation();
+            const gidx = parseInt($(this).attr("data-gidx"));
+            doReplaceOne(gidx);
+          });
+      };
+
+      const scrollToActive = () => {
+        const $active = $dlg.find(
+          `.lulu-rep-snippet[data-gidx="${curMatchIdx}"]`,
+        );
+        if ($active.length) {
+          $active[0].scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      };
+
+      const doReplaceOne = (gidx) => {
+        const mt = matchList[gidx];
+        if (!mt) return;
+        const to = $dlg.find("#lulu-rep-to").val();
+        const e = tuneEntries[mt.entryIdx];
+        if (!e) return;
+
+        const replaceAt = (str) =>
+          str.slice(0, mt.start) + to + str.slice(mt.start + mt.length);
+
+        if (mt.field === "name") {
+          e.name = replaceAt(e.name || "");
+        } else if (mt.field === "content") {
+          e.content = replaceAt(e.content || "");
+        } else if (mt.field === "keys") {
+          const arr = e.strategy.keys.slice();
+          arr[mt.keyIndex] = replaceAt(String(arr[mt.keyIndex] ?? ""));
+          e.strategy.keys = arr;
+          e.key = arr;
+          e.keys = arr;
+        }
+
+        if (typeof luluTokenCache !== "undefined")
+          delete luluTokenCache[tuneWbName];
+        renderEntryList();
+
+        const prevIdx = gidx;
+        buildMatchList();
+        if (matchList.length === 0) {
+          curMatchIdx = -1;
+        } else {
+          curMatchIdx = Math.min(prevIdx, matchList.length - 1);
+        }
+        renderPreviewList();
+        if (curMatchIdx >= 0) scrollToActive();
+
+        toastr.success(
+          "✨ 已替换这一处！记得最后点左下角绿色「确认并覆盖源文件」哦~",
+        );
+      };
+
       $dlg.find("#lulu-rep-preview-btn").on("click", () => {
         const find = $dlg.find("#lulu-rep-find").val();
         if (!find) {
@@ -6901,6 +7201,7 @@ $menuBtn.on("click", async () => {
             .html(
               '<span style="color:#ff6b6b;">请先输入要查找的内容哦~</span>',
             );
+          $dlg.find("#lulu-rep-nav").css("display", "none");
           return;
         }
         if (
@@ -6913,43 +7214,43 @@ $menuBtn.on("click", async () => {
             .html(
               '<span style="color:#ff6b6b;">至少要勾选一个替换范围呀~</span>',
             );
+          $dlg.find("#lulu-rep-nav").css("display", "none");
           return;
         }
-        const { total, entryCount } = countMatches();
-        if (total === 0) {
-          $dlg
-            .find("#lulu-rep-preview")
-            .html(
-              '<span style="color:gray;">没有找到任何匹配的内容呢 (´･ω･`)</span>',
-            );
-          $dlg.find("#lulu-rep-do-btn").prop("disabled", true);
-        } else {
-          const to = $dlg.find("#lulu-rep-to").val();
-          const { details } = countMatches();
-          let listHtml = `<div style="text-align:center; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid rgba(125,125,125,0.2);">共找到 <strong style="color:var(--SmartThemeQuoteColor); font-size:15px;">${total}</strong> 处匹配，分布在 <strong style="color:var(--SmartThemeQuoteColor);">${entryCount}</strong> 个条目中<br><span style="font-size:12px; color:gray;">将把 [${find}] → [${to || "（空，即删除）"}]</span></div>`;
-          listHtml += '<div style="text-align:left;">';
-          details.forEach((d) => {
-            listHtml += `<div style="margin-bottom:8px;"><div style="font-weight:bold; font-size:12.5px; color:var(--SmartThemeBodyColor); margin-bottom:2px;"><i class="fa-solid fa-file-lines" style="color:var(--SmartThemeQuoteColor); margin-right:4px;"></i>${escapeHtml(d.name)} <span style="color:gray; font-weight:normal;">(${d.snippets.length}处)</span></div><div style="padding-left:8px; border-left:2px solid var(--SmartThemeBorderColor); color:var(--SmartThemeBodyColor); font-size:12px;">${d.snippets.join("")}</div></div>`;
-          });
-          if (total > 200) {
-            listHtml += `<div style="text-align:center; color:gray; font-size:11px; margin-top:6px;">（片段太多，仅展示前 200 处，但替换会全部生效哦）</div>`;
-          }
-          listHtml += "</div>";
-          $dlg.find("#lulu-rep-preview").html(listHtml);
-          $dlg.find("#lulu-rep-do-btn").prop("disabled", false);
-        }
+        buildMatchList();
+        curMatchIdx = matchList.length > 0 ? 0 : -1;
+        renderPreviewList();
+        if (curMatchIdx >= 0) scrollToActive();
       });
 
-      // 改动任何条件时，重置执行按钮
+      $dlg.find("#lulu-rep-nav-prev").on("click", () => {
+        if (matchList.length === 0) return;
+        curMatchIdx = (curMatchIdx - 1 + matchList.length) % matchList.length;
+        renderPreviewList();
+        scrollToActive();
+      });
+      $dlg.find("#lulu-rep-nav-next").on("click", () => {
+        if (matchList.length === 0) return;
+        curMatchIdx = (curMatchIdx + 1) % matchList.length;
+        renderPreviewList();
+        scrollToActive();
+      });
+      $dlg.find("#lulu-rep-nav-do").on("click", () => {
+        if (curMatchIdx < 0) return;
+        doReplaceOne(curMatchIdx);
+      });
+
       $dlg
         .find(
           "#lulu-rep-find, #lulu-rep-to, #lulu-rep-content, #lulu-rep-keys, #lulu-rep-name, #lulu-rep-case",
         )
         .on("input change", () => {
           $dlg.find("#lulu-rep-do-btn").prop("disabled", true);
+          $dlg.find("#lulu-rep-nav").css("display", "none");
+          matchList = [];
+          curMatchIdx = -1;
         });
 
-      // 执行替换按钮（Part 2 会填充真正逻辑）
       $dlg.find("#lulu-rep-do-btn").on("click", () => {
         if (typeof doEntryReplace === "function") {
           doEntryReplace($dlg, escapeReg);
