@@ -97,6 +97,101 @@ const getSharedGroupOrder = () =>
   JSON.parse(localStorage.getItem("lulu_wb_native_group_order") || "[]");
 const setSharedGroupOrder = (arr) =>
   localStorage.setItem("lulu_wb_native_group_order", JSON.stringify(arr));
+// ========== 【功能8：快照排序】工具函数 开始 ==========
+const getSnapshotOrder = () => {
+  let vars = getVariables({ type: "global" });
+  let order = vars.wb_snapshot_order;
+  if (typeof order === "string") {
+    try {
+      order = JSON.parse(order);
+    } catch (e) {
+      order = [];
+    }
+  }
+  return Array.isArray(order) ? order : [];
+};
+const setSnapshotOrder = (arr) => {
+  updateVariablesWith(
+    (v) => {
+      v.wb_snapshot_order = arr;
+      return v;
+    },
+    { type: "global" },
+  );
+};
+// 按顺序数组给快照名排序，新出现的排最后
+const sortSnapshotNames = (names) => {
+  let order = getSnapshotOrder();
+  let changed = false;
+  names.forEach((n) => {
+    if (!order.includes(n)) {
+      order.push(n);
+      changed = true;
+    }
+  });
+  if (changed) setSnapshotOrder(order);
+  return [...names].sort((a, b) => {
+    let ia = order.indexOf(a);
+    let ib = order.indexOf(b);
+    if (ia === -1) ia = 9999;
+    if (ib === -1) ib = 9999;
+    return ia - ib;
+  });
+};
+// 角色快照顺序：按角色名分开存
+const getCharSnapshotOrder = (charName) => {
+  let vars = getVariables({ type: "global" });
+  let allOrder = vars.wb_char_snapshot_order;
+  if (typeof allOrder === "string") {
+    try {
+      allOrder = JSON.parse(allOrder);
+    } catch (e) {
+      allOrder = {};
+    }
+  }
+  if (!allOrder || typeof allOrder !== "object" || Array.isArray(allOrder))
+    allOrder = {};
+  return Array.isArray(allOrder[charName]) ? allOrder[charName] : [];
+};
+const setCharSnapshotOrder = (charName, arr) => {
+  updateVariablesWith(
+    (v) => {
+      let allOrder = v.wb_char_snapshot_order;
+      if (typeof allOrder === "string") {
+        try {
+          allOrder = JSON.parse(allOrder);
+        } catch (e) {
+          allOrder = {};
+        }
+      }
+      if (!allOrder || typeof allOrder !== "object" || Array.isArray(allOrder))
+        allOrder = {};
+      allOrder[charName] = arr;
+      v.wb_char_snapshot_order = allOrder;
+      return v;
+    },
+    { type: "global" },
+  );
+};
+const sortCharSnapshotNames = (charName, names) => {
+  let order = getCharSnapshotOrder(charName);
+  let changed = false;
+  names.forEach((n) => {
+    if (!order.includes(n)) {
+      order.push(n);
+      changed = true;
+    }
+  });
+  if (changed) setCharSnapshotOrder(charName, order);
+  return [...names].sort((a, b) => {
+    let ia = order.indexOf(a);
+    let ib = order.indexOf(b);
+    if (ia === -1) ia = 9999;
+    if (ib === -1) ib = 9999;
+    return ia - ib;
+  });
+};
+// ========== 【功能8：快照排序】工具函数 结束 ==========
 
 const formatPositionBadge = (pos) => {
   if (!pos) return "📍未知位置 | 🔢100";
@@ -249,7 +344,15 @@ window.luluOpenQuickSnapshotView = async () => {
   const customCss = `<style>.lulu-qs-btn-hover:hover { filter: brightness(1.2); } .lulu-qs-item { transition: 0.2s; } .lulu-qs-item:hover { border-color: var(--SmartThemeQuoteColor) !important; transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,0.1); } .lulu-qs-active { border-color: #51cf66 !important; background: rgba(81, 207, 102, 0.05) !important; } dialog.lulu-qs-dialog { background: var(--SmartThemeBlurTintColor) !important; border: 1px solid var(--SmartThemeBorderColor) !important; border-radius: 12px; } dialog.lulu-qs-dialog::backdrop { background: rgba(0,0,0,0.4) !important; backdrop-filter: blur(4px) !important; } @media (max-width: 768px) { #lulu-quick-snap-modal { min-width: unset !important; width: 85vw !important; padding: 5px !important; } .lulu-qs-item { padding: 10px !important; gap: 8px !important; } } ${themeOverrideCSS} </style>`;
 
   let html = `${customCss}<div id="lulu-quick-snap-modal" style="padding:10px; font-family:sans-serif; min-width:320px; max-width:550px;"><h3 style="margin-top:0; color:var(--SmartThemeQuoteColor); border-bottom:2px solid var(--SmartThemeBorderColor); padding-bottom:10px; font-size: 16px; display:flex; align-items:center; justify-content:space-between; gap:8px;"><span><i class="fa-solid fa-bolt" style="color:#fcc419;"></i> 极速快照控制台</span><span id="lulu-qs-status-text" style="color:var(--SmartThemeQuoteColor); font-size: 12px; font-weight:normal;">正在检测状态...</span></h3><div style="margin-bottom:10px;"><input type="text" id="lulu-qs-search" class="text_pole" placeholder="🔍 检索快照名称..." style="width:100%; box-sizing:border-box; padding:8px; border-radius:6px; font-size:13px; margin-bottom:10px;"><button id="lulu-qs-clear-all" class="menu_button interactable btn-danger lulu-qs-btn-hover" style="width:100%; margin:0; border:none; padding:10px; border-radius:6px; background:rgba(255, 107, 107, 0.1); color:#ff6b6b; font-weight:bold; font-size:13px; display:flex; justify-content:center; align-items:center; gap:8px;"><i class="fa-solid fa-power-off"></i> 一键关闭当前所有全局世界书</button></div><div style="max-height: 50vh; overflow-y: auto; display:flex; flex-direction:column; gap:10px; padding:4px;" class="scrollableInnerFull">`;
-  const snapEntries = Object.entries(snapshots);
+  let __quickOrder = getSnapshotOrder();
+  const __sortedQuickNames = Object.keys(snapshots).sort((a, b) => {
+    let ia = __quickOrder.indexOf(a);
+    let ib = __quickOrder.indexOf(b);
+    if (ia === -1) ia = 9999;
+    if (ib === -1) ib = 9999;
+    return ia - ib;
+  });
+  const snapEntries = __sortedQuickNames.map((n) => [n, snapshots[n]]);
   if (snapEntries.length === 0) {
     html += `<div style="color:gray; text-align:center; padding: 30px; background:var(--SmartThemeBlurTintColor, rgba(0,0,0,0.1)); border-radius:8px; border:1px dashed var(--SmartThemeBorderColor);">存储库目前是空的哦，<br>可以先去主页面的重度面板收纳一些快照进来呀~</div>`;
   } else {
@@ -265,7 +368,7 @@ window.luluOpenQuickSnapshotView = async () => {
         /[^a-zA-Z0-9]/g,
         "",
       );
-      html += `<div class="lulu-qs-item" data-itemname="${safeName}" style="background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:8px; padding:12px; display:flex; justify-content:space-between; align-items:center; gap: 10px;"><div style="flex:1; min-width:0;"><div style="font-weight:bold; font-size:14.5px; color:var(--SmartThemeBodyColor); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><i class="fa-solid ${isDetailed ? "fa-puzzle-piece" : "fa-camera-retro"}" style="color:var(--SmartThemeQuoteColor);"></i> ${name}</div><div style="font-size:11px; color:gray; margin-top:6px; display:flex; align-items:center; gap:6px;"><span>${isDetailed ? "复合场景" : "基础组合"} | 共涉及 ${wbs.length || 0} 本书</span></div><div class="lulu-qs-badge" data-badgename="${safeName}" style="display:none; margin-top:6px; font-size:11px; color:#51cf66; font-weight:bold;"><i class="fa-solid fa-circle-check"></i> 当前全局生效中</div></div><button class="menu_button interactable btn-success lulu-qs-btn-hover lulu-qs-apply-btn" data-btnname="${safeName}" data-rawname="${encodeURIComponent(name)}" style="margin:0; border:none; border-radius:6px; font-size:13px; font-weight:bold; padding: 8px 14px; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; gap:6px; white-space:nowrap !important; word-break:keep-all;">运行 <i class="fa-solid fa-play"></i></button></div>`;
+      html += `<div class="lulu-qs-item" data-itemname="${safeName}" style="background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:8px; padding:12px; display:flex; justify-content:space-between; align-items:center; gap: 10px;"><div style="flex:1; min-width:0;"><div style="font-weight:bold; font-size:14.5px; color:var(--SmartThemeBodyColor); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><i class="fa-solid ${isDetailed ? "fa-puzzle-piece" : "fa-camera-retro"}" style="color:var(--SmartThemeQuoteColor);"></i> ${name}</div><div style="font-size:11px; color:gray; margin-top:6px; display:flex; align-items:center; gap:6px;"><span>${isDetailed ? "复合场景" : "基础组合"} | 共涉及 ${wbs.length || 0} 本书</span></div><div class="lulu-qs-badge" data-badgename="${safeName}" style="display:none; margin-top:6px; font-size:11px; color:#51cf66; font-weight:bold;"><i class="fa-solid fa-circle-check"></i> 当前全局生效中</div></div><div style="display:flex; align-items:center; gap:6px; flex-shrink:0;"><div style="display:flex; flex-direction:column; gap:2px;"><button class="menu_button interactable lulu-qs-move-up" data-rawname="${encodeURIComponent(name)}" style="margin:0; padding:2px 8px; min-width:unset; font-size:11px; line-height:1;" title="上移"><i class="fa-solid fa-chevron-up"></i></button><button class="menu_button interactable lulu-qs-move-down" data-rawname="${encodeURIComponent(name)}" style="margin:0; padding:2px 8px; min-width:unset; font-size:11px; line-height:1;" title="下移"><i class="fa-solid fa-chevron-down"></i></button></div><button class="menu_button interactable btn-success lulu-qs-btn-hover lulu-qs-apply-btn" data-btnname="${safeName}" data-rawname="${encodeURIComponent(name)}" style="margin:0; border:none; border-radius:6px; font-size:13px; font-weight:bold; padding: 8px 14px; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; gap:6px; white-space:nowrap !important; word-break:keep-all;">运行 <i class="fa-solid fa-play"></i></button></div></div>`;
     });
   }
   html += `</div></div>`;
@@ -383,6 +486,45 @@ window.luluOpenQuickSnapshotView = async () => {
             toastr.error("卸载失败...");
           }
         });
+        // 极速面板排序（功能8）——改的是同一个 wb_snapshot_order，自动和主面板同步
+        const reorderQuickSnapshot = (rawName, dir) => {
+          const sName = decodeURIComponent(rawName);
+          let order = getSnapshotOrder();
+          // 确保所有当前快照都在 order 里
+          Object.keys(snapshots).forEach((n) => {
+            if (!order.includes(n)) order.push(n);
+          });
+          const idx = order.indexOf(sName);
+          const swapWith = idx + dir;
+          if (swapWith < 0 || swapWith >= order.length) return;
+          [order[idx], order[swapWith]] = [order[swapWith], order[idx]];
+          setSnapshotOrder(order);
+          // 重新排列 DOM 里的卡片顺序（不重建整个弹窗，体验更顺滑）
+          const $items = $dlg.find(".lulu-qs-item").get();
+          $items.sort((a, b) => {
+            const na = decodeURIComponent(
+              $(a).find(".lulu-qs-apply-btn").attr("data-rawname"),
+            );
+            const nb = decodeURIComponent(
+              $(b).find(".lulu-qs-apply-btn").attr("data-rawname"),
+            );
+            let ia = order.indexOf(na);
+            let ib = order.indexOf(nb);
+            if (ia === -1) ia = 9999;
+            if (ib === -1) ib = 9999;
+            return ia - ib;
+          });
+          const $container = $dlg.find(".lulu-qs-item").first().parent();
+          $items.forEach((el) => $container.append(el));
+        };
+        $dlg.find(".lulu-qs-move-up").on("click", function (e) {
+          e.stopPropagation();
+          reorderQuickSnapshot($(this).attr("data-rawname"), -1);
+        });
+        $dlg.find(".lulu-qs-move-down").on("click", function (e) {
+          e.stopPropagation();
+          reorderQuickSnapshot($(this).attr("data-rawname"), 1);
+        });
         $dlg.find(".lulu-qs-apply-btn").on("click", async function () {
           if ($(this).hasClass("btn-primary"))
             return toastr.info("目前已经应用了，不需要重复应用哦！(๑>؂<๑)");
@@ -495,7 +637,7 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
     )
     .appendTo("#app_container, body");
   const btnNode = $floatBtn[0];
-    // ✨ 贴边后 hover 自动露出 / 移开缩回
+  // ✨ 贴边后 hover 自动露出 / 移开缩回
   const edgeGapHover = 12;
   let hoverCollapseTimer = null; // 缩回的定时器
 
@@ -527,9 +669,17 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
     const btnW = btnNode.offsetWidth || 48;
     btnNode.style.setProperty("transition", "left 0.22s ease", "important");
     if (edge === "left") {
-      btnNode.style.setProperty("left", edgeGapHover - btnW + "px", "important");
+      btnNode.style.setProperty(
+        "left",
+        edgeGapHover - btnW + "px",
+        "important",
+      );
     } else {
-      btnNode.style.setProperty("left", winW - edgeGapHover + "px", "important");
+      btnNode.style.setProperty(
+        "left",
+        winW - edgeGapHover + "px",
+        "important",
+      );
     }
   };
 
@@ -565,8 +715,8 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
     const rect = btnNode.getBoundingClientRect();
     initX = rect.left;
     initY = rect.top;
-    let lastLeft = initX;   // 新增：记录当前left
-    let lastTop = initY;    // 新增：记录当前top
+    let lastLeft = initX; // 新增：记录当前left
+    let lastTop = initY; // 新增：记录当前top
 
     const onPointerMove = (ev) => {
       const dx = (ev.clientX || 0) - startX;
@@ -574,15 +724,15 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
       if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
         isDragging = true;
         $floatBtn.find(".lulu-float-menu-opts").removeClass("show");
-        lastLeft = initX + dx;   // 新增：存起来
-        lastTop = initY + dy;    // 新增：存起来
+        lastLeft = initX + dx; // 新增：存起来
+        lastTop = initY + dy; // 新增：存起来
         btnNode.style.setProperty("left", initX + dx + "px", "important");
         btnNode.style.setProperty("top", initY + dy + "px", "important");
         btnNode.style.setProperty("right", "auto", "important");
         btnNode.style.setProperty("transition", "none", "important");
       }
     };
-        const onPointerUp = (ev) => {
+    const onPointerUp = (ev) => {
       console.log("松手，isDragging =", isDragging);
       btnNode.removeEventListener("pointermove", onPointerMove);
       btnNode.removeEventListener("pointerup", onPointerUp);
@@ -632,8 +782,8 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
       btnNode.dataset.dockedEdge = dockedEdge || "";
 
       // 【关键防呆】强制夹进合理范围，物理上不许飞
-      const minLeft = edgeGap - btnW;      // 最左（贴左边露一点）
-      const maxLeft = winW - edgeGap;      // 最右
+      const minLeft = edgeGap - btnW; // 最左（贴左边露一点）
+      const maxLeft = winW - edgeGap; // 最右
       if (finalLeft < minLeft) finalLeft = minLeft;
       if (finalLeft > maxLeft) finalLeft = maxLeft;
 
@@ -668,8 +818,7 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
       // 看球现在在屏幕的左半区还是右半区，决定面板弹出方向
       const realWin =
         window.parent && window.parent !== window ? window.parent : window;
-      const winW =
-        realWin.innerWidth || document.documentElement.clientWidth;
+      const winW = realWin.innerWidth || document.documentElement.clientWidth;
       const rect = btnNode.getBoundingClientRect();
       const btnCenterX = rect.left + rect.width / 2; // 球的中心点横坐标
 
@@ -743,6 +892,7 @@ $menuBtn.on("click", async () => {
             .wb-icon-btn.hover-red:hover { background: #ff6b6b; color: #fff; border-color: #ff6b6b; }
             .wb-icon-btn.hover-yellow:hover { background: #fcc419; color: #fff; border-color: #fcc419; }
             .wb-icon-btn.hover-blue:hover { background: #339af0; color: #fff; border-color: #339af0; }
+            #wb-transfer-a2b:hover, #wb-transfer-b2a:hover { background: #51cf66 !important; color: #fff !important; transform: scale(1.12); box-shadow: 0 4px 12px rgba(81,207,102,0.4) !important; }
 
             .wb-bind-tag { font-size: 11px; border-radius: 4px; padding: 4px 8px; display: inline-flex; align-items: center; gap: 5px; font-weight: bold; cursor: pointer; transition: 0.2s; }
             .wb-bind-tag:hover { filter: brightness(1.2); }
@@ -754,6 +904,28 @@ $menuBtn.on("click", async () => {
             .wb-action-btn { flex: 1; min-width: 140px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; padding: 10px; border-radius: 6px; background: transparent; color: var(--SmartThemeBodyColor); border: 1px solid var(--SmartThemeBorderColor); transition: 0.2s; font-weight: bold; font-size: 13px; box-sizing: border-box; text-align: center; white-space: nowrap; word-break: keep-all; }
             .wb-action-btn:hover { background: var(--SmartThemeBlurTintColor); box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
             .wb-nowrap-btn { white-space: nowrap !important; flex-shrink: 0 !important; word-break: keep-all !important; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+            /* 让这几个按钮的底色跟随主题，不再是刺眼的纯白 */
+            dialog.wb-manager-dialog #wb-btn-recycle {
+                background: rgba(252,196,25,0.08) !important;
+            }
+            dialog.wb-manager-dialog #wb-btn-transfer {
+                background: rgba(32,201,151,0.08) !important;
+            }
+            dialog.wb-manager-dialog .wb-transfer-selall,
+            dialog.wb-manager-dialog .wb-transfer-deselall {
+                background: var(--SmartThemeBotMesColor) !important;
+                color: var(--SmartThemeBodyColor) !important;
+                border: 1px solid var(--SmartThemeBorderColor) !important;
+            }
+            .wb-transfer-wbdrop {
+    background-color: var(--SmartThemeBlurTintColor) !important;
+    background-image:
+        linear-gradient(var(--SmartThemeBotMesColor), var(--SmartThemeBotMesColor)),
+        linear-gradient(#22252b, #22252b) !important;
+    backdrop-filter: blur(16px) saturate(1.6) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(1.6) !important;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.6) !important;
+}
 
             .btn-primary { color: var(--SmartThemeQuoteColor) !important; border-color: var(--SmartThemeQuoteColor) !important; background: rgba(125, 125, 125, 0.05) !important;}
             .btn-primary:hover { background: var(--SmartThemeQuoteColor) !important; color: #fff !important; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
@@ -1107,6 +1279,62 @@ $menuBtn.on("click", async () => {
                 #wb-entry-detail-side .wb-action-btn { font-size: 10px !important; padding: 4px 2px !important; }
 
                 #wb-btn-det-close-mobile { display: none !important; }
+
+                /* ========== 【功能4：搬运台】手机适配 ========== */
+                #wb-transfer-view {
+                    height: auto !important;
+                }
+                #wb-transfer-split {
+                    display: block !important;
+                    max-height: none !important;
+                    min-height: 0 !important;
+                    overflow: visible !important;
+                }
+                .wb-transfer-side {
+                    display: block !important;
+                    width: 100% !important;
+                    box-sizing: border-box !important;
+                    padding: 6px !important;
+                    margin-bottom: 6px !important;
+                }
+                .wb-transfer-wbsearch,
+                .wb-transfer-search {
+                    padding: 5px 7px !important;
+                    font-size: 12px !important;
+                    margin-bottom: 5px !important;
+                }
+                .wb-transfer-selall, .wb-transfer-deselall {
+                    padding: 4px 6px !important;
+                    font-size: 11px !important;
+                }
+                /* 条目列表：给一个明确的高度，能滚动 */
+                .wb-transfer-side .wb-transfer-list {
+                    height: 38vh !important;
+                    max-height: 38vh !important;
+                    min-height: 180px !important;
+                    overflow-y: auto !important;
+                }
+                /* 中间搬运按钮：横排、小尺寸 */
+                #wb-transfer-split > div:nth-child(2) {
+                    display: flex !important;
+                    flex-direction: row !important;
+                    justify-content: center !important;
+                    gap: 28px !important;
+                    padding: 2px 0 !important;
+                    margin: 4px 0 !important;
+                }
+                #wb-transfer-a2b, #wb-transfer-b2a {
+                    width: 34px !important;
+                    height: 34px !important;
+                    font-size: 13px !important;
+                    box-shadow: none !important;
+                }
+                #wb-transfer-a2b i::before { content: "\\f103"; }
+                #wb-transfer-b2a i::before { content: "\\f102"; }
+                .wb-transfer-wbdrop {
+                    max-height: 160px !important;
+                }
+                /* ========== 搬运台手机适配 结束 ========== */
             }
         </style>
     `;
@@ -1245,6 +1473,8 @@ $menuBtn.on("click", async () => {
                     </div>
 
                     <div class="wb-controls-group">
+                        <button id="wb-btn-recycle" class="menu_button interactable wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px; color:#fcc419; border-color:#fcc419; background:rgba(252,196,25,0.08);" title="查看最近删除的世界书，可以还原哦"><i class="fa-solid fa-trash-arrow-up"></i> 回收站</button>
+                        <button id="wb-btn-transfer" class="menu_button interactable wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px; color:#20c997; border-color:#20c997; background:rgba(32,201,151,0.08);" title="在两本世界书之间复制搬运条目"><i class="fa-solid fa-truck-ramp-box"></i> 搬运条目</button>                        
                         <button id="wb-btn-force-scan" class="menu_button interactable wb-nowrap-btn btn-primary" style="margin: 0; padding: 6px 12px; font-size: 12px;" title="在面板外部修改了其他没加载卡片的绑定状态？点这里重新翻一遍记忆哦！"><i class="fa-solid fa-rotate-right"></i> 深度重扫</button>
                         <button id="wb-btn-batch-toggle" class="menu_button interactable wb-nowrap-btn btn-warning" style="margin: 0; padding: 6px 12px; font-size: 12px;"><i class="fa-solid fa-layer-group"></i> 批量操作模式</button>
                         <button id="wb-btn-select-all" class="menu_button interactable wb-nowrap-btn btn-success" style="margin: 0; padding: 6px 12px; font-size: 12px;"><i class="fa-solid fa-check-double"></i> 全选当前项</button>
@@ -1267,6 +1497,7 @@ $menuBtn.on("click", async () => {
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap: wrap; gap: 10px;">
                         <span style="color: var(--SmartThemeQuoteColor); font-weight: bold; font-size: 14px; margin-top: 4px;"><i class="fa-solid fa-check-double"></i> 选中的世界书 (<span id="wb-batch-count">0</span>)：</span>
                         <div style="display:flex; gap: 8px; flex-wrap: wrap;">
+                             <button class="menu_button interactable btn-warning wb-nowrap-btn" id="wb-btn-batch-group" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px; background: rgba(252, 196, 25, 0.15); color: #fcc419;"><i class="fa-solid fa-folder-tree"></i> 批量分组</button>
                              <button class="menu_button interactable btn-primary wb-nowrap-btn" id="wb-btn-batch-export" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-file-export"></i> 批量打包导出</button>
                              <button class="menu_button interactable btn-danger wb-nowrap-btn" id="wb-btn-confirm-delete" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-burst"></i> 确认永久删除</button>
                         </div>
@@ -1455,6 +1686,7 @@ $menuBtn.on("click", async () => {
                             <div class="wb-action-btn wb-nowrap-btn" id="wb-btn-entry-none" style="padding: 6px;"><i class="fa-regular fa-square"></i> 关闭全部</div>
                             <div class="wb-action-btn wb-nowrap-btn btn-success" id="wb-btn-entry-add" style="padding: 6px; border:none;"><i class="fa-solid fa-plus"></i> 新建条目</div>
                             <div class="wb-action-btn wb-nowrap-btn btn-danger" id="wb-btn-entry-batch" style="padding: 6px; border:none;"><i class="fa-solid fa-layer-group"></i> 批量操作</div>
+                            <div class="wb-action-btn wb-nowrap-btn" id="wb-btn-entry-replace" style="padding: 6px; color:#339af0; border-color:#339af0; background:rgba(51,154,240,0.1);"><i class="fa-solid fa-magnifying-glass-arrow-right"></i> 查找替换</div>
                         </div>
 
                         <div id="wb-entry-batch-actions" style="display: none; background: rgba(255, 107, 107, 0.1); border: 1px dashed #ff6b6b; border-radius: 6px; padding: 10px; margin-bottom: 10px; flex-direction: column; gap: 10px; flex-shrink: 0;">
@@ -1575,6 +1807,63 @@ $menuBtn.on("click", async () => {
                     </div>
                 </div>
             </div>
+
+            <!-- ========== 【功能4：条目搬运工作台】界面 ========== -->
+            <div id="wb-transfer-view" style="display: none; height: 100%; flex-direction: column;">
+                <div style="font-weight: bold; font-size: 16px; margin-bottom: 10px; color: var(--SmartThemeQuoteColor); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                    <span><i class="fa-solid fa-truck-ramp-box"></i> 条目搬运工作台</span>
+                </div>
+
+                <div id="wb-transfer-split" style="display:flex; gap:10px; flex:1; min-height:45vh; max-height:60vh; overflow:hidden;">
+                    <!-- 左栏 A -->
+                    <div class="wb-transfer-side" data-side="A" style="flex:1; display:flex; flex-direction:column; min-width:0; border:1px solid var(--SmartThemeBorderColor); border-radius:6px; padding:8px; background:var(--SmartThemeBotMesColor); overflow:visible;">
+                        <div class="wb-transfer-selbox" data-side="A" style="position:relative; margin-bottom:6px; flex-shrink:0;">
+                            <input type="text" class="text_pole wb-transfer-wbsearch" data-side="A" placeholder="🔍 点此搜索并选择世界书..." style="width:100%; box-sizing:border-box; padding:6px; cursor:pointer;">
+                            <div class="wb-transfer-wbdrop" data-side="A" style="display:none; z-index:2147483647; max-height:240px; overflow-y:auto; background:var(--lulu-input-bg, var(--SmartThemeBotMesColor)); border:1px solid var(--SmartThemeQuoteColor); border-radius:6px; margin-top:2px; box-shadow:0 4px 12px rgba(0,0,0,0.3);"></div>
+                        </div>
+                        <input type="text" class="text_pole wb-transfer-search" data-side="A" placeholder="🔍 搜索条目..." style="width:100%; box-sizing:border-box; padding:6px; margin-bottom:6px; flex-shrink:0;">
+                        <div style="display:flex; gap:6px; margin-bottom:6px; flex-shrink:0;">
+                            <button class="menu_button interactable wb-nowrap-btn wb-transfer-selall" data-side="A" style="margin:0; padding:4px 8px; font-size:11px; flex:1;"><i class="fa-solid fa-check-double"></i> 全选</button>
+                            <button class="menu_button interactable wb-nowrap-btn wb-transfer-deselall" data-side="A" style="margin:0; padding:4px 8px; font-size:11px; flex:1;"><i class="fa-regular fa-square"></i> 取消</button>
+                        </div>
+                        <div class="wb-transfer-list scrollableInnerFull" data-side="A" style="flex:1; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:4px;"></div>
+                    </div>
+
+                    <!-- 中间搬运按钮 -->
+                    <div style="display:flex; flex-direction:column; justify-content:center; align-items:center; gap:14px; flex-shrink:0; padding:0 2px;">
+                        <div id="wb-transfer-a2b" title="把左边选中的条目复制到右边" style="width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; background:rgba(81,207,102,0.12); border:2px solid #51cf66; color:#51cf66; font-size:16px; transition:0.2s; box-shadow:0 2px 6px rgba(0,0,0,0.15);">
+                            <i class="fa-solid fa-angles-right"></i>
+                        </div>
+                        <div id="wb-transfer-b2a" title="把右边选中的条目复制到左边" style="width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; background:rgba(81,207,102,0.12); border:2px solid #51cf66; color:#51cf66; font-size:16px; transition:0.2s; box-shadow:0 2px 6px rgba(0,0,0,0.15);">
+                            <i class="fa-solid fa-angles-left"></i>
+                        </div>
+                    </div>
+
+                    <!-- 右栏 B -->
+                    <div class="wb-transfer-side" data-side="B" style="flex:1; display:flex; flex-direction:column; min-width:0; border:1px solid var(--SmartThemeBorderColor); border-radius:6px; padding:8px; background:var(--SmartThemeBotMesColor); overflow:visible;">
+                                                <div class="wb-transfer-selbox" data-side="B" style="position:relative; margin-bottom:6px; flex-shrink:0;">
+                            <input type="text" class="text_pole wb-transfer-wbsearch" data-side="B" placeholder="🔍 点此搜索并选择世界书..." style="width:100%; box-sizing:border-box; padding:6px; cursor:pointer;">
+                            <div class="wb-transfer-wbdrop" data-side="B" style="display:none; z-index:2147483647; max-height:240px; overflow-y:auto; background:var(--lulu-input-bg, var(--SmartThemeBotMesColor)); border:1px solid var(--SmartThemeQuoteColor); border-radius:6px; margin-top:2px; box-shadow:0 4px 12px rgba(0,0,0,0.3);"></div>
+                        </div>
+                        <input type="text" class="text_pole wb-transfer-search" data-side="B" placeholder="🔍 搜索条目..." style="width:100%; box-sizing:border-box; padding:6px; margin-bottom:6px; flex-shrink:0;">
+                        <div style="display:flex; gap:6px; margin-bottom:6px; flex-shrink:0;">
+                            <button class="menu_button interactable wb-nowrap-btn wb-transfer-selall" data-side="B" style="margin:0; padding:4px 8px; font-size:11px; flex:1;"><i class="fa-solid fa-check-double"></i> 全选</button>
+                            <button class="menu_button interactable wb-nowrap-btn wb-transfer-deselall" data-side="B" style="margin:0; padding:4px 8px; font-size:11px; flex:1;"><i class="fa-regular fa-square"></i> 取消</button>
+                        </div>
+                        <div class="wb-transfer-list scrollableInnerFull" data-side="B" style="flex:1; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:4px;"></div>
+                    </div>
+                </div>
+
+                <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-top:10px; padding:8px; background:rgba(0,0,0,0.1); border-radius:6px;">
+                    <label style="cursor:pointer; display:flex; align-items:center; gap:6px; font-size:13px; margin:0;">
+                        <input type="checkbox" id="wb-transfer-jump" style="accent-color:var(--SmartThemeQuoteColor);">
+                        <span style="font-weight:bold;">复制完成后，跳转到目标世界书编辑页</span>
+                    </label>
+                    <div class="wb-action-btn wb-nowrap-btn" id="wb-transfer-back" style="color:#888; flex:unset; min-width:120px;"><i class="fa-solid fa-arrow-left"></i> 返回</div>
+                </div>
+            </div>
+            <!-- ========== 搬运工作台界面 结束 ========== -->
+
         </div>
     `);
 
@@ -1673,9 +1962,9 @@ $menuBtn.on("click", async () => {
             -webkit-appearance: none !important;
             width: 17px !important;
             height: 17px !important;
-            border: 2px solid var(--SmartThemeBorderColor) !important;
+            border: 2px solid var(--SmartThemeQuoteColor) !important;
             border-radius: 4px !important;
-            background: var(--lulu-input-bg) !important;
+            background: transparent !important;
             cursor: pointer !important;
             display: inline-flex !important;
             align-items: center !important;
@@ -2270,7 +2559,114 @@ $menuBtn.on("click", async () => {
       $overlay.fadeOut("slow");
     }
   };
+  // ========== 【功能1：回收站】 开始 ==========
+  const RECYCLE_KEY = "lulu_wb_recycle_bin";
+  const RECYCLE_MAX = 15;
 
+  const getRecycleBin = () => {
+    try {
+      return JSON.parse(localStorage.getItem(RECYCLE_KEY) || "[]");
+    } catch (e) {
+      return [];
+    }
+  };
+  const saveRecycleBin = (arr) => {
+    localStorage.setItem(RECYCLE_KEY, JSON.stringify(arr));
+  };
+
+  // 删书前调用：把整本书打包丢进回收站
+  const moveWbToRecycle = async (wbName) => {
+    try {
+      let entries = [];
+      try {
+        entries = await getWorldbook(wbName);
+      } catch (e) {
+        entries = [];
+      }
+      // 顺便记住它所在的分类和UI分组，还原时一起恢复
+      const cats = getCategories();
+      const myCats = Object.keys(cats).filter(
+        (k) => Array.isArray(cats[k]) && cats[k].includes(wbName),
+      );
+      const uiGroups = getWbUiGroups()[wbName] || {};
+
+      let bin = getRecycleBin();
+      // 同名的旧记录先去掉，避免重复
+      bin = bin.filter((item) => item.name !== wbName);
+      bin.unshift({
+        name: wbName,
+        entries: entries,
+        cats: myCats,
+        uiGroups: uiGroups,
+        deletedAt: Date.now(),
+      });
+      if (bin.length > RECYCLE_MAX) bin = bin.slice(0, RECYCLE_MAX);
+      saveRecycleBin(bin);
+    } catch (e) {
+      console.error("Lulu 回收站打包失败:", e);
+    }
+  };
+
+  // 还原：把回收站里的书重新创建回来
+  const restoreWbFromRecycle = async (idx) => {
+    let bin = getRecycleBin();
+    const item = bin[idx];
+    if (!item) return;
+
+    let finalName = item.name;
+    // 重名处理
+    if (getWorldbookNames().includes(finalName)) {
+      const btnRes = await SillyTavern.callGenericPopup(
+        `世界书 [${finalName}] 现在已经存在啦，怎么还原呢？`,
+        SillyTavern.POPUP_TYPE.TEXT,
+        "",
+        {
+          okButton: "取消还原",
+          customButtons: [
+            { text: "覆盖现有的", result: 1, classes: ["btn-danger"] },
+            { text: "换个新名字", result: 2, classes: ["btn-primary"] },
+          ],
+        },
+      );
+      if (btnRes === 2) {
+        let nn = await SillyTavern.callGenericPopup(
+          "请赐予它一个新名字：",
+          SillyTavern.POPUP_TYPE.INPUT,
+          finalName + "_还原",
+        );
+        if (!nn || !(nn = nn.trim())) return;
+        finalName = nn;
+      } else if (btnRes !== 1) {
+        return;
+      }
+    }
+
+    await withLoadingOverlay(async () => {
+      await createWorldbook(finalName, item.entries || []);
+      // 恢复分类
+      if (Array.isArray(item.cats) && item.cats.length > 0) {
+        let cData = getCategories();
+        item.cats.forEach((c) => {
+          if (!cData[c]) cData[c] = [];
+          if (!cData[c].includes(finalName)) cData[c].push(finalName);
+        });
+        saveCategories(cData);
+      }
+      // 恢复UI分组
+      if (item.uiGroups && Object.keys(item.uiGroups).length > 0) {
+        let grpMap = getWbUiGroups();
+        grpMap[finalName] = item.uiGroups;
+        saveWbUiGroups(grpMap);
+      }
+      // 从回收站移除这条
+      let curBin = getRecycleBin();
+      curBin.splice(idx, 1);
+      saveRecycleBin(curBin);
+    }, "正在从回收站找回世界书...");
+    toastr.success(`✨ [${finalName}] 已经成功复活啦！`);
+    renderData();
+  };
+  // ========== 【功能1：回收站】 结束 ==========
   const getCategories = () => {
     let vars = getVariables({ type: "global" });
     let cats = vars.wb_categories;
@@ -2545,7 +2941,462 @@ $menuBtn.on("click", async () => {
       if ($ui.find("#wb-char-view").is(":visible")) renderCharView();
     }
   };
+  // ---- 回收站弹窗（功能1）----
+  $ui.find("#wb-btn-recycle").on("click", async () => {
+    const renderRecycleList = () => {
+      const bin = getRecycleBin();
+      if (bin.length === 0) {
+        return `<div style="color:gray; text-align:center; padding:30px;">回收站空空如也，很干净哦~ ✨</div>`;
+      }
+      let html =
+        '<div style="display:flex; flex-direction:column; gap:8px; max-height:55vh; overflow-y:auto; padding:4px;">';
+      bin.forEach((item, idx) => {
+        const timeStr = new Date(item.deletedAt).toLocaleString();
+        const entryCount = (item.entries || []).length;
+        html += `
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:10px; background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:6px; flex-wrap:wrap;">
+            <div style="flex:1; min-width:150px;">
+              <div style="font-weight:bold; font-size:14px;"><i class="fa-solid fa-book-skull" style="color:#fcc419;"></i> ${item.name}</div>
+              <div style="font-size:11px; color:gray; margin-top:4px;">含 ${entryCount} 个条目 | 删除于 ${timeStr}</div>
+            </div>
+            <div style="display:flex; gap:6px;">
+              <button class="menu_button interactable btn-success wb-nowrap-btn lulu-recycle-restore" data-idx="${idx}" style="margin:0; padding:6px 12px; font-size:12px; border:none;"><i class="fa-solid fa-rotate-left"></i> 还原</button>
+              <button class="menu_button interactable btn-danger wb-nowrap-btn lulu-recycle-purge" data-idx="${idx}" style="margin:0; padding:6px 10px; font-size:12px; border:none;" title="清除，无法再还原"><i class="fa-solid fa-fire"></i></button>
+            </div>
+          </div>`;
+      });
+      html += "</div>";
+      return html;
+    };
 
+    const savedRecycleMode =
+      localStorage.getItem("lulu_wb_panel_theme") || "default";
+    const savedRecycleCustom = JSON.parse(
+      localStorage.getItem("lulu_wb_panel_custom_colors") ||
+        '{"bg":"#2a2e33", "text":"#ffffff", "accent":"#70a1ff", "alpha":95, "inputBg":"#1a1c1f"}',
+    );
+    const rcHexToRgba = (hex, alpha) => {
+      let r = 0,
+        g = 0,
+        b = 0;
+      if (hex && hex.length === 7) {
+        r = parseInt(hex.substring(1, 3), 16);
+        g = parseInt(hex.substring(3, 5), 16);
+        b = parseInt(hex.substring(5, 7), 16);
+      }
+      return `rgba(${r},${g},${b},${alpha / 100})`;
+    };
+    let recycleThemeCSS = "";
+    if (savedRecycleMode === "dark") {
+      recycleThemeCSS = `dialog:has(#lulu-recycle-list-wrap) { background: rgba(22,24,28,1) !important; border: 1px solid #d1c5a1 !important; --SmartThemeBotMesColor: rgba(32,35,40,1) !important; --SmartThemeBodyColor: #c0c2c8 !important; --SmartThemeQuoteColor: #d1c5a1 !important; --SmartThemeBorderColor: #3d414d !important; color: #c0c2c8 !important; }`;
+    } else if (savedRecycleMode === "light") {
+      recycleThemeCSS = `dialog:has(#lulu-recycle-list-wrap) { background: rgba(253,246,227,1) !important; border: 1px solid #8b5d33 !important; --SmartThemeBotMesColor: rgba(255,251,240,1) !important; --SmartThemeBodyColor: #4a3b32 !important; --SmartThemeQuoteColor: #8b5d33 !important; --SmartThemeBorderColor: #e0d0b8 !important; color: #4a3b32 !important; }`;
+    } else if (savedRecycleMode === "custom") {
+      const bgRgba = rcHexToRgba(
+        savedRecycleCustom.bg,
+        savedRecycleCustom.alpha,
+      );
+      recycleThemeCSS = `dialog:has(#lulu-recycle-list-wrap) { background: ${bgRgba} !important; border: 1px solid ${savedRecycleCustom.accent || "#70a1ff"} !important; --SmartThemeBotMesColor: ${savedRecycleCustom.bg} !important; --SmartThemeBodyColor: ${savedRecycleCustom.text} !important; --SmartThemeQuoteColor: ${savedRecycleCustom.accent || "#70a1ff"} !important; color: ${savedRecycleCustom.text} !important; }`;
+    }
+
+    const dialogHtml = `
+      <style>${recycleThemeCSS}</style>
+      <div style="padding:6px; font-family:sans-serif; min-width:300px; max-width:520px; text-align:left;">
+        <h3 style="margin-top:0; color:var(--SmartThemeQuoteColor); border-bottom:2px solid var(--SmartThemeBorderColor); padding-bottom:10px;">
+          <i class="fa-solid fa-trash-arrow-up"></i> 世界书回收站
+          <span style="font-size:12px; font-weight:normal; color:gray;">(最多保留最近 ${RECYCLE_MAX} 本)</span>
+        </h3>
+        <div id="lulu-recycle-list-wrap">${renderRecycleList()}</div>
+      </div>`;
+
+    const $dlg = $(dialogHtml);
+
+    const bindEvents = () => {
+      $dlg
+        .find(".lulu-recycle-restore")
+        .off("click")
+        .on("click", async function () {
+          const idx = parseInt($(this).attr("data-idx"));
+          await restoreWbFromRecycle(idx);
+          $dlg.find("#lulu-recycle-list-wrap").html(renderRecycleList());
+          bindEvents();
+        });
+      $dlg
+        .find(".lulu-recycle-purge")
+        .off("click")
+        .on("click", async function () {
+          const idx = parseInt($(this).attr("data-idx"));
+          const bin = getRecycleBin();
+          const name = bin[idx] ? bin[idx].name : "";
+          const res = await SillyTavern.callGenericPopup(
+            `确认把 [${name}] 从回收站清除吗？之后就再也找不回来咯！`,
+            SillyTavern.POPUP_TYPE.CONFIRM,
+          );
+          if (res === SillyTavern.POPUP_RESULT.AFFIRMATIVE) {
+            const curBin = getRecycleBin();
+            curBin.splice(idx, 1);
+            saveRecycleBin(curBin);
+            $dlg.find("#lulu-recycle-list-wrap").html(renderRecycleList());
+            bindEvents();
+            toastr.info(`[${name}] 已被清除。`);
+          }
+        });
+    };
+
+    setTimeout(bindEvents, 50);
+
+    await SillyTavern.callGenericPopup($dlg, SillyTavern.POPUP_TYPE.TEXT, "", {
+      okButton: "关闭",
+      wide: true,
+    });
+  });
+  // ---- 回收站弹窗结束 ----
+  // ========== 【功能4：搬运工作台】逻辑 开始 ==========
+  const openTransferView = () => {
+    $ui
+      .find("#wb-main-view, #wb-char-view, #wb-assoc-view, #wb-tab-strip")
+      .hide();
+    $ui.find("#wb-transfer-view").css("display", "flex").hide().fadeIn(200);
+    // Part 2 会在这里初始化两栏内容
+    if (typeof initTransferView === "function") initTransferView();
+  };
+
+  $ui.find("#wb-btn-transfer").on("click", openTransferView);
+  $ui.find("#wb-transfer-back").on("click", () => {
+    $ui.find("#wb-transfer-view").hide();
+    $ui.find("#wb-tab-strip, #wb-main-view").fadeIn(200);
+  });
+  // ---- Part 2：两栏数据与渲染 ----
+  const transferState = {
+    A: { wbName: "", entries: [], selected: new Set() },
+    B: { wbName: "", entries: [], selected: new Set() },
+  };
+
+  // 渲染某一侧的世界书候选下拉列表
+  const renderWbDropdown = (side) => {
+    const $drop = $ui.find(`.wb-transfer-wbdrop[data-side="${side}"]`).empty();
+    // 用 fixed 定位，浮到最顶层，不被任何容器裁剪
+    const $searchInput = $ui.find(`.wb-transfer-wbsearch[data-side="${side}"]`);
+    const rect = $searchInput[0].getBoundingClientRect();
+    $drop.css({
+      position: "fixed",
+      top: rect.bottom + 2 + "px",
+      left: rect.left + "px",
+      width: rect.width + "px",
+      "z-index": "2147483647",
+    });
+    const kw = $ui
+      .find(`.wb-transfer-wbsearch[data-side="${side}"]`)
+      .val()
+      .toLowerCase();
+    const curName = transferState[side].wbName;
+    const list = getWorldbookNames().filter(
+      (wb) => !kw || wb.toLowerCase().includes(kw),
+    );
+    if (list.length === 0) {
+      $drop.html(
+        '<div style="padding:10px; color:gray; text-align:center; font-size:12px;">没有匹配的世界书</div>',
+      );
+      return;
+    }
+    list.forEach((wb) => {
+      const isCur = wb === curName;
+      const $opt = $(
+        `<div class="wb-transfer-wbopt" style="padding:8px 10px; cursor:pointer; font-size:13px; border-bottom:1px solid rgba(125,125,125,0.15); ${isCur ? "background:rgba(81,207,102,0.15); color:#51cf66; font-weight:bold;" : "color:var(--SmartThemeBodyColor);"}">${isCur ? '<i class="fa-solid fa-check" style="margin-right:4px;"></i>' : ""}${wb}</div>`,
+      );
+      $opt.on("mouseenter", function () {
+        if (!isCur) $(this).css("background", "rgba(125,125,125,0.15)");
+      });
+      $opt.on("mouseleave", function () {
+        if (!isCur) $(this).css("background", "");
+      });
+      $opt.on("click", async () => {
+        $ui.find(`.wb-transfer-wbsearch[data-side="${side}"]`).val(wb);
+        $drop.hide();
+        await loadTransferSide(side, wb);
+        updateTransferCount();
+      });
+      $drop.append($opt);
+    });
+  };
+
+  // 加载某一侧的世界书条目
+  const loadTransferSide = async (side, wbName) => {
+    transferState[side].wbName = wbName;
+    transferState[side].selected.clear();
+    if (!wbName) {
+      transferState[side].entries = [];
+      renderTransferList(side);
+      return;
+    }
+    const $list = $ui.find(`.wb-transfer-list[data-side="${side}"]`);
+    $list.html(
+      '<div style="text-align:center; color:gray; padding:20px;"><i class="fa-solid fa-spinner fa-spin"></i> 加载中...</div>',
+    );
+    try {
+      const entries = await getWorldbook(wbName);
+      transferState[side].entries = JSON.parse(JSON.stringify(entries));
+    } catch (e) {
+      transferState[side].entries = [];
+      $list.html(
+        '<div style="text-align:center; color:#ff6b6b; padding:20px;">加载失败了...</div>',
+      );
+      return;
+    }
+    renderTransferList(side);
+  };
+
+  // 渲染某一侧的条目列表
+  const renderTransferList = (side) => {
+    const $list = $ui.find(`.wb-transfer-list[data-side="${side}"]`).empty();
+    const st = transferState[side];
+    const kw = $ui
+      .find(`.wb-transfer-search[data-side="${side}"]`)
+      .val()
+      .toLowerCase();
+
+    if (!st.wbName) {
+      $list.html(
+        '<div style="text-align:center; color:gray; padding:20px;">请先在上方选择一本世界书~</div>',
+      );
+      return;
+    }
+
+    const filtered = st.entries.filter((e) => {
+      const s =
+        `${e.name || ""} ${(e.strategy?.keys || []).join(",")} ${e.content || ""}`.toLowerCase();
+      return !kw || s.includes(kw);
+    });
+
+    if (filtered.length === 0) {
+      $list.html(
+        `<div style="text-align:center; color:gray; padding:20px;">${st.entries.length === 0 ? "这本书是空的呢" : "没有匹配的条目"}</div>`,
+      );
+      return;
+    }
+
+    filtered.forEach((entry) => {
+      const realIdx = st.entries.indexOf(entry);
+      const isSel = st.selected.has(realIdx);
+      const isExpanded = st.expanded && st.expanded.has(realIdx);
+      const isEn = entry.enabled;
+      const strategy = entry.strategy || { type: "constant", keys: [] };
+      const posBadge = formatPositionBadge(entry.position);
+      const stratBadge =
+        strategy.type === "selective"
+          ? '<span class="badge-green">匹配</span>'
+          : '<span class="badge-blue">常驻</span>';
+
+      const $item = $(
+        `<div style="border-left:3px solid ${isEn ? "var(--okGreen)" : "gray"}; background:${isSel ? "rgba(81,207,102,0.1)" : "var(--SmartThemeBlurTintColor)"}; border-radius:4px; opacity:${isEn ? "1" : "0.6"}; transition:0.15s;"></div>`,
+      );
+
+      // 顶部行：复选框 + 可点击展开的主体
+      const $topRow = $(
+        `<div style="display:flex; align-items:flex-start; gap:8px; padding:8px;"></div>`,
+      );
+      const $chk = $(
+        `<input type="checkbox" style="transform:scale(1.1); margin-top:2px; flex-shrink:0; cursor:pointer;">`,
+      ).prop("checked", isSel);
+      $chk.on("click", function (e) {
+        e.stopPropagation(); // 勾选时不触发展开
+      });
+      $chk.on("change", function () {
+        $(this).is(":checked")
+          ? st.selected.add(realIdx)
+          : st.selected.delete(realIdx);
+        $item.css(
+          "background",
+          $(this).is(":checked")
+            ? "rgba(81,207,102,0.1)"
+            : "var(--SmartThemeBlurTintColor)",
+        );
+        updateTransferCount();
+      });
+
+      const expandIcon = entry.content
+        ? `<i class="fa-solid fa-chevron-${isExpanded ? "up" : "down"}" style="margin-left:6px; font-size:10px; color:gray;"></i>`
+        : "";
+      const $body = $(
+        `<div style="flex:1; min-width:0; cursor:pointer;">
+          <div style="font-weight:bold; font-size:13px; word-break:break-all; margin-bottom:3px; display:flex; align-items:center; justify-content:space-between; gap:4px;"><span>${entry.name || "(未命名条目)"}</span>${expandIcon}</div>
+          <div style="display:flex; gap:4px; flex-wrap:wrap; align-items:center; font-size:11px;">
+            <span class="${isEn ? "badge-green" : "badge-grey"}">${isEn ? "已启" : "关闭"}</span>
+            ${stratBadge}
+            <span class="dsnap-entry-pos">${posBadge}</span>
+          </div>
+        </div>`,
+      );
+      // 点主体区域 → 展开/折叠正文
+      $body.on("click", () => {
+        if (!entry.content) return;
+        if (!st.expanded) st.expanded = new Set();
+        st.expanded.has(realIdx)
+          ? st.expanded.delete(realIdx)
+          : st.expanded.add(realIdx);
+        renderTransferList(side);
+      });
+
+      $topRow.append($chk, $body);
+      $item.append($topRow);
+
+      // 展开的正文区
+      if (isExpanded && entry.content) {
+        const keysLine =
+          strategy.type === "selective" && (strategy.keys || []).length > 0
+            ? `<div style="font-size:11px; color:var(--SmartThemeQuoteColor); margin-bottom:6px;">🔑 ${(strategy.keys || []).join(", ")}</div>`
+            : "";
+        $item.append(
+          $(
+            `<div style="padding:0 8px 8px 8px; border-top:1px dashed rgba(125,125,125,0.3); margin-top:2px; padding-top:8px;">${keysLine}<div style="font-size:12px; line-height:1.5; color:var(--SmartThemeBodyColor); white-space:pre-wrap; word-break:break-word; max-height:200px; overflow-y:auto;">${String(entry.content).replace(/</g, "<").replace(/>/g, ">")}</div></div>`,
+          ),
+        );
+      }
+
+      $list.append($item);
+    });
+  };
+
+  // 更新中间按钮上的选中数提示
+  const updateTransferCount = () => {
+    const aN = transferState.A.selected.size;
+    const bN = transferState.B.selected.size;
+    $ui
+      .find("#wb-transfer-a2b")
+      .attr("title", `把左边选中的 ${aN} 项复制到右边`);
+    $ui
+      .find("#wb-transfer-b2a")
+      .attr("title", `把右边选中的 ${bN} 项复制到左边`);
+  };
+
+  // 初始化整个搬运视图（Part1 里调用的就是它）
+  const initTransferView = () => {
+    $ui.find("#wb-transfer-jump").prop("checked", false);
+    renderTransferList("A");
+    renderTransferList("B");
+  };
+
+  // 事件绑定
+  // 世界书搜索框：聚焦/输入时显示候选，选中后隐藏
+  $ui.find(".wb-transfer-wbsearch").on("focus", function () {
+    const side = $(this).attr("data-side");
+    renderWbDropdown(side);
+    $ui.find(`.wb-transfer-wbdrop[data-side="${side}"]`).show();
+  });
+  $ui.find(".wb-transfer-wbsearch").on("input", function () {
+    const side = $(this).attr("data-side");
+    renderWbDropdown(side);
+    $ui.find(`.wb-transfer-wbdrop[data-side="${side}"]`).show();
+  });
+  // 点击别处收起候选框
+  $ui.find("#wb-transfer-view").on("click", function (e) {
+    if ($(e.target).closest(".wb-transfer-selbox").length === 0) {
+      $ui.find(".wb-transfer-wbdrop").hide();
+    }
+  });
+  // 条目搜索
+  $ui.find(".wb-transfer-search").on("input", function () {
+    renderTransferList($(this).attr("data-side"));
+  });
+
+  $ui.find(".wb-transfer-selall").on("click", function () {
+    const side = $(this).attr("data-side");
+    const st = transferState[side];
+    const kw = $ui
+      .find(`.wb-transfer-search[data-side="${side}"]`)
+      .val()
+      .toLowerCase();
+    const showPreview = $ui.find("#wb-transfer-preview").is(":checked");
+    st.entries.forEach((e, idx) => {
+      const s =
+        `${e.name || ""} ${(e.strategy?.keys || []).join(",")} ${showPreview ? e.content || "" : ""}`.toLowerCase();
+      if (!kw || s.includes(kw)) st.selected.add(idx);
+    });
+    renderTransferList(side);
+    updateTransferCount();
+  });
+  $ui.find(".wb-transfer-deselall").on("click", function () {
+    const side = $(this).attr("data-side");
+    transferState[side].selected.clear();
+    renderTransferList(side);
+    updateTransferCount();
+  });
+  // ---- Part 2 结束 ----
+  // ---- Part 3：执行复制搬运 ----
+  const doTransfer = async (fromSide, toSide) => {
+    const from = transferState[fromSide];
+    const to = transferState[toSide];
+
+    if (!from.wbName) return toastr.warning("源世界书还没选呢~");
+    if (!to.wbName) return toastr.warning("目标世界书还没选哦~");
+    if (from.wbName === to.wbName)
+      return toastr.warning("源和目标是同一本书，没法搬运给自己啦 (>﹏<)");
+    if (from.selected.size === 0)
+      return toastr.warning("请先勾选要搬运的条目~");
+
+    const count = from.selected.size;
+    const res = await SillyTavern.callGenericPopup(
+      `确认把 <strong style="color:var(--SmartThemeQuoteColor);">[${from.wbName}]</strong> 中选中的 <strong>${count}</strong> 个条目，复制到 <strong style="color:var(--SmartThemeQuoteColor);">[${to.wbName}]</strong> 吗？<br><br><span style="font-size:12px;color:gray;">（源书条目不受影响，是复制不是移动哦~）</span>`,
+      SillyTavern.POPUP_TYPE.CONFIRM,
+    );
+    if (res !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+
+    await withLoadingOverlay(async () => {
+      // 取出要复制的条目（深拷贝，避免影响源数据）
+      const toCopy = [];
+      from.selected.forEach((idx) => {
+        if (from.entries[idx]) {
+          toCopy.push(JSON.parse(JSON.stringify(from.entries[idx])));
+        }
+      });
+
+      // 读取目标书当前全部条目
+      let targetEntries = await getWorldbook(to.wbName);
+
+      // 给复制来的条目分配新的唯一 uid，避免和目标书冲突
+      let baseUid = Date.now();
+      toCopy.forEach((e, i) => {
+        e.uid = baseUid + i;
+        if (e.id !== undefined) e.id = e.uid;
+        // 清掉可能残留的临时字段
+        delete e._lulu_ui_group;
+      });
+
+      // 追加到目标书末尾
+      targetEntries = targetEntries.concat(toCopy);
+      await replaceWorldbook(to.wbName, targetEntries);
+
+      // 目标书 Token 缓存失效（如果功能7的缓存变量存在）
+      if (typeof luluTokenCache !== "undefined")
+        delete luluTokenCache[to.wbName];
+
+      // 更新面板里目标侧的内存数据 + 刷新
+      to.entries = JSON.parse(JSON.stringify(targetEntries));
+      to.selected.clear();
+      if (to.expanded) to.expanded.clear();
+    }, `正在搬运 ${count} 个条目...`);
+
+    toastr.success(`✨ 成功复制 ${count} 个条目到 [${to.wbName}] 啦！`);
+
+    // 清空源侧勾选
+    from.selected.clear();
+    renderTransferList(fromSide);
+    renderTransferList(toSide);
+    updateTransferCount();
+
+    // 是否跳转到目标书编辑页
+    if ($ui.find("#wb-transfer-jump").is(":checked")) {
+      const targetWb = to.wbName;
+      $ui.find("#wb-transfer-view").hide();
+      // 用 openEntryTuneView 打开目标书的条目编辑，返回时回主界面
+      await openEntryTuneView(targetWb, "#wb-main-view");
+    }
+  };
+
+  $ui.find("#wb-transfer-a2b").on("click", () => doTransfer("A", "B"));
+  $ui.find("#wb-transfer-b2a").on("click", () => doTransfer("B", "A"));
+  // ---- Part 3 结束 ----
+  // ========== 【功能4：搬运工作台】逻辑（Part1）结束 ==========
   $ui.find("#wb-btn-force-scan").on("click", async () => {
     await initiateDeepScan(false, true);
     toastr.success(
@@ -2599,6 +3450,56 @@ $menuBtn.on("click", async () => {
     }, "正在创建世界书...");
   };
   $ui.find("#wb-btn-create-wb").on("click", () => attemptCreateWb());
+  // ---- 外面：全局启用总 Token 按钮 ----
+  $ui.find("#wb-btn-clear").after(
+    $(
+      '<div class="wb-action-btn wb-nowrap-btn btn-primary" id="wb-btn-calc-global-tk"><i class="fa-solid fa-coins"></i> 计算全局已占用总 Token</div>',
+    ).on("click", async function () {
+      const $btn = $(this);
+      $btn.html('<i class="fa-solid fa-spinner fa-spin"></i> 潜水计算中...');
+      const activeWbs = getGlobalWorldbookNames(); // 获取当前全局启用的所有书
+      if (activeWbs.length === 0) {
+        $btn.html('<i class="fa-solid fa-coins"></i> 当前无启用，0 Tk');
+        setTimeout(
+          () =>
+            $btn.html(
+              '<i class="fa-solid fa-coins"></i> 计算全局已占用总 Token',
+            ),
+          3000,
+        );
+        return;
+      }
+      let totalTokens = 0;
+      try {
+        for (const wb of activeWbs) {
+          const entries = await getWorldbook(wb);
+          const text = entries
+            .filter((e) => e.enabled)
+            .map((e) => e.content || "")
+            .join("\n");
+          if (text) {
+            totalTokens +=
+              typeof getTokenCount === "function"
+                ? await getTokenCount(text)
+                : Math.ceil(text.length / 2.5);
+          }
+        }
+        $btn.html(
+          `<i class="fa-solid fa-check"></i> ⚠️ 全局总占用: ${totalTokens} Tk`,
+        );
+      } catch (e) {
+        $btn.html(
+          '<i class="fa-solid fa-triangle-exclamation"></i> 计算出错了',
+        );
+      }
+      setTimeout(
+        () =>
+          $btn.html('<i class="fa-solid fa-coins"></i> 计算全局已占用总 Token'),
+        5000,
+      );
+    }),
+  );
+  // ---- 结束 ----
   const $fileInput = $(
     '<input type="file" multiple accept=".json" style="display: none;">',
   );
@@ -3408,6 +4309,7 @@ $menuBtn.on("click", async () => {
       await withLoadingOverlay(async () => {
         const c = loadBindingCache() || {};
         for (let wb of batchSelected) {
+          await moveWbToRecycle(wb);
           await deleteWorldbook(wb);
           delete globalBindingMapCache[wb];
           delete c[wb];
@@ -3423,7 +4325,86 @@ $menuBtn.on("click", async () => {
       }, `删除中...`);
     }
   });
+  $ui.find("#wb-btn-batch-group").on("click", async () => {
+    if (batchSelected.size === 0)
+      return toastr.warning("请先勾选需要分组的世界书哦~");
 
+    const cats = getCategories();
+    const catNames = Object.keys(cats);
+
+    // 构建下拉选项
+    let optionsHtml = '<option value="">-- 请选择已有分类 --</option>';
+    catNames.forEach((c) => {
+      optionsHtml += `<option value="${c}">${c}</option>`;
+    });
+
+    // 构建弹窗内容
+    const dialogHtml = `
+      <div style="padding:6px; font-family:sans-serif; min-width:280px; text-align:left;">
+        <div style="font-weight:bold; margin-bottom:10px; color:var(--SmartThemeQuoteColor); font-size:15px;">
+          <i class="fa-solid fa-folder-tree"></i> 把选中的 ${batchSelected.size} 本书归入分类
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">① 选择已有分类：</label>
+          <select id="lulu-batch-grp-select" style="width:100%; box-sizing:border-box; padding:8px; border-radius:6px; border:1px solid var(--SmartThemeBorderColor); background:var(--lulu-input-bg, var(--SmartThemeBotMesColor)); color:var(--SmartThemeBodyColor);">
+            ${optionsHtml}
+          </select>
+        </div>
+
+        <div style="text-align:center; color:gray; font-size:12px; margin:8px 0;">—— 或者 ——</div>
+
+        <div>
+          <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">② 新建一个分类：</label>
+          <input type="text" id="lulu-batch-grp-input" placeholder="输入新分类名字..." style="width:100%; box-sizing:border-box; padding:8px; border-radius:6px; border:1px solid var(--SmartThemeBorderColor); background:var(--lulu-input-bg, var(--SmartThemeBotMesColor)); color:var(--SmartThemeBodyColor);">
+        </div>
+
+        <div style="font-size:11px; color:gray; margin-top:10px;">* 两个都填的话，会优先使用②新建的名字哦~</div>
+      </div>
+    `;
+
+    const $dialog = $(dialogHtml);
+
+    // 让下拉和输入框互斥：选了下拉就清空输入框，反之亦然
+    $dialog.find("#lulu-batch-grp-select").on("change", function () {
+      if ($(this).val()) $dialog.find("#lulu-batch-grp-input").val("");
+    });
+    $dialog.find("#lulu-batch-grp-input").on("input", function () {
+      if ($(this).val().trim()) $dialog.find("#lulu-batch-grp-select").val("");
+    });
+
+    const result = await SillyTavern.callGenericPopup(
+      $dialog,
+      SillyTavern.POPUP_TYPE.CONFIRM,
+      "",
+      { okButton: "确认归类", cancelButton: "取消" },
+    );
+
+    if (result !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+
+    // 优先取输入框（新建），没有再取下拉（已有）
+    let catName = $dialog.find("#lulu-batch-grp-input").val().trim();
+    if (!catName) catName = $dialog.find("#lulu-batch-grp-select").val();
+
+    if (!catName) {
+      return toastr.warning("你还没有选择或输入任何分类名字");
+    }
+
+    let data = getCategories();
+    if (!data[catName]) data[catName] = [];
+    let addCount = 0;
+    batchSelected.forEach((wb) => {
+      if (!data[catName].includes(wb)) {
+        data[catName].push(wb);
+        addCount++;
+      }
+    });
+    saveCategories(data);
+    toastr.success(
+      `已将 ${addCount} 本世界书归入分类 [${catName}] 啦！(๑>؂<๑)`,
+    );
+    renderData();
+  });
   const renderCharView = () => {
     let vars = getVariables({ type: "global" });
     let charSnaps = vars.wb_char_snapshots;
@@ -3504,21 +4485,92 @@ $menuBtn.on("click", async () => {
         '<div style="color:gray; padding:10px; text-align:center;">这名角色还没有存过专属搭配组合呢，快点上方按钮留个纪念吧~</div>',
       );
     } else {
-      Object.entries(mySnaps).forEach(([snapName, snapData]) => {
+      const sortedCharSnapNames = sortCharSnapshotNames(
+        charName,
+        Object.keys(mySnaps),
+      );
+      sortedCharSnapNames.forEach((snapName) => {
+        const snapData = mySnaps[snapName];
         const totalEntries = Object.values(snapData).reduce(
           (a, arr) => a + arr.length,
           0,
         );
         const includedBooks = Object.keys(snapData).length;
         const $item = $(
-          `<div style="display:flex; justify-content:space-between; align-items:center; padding:10px; background:var(--SmartThemeBotMesColor); border-radius:6px; border:1px solid var(--SmartThemeBorderColor); flex-wrap:wrap; gap:8px;"></div>`,
+          `<div class="lulu-char-snap-item" draggable="true" style="display:flex; justify-content:space-between; align-items:center; padding:10px; background:var(--SmartThemeBotMesColor); border-radius:6px; border:1px solid var(--SmartThemeBorderColor); flex-wrap:wrap; gap:8px; cursor:default;"></div>`,
         );
+        // ---- 角色快照拖拽排序 ----
+        $item.on("dragstart", function (e) {
+          e.originalEvent.dataTransfer.setData("text/plain", snapName);
+          $(this).addClass("lulu-drag-ghost");
+        });
+        $item.on("dragend", function () {
+          $(this).removeClass("lulu-drag-ghost");
+          $ui
+            .find(".lulu-drag-over-top, .lulu-drag-over-bottom")
+            .removeClass("lulu-drag-over-top lulu-drag-over-bottom");
+        });
+        $item.on("dragover", function (e) {
+          e.preventDefault();
+          const rect = this.getBoundingClientRect();
+          const isBottom = e.originalEvent.clientY > rect.top + rect.height / 2;
+          $(this)
+            .removeClass("lulu-drag-over-top lulu-drag-over-bottom")
+            .addClass(
+              isBottom ? "lulu-drag-over-bottom" : "lulu-drag-over-top",
+            );
+        });
+        $item.on("dragleave", function () {
+          $(this).removeClass("lulu-drag-over-top lulu-drag-over-bottom");
+        });
+        $item.on("drop", function (e) {
+          e.preventDefault();
+          $(this).removeClass("lulu-drag-over-top lulu-drag-over-bottom");
+          const dragged = e.originalEvent.dataTransfer.getData("text/plain");
+          const target = snapName;
+          if (!dragged || dragged === target) return;
+          let order = sortCharSnapshotNames(charName, Object.keys(mySnaps));
+          const fromIdx = order.indexOf(dragged);
+          if (fromIdx === -1) return;
+          const rect = this.getBoundingClientRect();
+          const isBottom = e.originalEvent.clientY > rect.top + rect.height / 2;
+          order.splice(fromIdx, 1);
+          let toIdx = order.indexOf(target);
+          if (isBottom) toIdx++;
+          order.splice(toIdx, 0, dragged);
+          setCharSnapshotOrder(charName, order);
+          renderCharView();
+        });
+        // ---- 角色快照拖拽排序结束 ----
+
         $item.append(
-          `<div style="flex:1; min-width: 150px;"><div style="font-weight:bold;font-size:14px;"><i class="fa-solid fa-camera-retro" style="color:var(--SmartThemeQuoteColor);"></i> ${snapName}</div><div style="font-size:12px;color:gray;">牵涉 ${includedBooks} 本世界书，共开启 ${totalEntries} 项条目</div></div>`,
+          `<div style="flex:1; min-width: 150px;"><div style="font-weight:bold;font-size:14px;"><i class="fa-solid fa-grip-vertical lulu-char-snap-drag-handle" style="cursor:grab; color:gray; margin-right:6px;" title="按住拖拽排序"></i><i class="fa-solid fa-camera-retro" style="color:var(--SmartThemeQuoteColor);"></i> ${snapName}</div>
+<div style="font-size:12px;color:gray;">牵涉 ${includedBooks} 本世界书，共开启 ${totalEntries} 项条目</div></div>`,
         );
         const $act = $(
           '<div style="display:flex; gap:6px; flex-wrap: wrap;"></div>',
         );
+        // 角色快照 上移/下移
+        const moveCharSnapshot = (dir) => {
+          let order = sortCharSnapshotNames(charName, Object.keys(mySnaps));
+          const idx = order.indexOf(snapName);
+          const swapWith = idx + dir;
+          if (swapWith < 0 || swapWith >= order.length) return;
+          [order[idx], order[swapWith]] = [order[swapWith], order[idx]];
+          setCharSnapshotOrder(charName, order);
+          renderCharView();
+        };
+        $act.append(
+          $(
+            '<button class="menu_button interactable wb-nowrap-btn" style="margin:0; padding:6px 8px;" title="上移"><i class="fa-solid fa-arrow-up"></i></button>',
+          ).on("click", () => moveCharSnapshot(-1)),
+        );
+        $act.append(
+          $(
+            '<button class="menu_button interactable wb-nowrap-btn" style="margin:0; padding:6px 8px;" title="下移"><i class="fa-solid fa-arrow-down"></i></button>',
+          ).on("click", () => moveCharSnapshot(1)),
+        );
+
         $act.append(
           $(
             '<button class="menu_button interactable btn-success wb-nowrap-btn" style="margin:0; padding:6px 12px; font-size:12px; border:none;">应用该组合</button>',
@@ -4486,11 +5538,12 @@ $menuBtn.on("click", async () => {
             ).on("click", async () => {
               if (
                 (await SillyTavern.callGenericPopup(
-                  `删除确认：丢失 [${wb}] ？`,
+                  `删除 [${wb}] ？会暂时进入回收站，误删可恢复`,
                   SillyTavern.POPUP_TYPE.CONFIRM,
                 )) === SillyTavern.POPUP_RESULT.AFFIRMATIVE
               ) {
                 await withLoadingOverlay(async () => {
+                  await moveWbToRecycle(wb);
                   await deleteWorldbook(wb);
                   delete globalBindingMapCache[wb];
                   const c = loadBindingCache();
@@ -4546,7 +5599,9 @@ $menuBtn.on("click", async () => {
     }
 
     const $snapContainer = $ui.find("#wb-snapshot-container").empty();
-    Object.entries(snapshots).forEach(([name, snapData]) => {
+    const sortedSnapNames = sortSnapshotNames(Object.keys(snapshots));
+    sortedSnapNames.forEach((name) => {
+      const snapData = snapshots[name];
       const isDetailed =
         !Array.isArray(snapData) && snapData.type === "detailed";
       const wbs = isDetailed
@@ -4555,10 +5610,52 @@ $menuBtn.on("click", async () => {
           ? snapData
           : snapData.wbs;
       const $item = $(
-        `<div style="display:flex; justify-content:space-between; align-items:center; padding:10px; background:var(--SmartThemeBotMesColor); border-radius:6px; border:1px solid var(--SmartThemeBorderColor); flex-wrap:wrap; gap:8px;"></div>`,
+        `<div class="lulu-snap-item" data-snapname="${encodeURIComponent(name)}" draggable="true" style="display:flex; justify-content:space-between; align-items:center; padding:10px; background:var(--SmartThemeBotMesColor); border-radius:6px; border:1px solid var(--SmartThemeBorderColor); flex-wrap:wrap; gap:8px; cursor:default;"></div>`,
       );
+      // ---- 快照拖拽排序 ----
+      $item.on("dragstart", function (e) {
+        e.originalEvent.dataTransfer.setData("text/plain", name);
+        $(this).addClass("lulu-drag-ghost");
+      });
+      $item.on("dragend", function () {
+        $(this).removeClass("lulu-drag-ghost");
+        $ui
+          .find(".lulu-drag-over-top, .lulu-drag-over-bottom")
+          .removeClass("lulu-drag-over-top lulu-drag-over-bottom");
+      });
+      $item.on("dragover", function (e) {
+        e.preventDefault();
+        const rect = this.getBoundingClientRect();
+        const isBottom = e.originalEvent.clientY > rect.top + rect.height / 2;
+        $(this)
+          .removeClass("lulu-drag-over-top lulu-drag-over-bottom")
+          .addClass(isBottom ? "lulu-drag-over-bottom" : "lulu-drag-over-top");
+      });
+      $item.on("dragleave", function () {
+        $(this).removeClass("lulu-drag-over-top lulu-drag-over-bottom");
+      });
+      $item.on("drop", function (e) {
+        e.preventDefault();
+        $(this).removeClass("lulu-drag-over-top lulu-drag-over-bottom");
+        const dragged = e.originalEvent.dataTransfer.getData("text/plain");
+        const target = name;
+        if (!dragged || dragged === target) return;
+        let order = sortSnapshotNames(Object.keys(snapshots));
+        const fromIdx = order.indexOf(dragged);
+        if (fromIdx === -1) return;
+        const rect = this.getBoundingClientRect();
+        const isBottom = e.originalEvent.clientY > rect.top + rect.height / 2;
+        order.splice(fromIdx, 1);
+        let toIdx = order.indexOf(target);
+        if (isBottom) toIdx++;
+        order.splice(toIdx, 0, dragged);
+        setSnapshotOrder(order);
+        renderData();
+      });
+      // ---- 拖拽排序结束 ----
       $item.append(
-        `<div style="flex:1; min-width: 150px;"><div style="font-weight:bold;font-size:14px;"><i class="fa-solid ${isDetailed ? "fa-puzzle-piece" : "fa-box-archive"}" style="color:var(--SmartThemeQuoteColor);"></i> ${name}</div><div style="font-size:12px;color:gray;">${isDetailed ? `含 ${Object.values(snapData.data).reduce((a, c) => a + c.length, 0)} 个内容微调` : `含 ${(wbs || []).length} 项设定`}</div></div>`,
+        `<div style="flex:1; min-width: 150px;"><div style="font-weight:bold;font-size:14px;"><i class="fa-solid fa-grip-vertical lulu-snap-drag-handle" style="cursor:grab; color:gray; margin-right:6px;" title="按住拖拽排序"></i><i class="fa-solid ${isDetailed ? "fa-puzzle-piece" : "fa-box-archive"}" style="color:var(--SmartThemeQuoteColor);"></i> ${name}</div>
+<div style="font-size:12px;color:gray;">${isDetailed ? `含 ${Object.values(snapData.data).reduce((a, c) => a + c.length, 0)} 个内容微调` : `含 ${(wbs || []).length} 项设定`}</div></div>`,
       );
       const $act = $(
         '<div style="display:flex; gap:6px; flex-wrap: wrap;"></div>',
@@ -4576,6 +5673,26 @@ $menuBtn.on("click", async () => {
           toastr.success("组合已应用。");
           renderData();
         }),
+      );
+      // 上移 / 下移按钮（功能8 手机友好）
+      const moveSnapshot = (dir) => {
+        let order = sortSnapshotNames(Object.keys(snapshots));
+        const idx = order.indexOf(name);
+        const swapWith = idx + dir;
+        if (swapWith < 0 || swapWith >= order.length) return;
+        [order[idx], order[swapWith]] = [order[swapWith], order[idx]];
+        setSnapshotOrder(order);
+        renderData();
+      };
+      $act.append(
+        $(
+          '<button class="menu_button interactable wb-nowrap-btn" style="margin:0; padding:6px 8px;" title="上移"><i class="fa-solid fa-arrow-up"></i></button>',
+        ).on("click", () => moveSnapshot(-1)),
+      );
+      $act.append(
+        $(
+          '<button class="menu_button interactable wb-nowrap-btn" style="margin:0; padding:6px 8px;" title="下移"><i class="fa-solid fa-arrow-down"></i></button>',
+        ).on("click", () => moveSnapshot(1)),
       );
       $act.append(
         $(
@@ -5651,7 +6768,276 @@ $menuBtn.on("click", async () => {
         `<div style="color: gray; padding: 10px; text-align: center;">${tuneEntries.length > 0 ? "搜查不到匹配内容呢。" : "完全是一本空壳书呀。"}</div>`,
       );
   };
+  // ========== 【功能6：查找替换】 开始 ==========
+  $ui
+    .find("#wb-btn-entry-replace")
+    .off("click")
+    .on("click", async () => {
+      if (!tuneEntries || tuneEntries.length === 0)
+        return toastr.warning("这本书还没有条目可以替换哦~");
 
+      const dialogHtml = `
+      <div style="padding:6px; font-family:sans-serif; min-width:300px; max-width:460px; text-align:left;">
+        <h3 style="margin-top:0; color:var(--SmartThemeQuoteColor); border-bottom:2px solid var(--SmartThemeBorderColor); padding-bottom:10px;">
+          <i class="fa-solid fa-magnifying-glass-arrow-right"></i> 查找替换
+          <span style="font-size:12px; font-weight:normal; color:gray;">当前书：${tuneWbName}</span>
+        </h3>
+
+        <div style="margin-bottom:12px;">
+          <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">🔍 查找内容：</label>
+          <input type="text" id="lulu-rep-find" class="text_pole" placeholder="要被替换掉的文字..." style="width:100%; box-sizing:border-box; padding:8px;">
+        </div>
+
+        <div style="margin-bottom:12px;">
+          <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">✏️ 替换为：</label>
+          <input type="text" id="lulu-rep-to" class="text_pole" placeholder="新的文字（留空=删除查找内容）..." style="width:100%; box-sizing:border-box; padding:8px;">
+        </div>
+
+        <div style="margin-bottom:10px; padding:10px; background:rgba(0,0,0,0.1); border-radius:6px;">
+          <div style="font-size:12px; font-weight:bold; margin-bottom:8px; color:var(--SmartThemeQuoteColor);">📍 替换范围（至少勾一个）：</div>
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px; margin-bottom:6px; cursor:pointer;">
+            <input type="checkbox" id="lulu-rep-content" checked style="accent-color:var(--SmartThemeQuoteColor);"> <span>条目正文内容</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px; margin-bottom:6px; cursor:pointer;">
+            <input type="checkbox" id="lulu-rep-keys" style="accent-color:var(--SmartThemeQuoteColor);"> <span>触发关键字</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer;">
+            <input type="checkbox" id="lulu-rep-name" style="accent-color:var(--SmartThemeQuoteColor);"> <span>条目名称</span>
+          </label>
+        </div>
+
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px; margin-bottom:12px; cursor:pointer;">
+          <input type="checkbox" id="lulu-rep-case" style="accent-color:var(--SmartThemeQuoteColor);"> <span>区分大小写</span>
+        </label>
+
+        <div id="lulu-rep-preview" style="font-size:13px; padding:10px; border-radius:6px; background:var(--SmartThemeBotMesColor); border:1px dashed var(--SmartThemeBorderColor); text-align:center; color:gray; margin-bottom:12px; max-height:260px; overflow-y:auto;">
+          点击下方「预览匹配」看看会替换多少处~
+        </div>
+
+        <div style="display:flex; gap:8px;">
+          <button id="lulu-rep-preview-btn" class="menu_button interactable btn-primary wb-nowrap-btn" style="flex:1; margin:0; padding:8px; border:none;"><i class="fa-solid fa-eye"></i> 预览匹配</button>
+          <button id="lulu-rep-do-btn" class="menu_button interactable btn-success wb-nowrap-btn" style="flex:1; margin:0; padding:8px; border:none;" disabled><i class="fa-solid fa-wand-magic-sparkles"></i> 执行替换</button>
+        </div>
+      </div>`;
+
+      const $dlg = $(dialogHtml);
+
+      // 工具：转义正则特殊字符，让查找当作纯文本
+      const escapeReg = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+      // 转义 HTML，防止条目内容里的尖括号乱套
+      const escapeHtml = (s) => String(s).replace(/</g, "<").replace(/>/g, ">");
+
+      // 从一段文本里，找出所有匹配并生成"前文【词】后文"的高亮片段
+      const collectSnippets = (text, reg, fieldLabel, snippets) => {
+        if (!text) return 0;
+        const CTX = 18; // 关键词前后各取多少个字
+        let count = 0;
+        let m;
+        reg.lastIndex = 0;
+        while ((m = reg.exec(text)) !== null) {
+          count++;
+          const start = m.index;
+          const end = m.index + m[0].length;
+          const before = text.slice(Math.max(0, start - CTX), start);
+          const after = text.slice(end, end + CTX);
+          const prefix = start - CTX > 0 ? "…" : "";
+          const suffix = end + CTX < text.length ? "…" : "";
+          // 只收集前 200 个片段，防止极端情况卡死
+          if (snippets.length < 200) {
+            snippets.push(
+              `<div style="padding:2px 0; line-height:1.5;"><span style="font-size:10px; color:var(--SmartThemeQuoteColor); background:rgba(125,125,125,0.15); padding:1px 4px; border-radius:3px; margin-right:4px;">${fieldLabel}</span>${prefix}${escapeHtml(before)}<mark style="background:#fcc419; color:#000; padding:0 2px; border-radius:2px; font-weight:bold;">${escapeHtml(m[0])}</mark>${escapeHtml(after)}${suffix}</div>`,
+            );
+          }
+          if (m[0].length === 0) reg.lastIndex++; // 防空匹配死循环
+        }
+        return count;
+      };
+
+      // 统计匹配 + 收集上下文片段
+      const countMatches = () => {
+        const find = $dlg.find("#lulu-rep-find").val();
+        if (!find) return { total: 0, entryCount: 0, details: [] };
+        const caseSensitive = $dlg.find("#lulu-rep-case").is(":checked");
+        const doContent = $dlg.find("#lulu-rep-content").is(":checked");
+        const doKeys = $dlg.find("#lulu-rep-keys").is(":checked");
+        const doName = $dlg.find("#lulu-rep-name").is(":checked");
+        const flags = caseSensitive ? "g" : "gi";
+        const reg = new RegExp(escapeReg(find), flags);
+
+        let total = 0;
+        let entryCount = 0;
+        const details = []; // 每个命中条目：{name, snippets:[]}
+
+        tuneEntries.forEach((e) => {
+          const snippets = [];
+          let hit = 0;
+          if (doName && e.name) {
+            hit += collectSnippets(e.name, reg, "名称", snippets);
+          }
+          if (doKeys && e.strategy?.keys) {
+            e.strategy.keys.forEach((k) => {
+              hit += collectSnippets(String(k), reg, "关键字", snippets);
+            });
+          }
+          if (doContent && e.content) {
+            hit += collectSnippets(e.content, reg, "正文", snippets);
+          }
+          if (hit > 0) {
+            total += hit;
+            entryCount++;
+            details.push({ name: e.name || "(未命名条目)", snippets });
+          }
+        });
+        return { total, entryCount, details };
+      };
+
+      // 预览按钮
+      $dlg.find("#lulu-rep-preview-btn").on("click", () => {
+        const find = $dlg.find("#lulu-rep-find").val();
+        if (!find) {
+          $dlg
+            .find("#lulu-rep-preview")
+            .html(
+              '<span style="color:#ff6b6b;">请先输入要查找的内容哦~</span>',
+            );
+          return;
+        }
+        if (
+          !$dlg.find("#lulu-rep-content").is(":checked") &&
+          !$dlg.find("#lulu-rep-keys").is(":checked") &&
+          !$dlg.find("#lulu-rep-name").is(":checked")
+        ) {
+          $dlg
+            .find("#lulu-rep-preview")
+            .html(
+              '<span style="color:#ff6b6b;">至少要勾选一个替换范围呀~</span>',
+            );
+          return;
+        }
+        const { total, entryCount } = countMatches();
+        if (total === 0) {
+          $dlg
+            .find("#lulu-rep-preview")
+            .html(
+              '<span style="color:gray;">没有找到任何匹配的内容呢 (´･ω･`)</span>',
+            );
+          $dlg.find("#lulu-rep-do-btn").prop("disabled", true);
+        } else {
+          const to = $dlg.find("#lulu-rep-to").val();
+          const { details } = countMatches();
+          let listHtml = `<div style="text-align:center; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid rgba(125,125,125,0.2);">共找到 <strong style="color:var(--SmartThemeQuoteColor); font-size:15px;">${total}</strong> 处匹配，分布在 <strong style="color:var(--SmartThemeQuoteColor);">${entryCount}</strong> 个条目中<br><span style="font-size:12px; color:gray;">将把 [${find}] → [${to || "（空，即删除）"}]</span></div>`;
+          listHtml += '<div style="text-align:left;">';
+          details.forEach((d) => {
+            listHtml += `<div style="margin-bottom:8px;"><div style="font-weight:bold; font-size:12.5px; color:var(--SmartThemeBodyColor); margin-bottom:2px;"><i class="fa-solid fa-file-lines" style="color:var(--SmartThemeQuoteColor); margin-right:4px;"></i>${escapeHtml(d.name)} <span style="color:gray; font-weight:normal;">(${d.snippets.length}处)</span></div><div style="padding-left:8px; border-left:2px solid var(--SmartThemeBorderColor); color:var(--SmartThemeBodyColor); font-size:12px;">${d.snippets.join("")}</div></div>`;
+          });
+          if (total > 200) {
+            listHtml += `<div style="text-align:center; color:gray; font-size:11px; margin-top:6px;">（片段太多，仅展示前 200 处，但替换会全部生效哦）</div>`;
+          }
+          listHtml += "</div>";
+          $dlg.find("#lulu-rep-preview").html(listHtml);
+          $dlg.find("#lulu-rep-do-btn").prop("disabled", false);
+        }
+      });
+
+      // 改动任何条件时，重置执行按钮
+      $dlg
+        .find(
+          "#lulu-rep-find, #lulu-rep-to, #lulu-rep-content, #lulu-rep-keys, #lulu-rep-name, #lulu-rep-case",
+        )
+        .on("input change", () => {
+          $dlg.find("#lulu-rep-do-btn").prop("disabled", true);
+        });
+
+      // 执行替换按钮（Part 2 会填充真正逻辑）
+      $dlg.find("#lulu-rep-do-btn").on("click", () => {
+        if (typeof doEntryReplace === "function") {
+          doEntryReplace($dlg, escapeReg);
+        }
+      });
+
+      await SillyTavern.callGenericPopup(
+        $dlg,
+        SillyTavern.POPUP_TYPE.TEXT,
+        "",
+        {
+          okButton: "关闭",
+        },
+      );
+    });
+  // ========== 【功能6：查找替换】Part1 结束 ==========
+  // ---- Part 2：执行替换逻辑 ----
+  const doEntryReplace = ($dlg, escapeReg) => {
+    const find = $dlg.find("#lulu-rep-find").val();
+    if (!find) return;
+    const to = $dlg.find("#lulu-rep-to").val();
+    const caseSensitive = $dlg.find("#lulu-rep-case").is(":checked");
+    const doContent = $dlg.find("#lulu-rep-content").is(":checked");
+    const doKeys = $dlg.find("#lulu-rep-keys").is(":checked");
+    const doName = $dlg.find("#lulu-rep-name").is(":checked");
+    const flags = caseSensitive ? "g" : "gi";
+
+    let replacedCount = 0;
+    let affectedEntries = 0;
+
+    tuneEntries.forEach((e) => {
+      let entryTouched = false;
+      // 每个字段用新的正则实例，避免 lastIndex 干扰
+      if (doName && e.name) {
+        const reg = new RegExp(escapeReg(find), flags);
+        const m = e.name.match(reg);
+        if (m) {
+          e.name = e.name.replace(reg, to);
+          replacedCount += m.length;
+          entryTouched = true;
+        }
+      }
+      if (doKeys && e.strategy?.keys && e.strategy.keys.length > 0) {
+        e.strategy.keys = e.strategy.keys.map((k) => {
+          const reg = new RegExp(escapeReg(find), flags);
+          const str = String(k);
+          const m = str.match(reg);
+          if (m) {
+            replacedCount += m.length;
+            entryTouched = true;
+            return str.replace(reg, to);
+          }
+          return k;
+        });
+        // 同步一下 key/keys 字段（你的脚本里两个都用）
+        e.key = e.strategy.keys;
+        e.keys = e.strategy.keys;
+      }
+      if (doContent && e.content) {
+        const reg = new RegExp(escapeReg(find), flags);
+        const m = e.content.match(reg);
+        if (m) {
+          e.content = e.content.replace(reg, to);
+          replacedCount += m.length;
+          entryTouched = true;
+        }
+      }
+      if (entryTouched) affectedEntries++;
+    });
+
+    if (replacedCount === 0) {
+      toastr.info("咦，没有替换任何内容呢~");
+      return;
+    }
+
+    // 刷新列表 + 让 Token 缓存失效
+    if (typeof luluTokenCache !== "undefined")
+      delete luluTokenCache[tuneWbName];
+    renderEntryList();
+
+    toastr.success(
+      `✨ 已替换 ${replacedCount} 处（涉及 ${affectedEntries} 个条目）！内容已暂存，记得点左下角绿色「确认并覆盖源文件」才会真正生效哦~`,
+    );
+
+    // 关掉替换弹窗
+    $dlg.closest("dialog").find(".popup-button-ok").trigger("click");
+  };
+  // ---- 功能6 Part2 结束 ----
   $ui.find("#wb-entry-search").off("input").on("input", renderEntryList);
   $ui.find("#wb-entry-sort").off("change").on("change", renderEntryList);
   $ui
@@ -5668,6 +7054,38 @@ $menuBtn.on("click", async () => {
       tuneEntries.forEach((e) => (e.enabled = false));
       renderEntryList();
     });
+  // ---- 里面：单本书启用总 Token 按钮 ----
+  $ui.find("#wb-btn-entry-none").after(
+    $(
+      '<div class="wb-action-btn wb-nowrap-btn" id="wb-btn-calc-tune-tk" style="padding: 6px; color: #339af0; border-color: #339af0; background: rgba(51, 154, 240, 0.1);"><i class="fa-solid fa-coins"></i> 计算本书启用 Token</div>',
+    ).on("click", async function () {
+      const $btn = $(this);
+      $btn.html('<i class="fa-solid fa-spinner fa-spin"></i> 算盘敲击中...');
+      try {
+        // 直接读取当前面板里(未保存或已保存)的条目状态
+        const text = tuneEntries
+          .filter((e) => e.enabled)
+          .map((e) => e.content || "")
+          .join("\n");
+        if (!text) {
+          $btn.html('<i class="fa-solid fa-check"></i> 本书总计: 0 Tk');
+        } else {
+          const tk =
+            typeof getTokenCount === "function"
+              ? await getTokenCount(text)
+              : Math.ceil(text.length / 2.5);
+          $btn.html(`<i class="fa-solid fa-check"></i> 本书总计: ${tk} Tk`);
+        }
+      } catch (e) {
+        $btn.html('<i class="fa-solid fa-xmark"></i> 计算失败');
+      }
+      setTimeout(
+        () => $btn.html('<i class="fa-solid fa-coins"></i> 计算本书启用 Token'),
+        4000,
+      );
+    }),
+  );
+  // ---- 结束 ----
   $ui
     .find("#wb-btn-entry-add")
     .off("click")
@@ -5713,6 +7131,7 @@ $menuBtn.on("click", async () => {
     }, `写入中...`);
 
     originalTuneEntries = JSON.parse(JSON.stringify(tuneEntries));
+    delete luluTokenCache[tuneWbName]; // Token缓存失效（功能7）
     toastr.success(`[${tuneWbName}] 的修改已经成功保存啦！`);
     if (tuneReturnView === "#wb-main-view") renderData();
     else if (tuneReturnView === "#wb-char-view") renderCharView();
