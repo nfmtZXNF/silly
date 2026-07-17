@@ -380,7 +380,6 @@ window.luluOpenQuickSnapshotView = async () => {
 }
 ${themeOverrideCSS} </style>`;
 
-
   let html = `${customCss}<div id="lulu-quick-snap-modal" style="padding:10px; font-family:sans-serif; min-width:320px; max-width:550px;"><h3 style="margin-top:0; color:var(--SmartThemeQuoteColor); border-bottom:2px solid var(--SmartThemeBorderColor); padding-bottom:10px; font-size: 16px; display:flex; align-items:center; justify-content:space-between; gap:8px;"><span><i class="fa-solid fa-bolt" style="color:#fcc419;"></i> 极速快照控制台</span><span id="lulu-qs-status-text" style="color:var(--SmartThemeQuoteColor); font-size: 12px; font-weight:normal;">正在检测状态...</span></h3><div style="margin-bottom:10px;"><input type="text" id="lulu-qs-search" class="text_pole" placeholder="🔍 检索快照名称..." style="width:100%; box-sizing:border-box; padding:8px; border-radius:6px; font-size:13px; margin-bottom:10px;"><button id="lulu-qs-clear-all" class="menu_button interactable btn-danger lulu-qs-btn-hover" style="width:100%; margin:0; border:none; padding:10px; border-radius:6px; background:rgba(255, 107, 107, 0.1); color:#ff6b6b; font-weight:bold; font-size:13px; display:flex; justify-content:center; align-items:center; gap:8px;"><i class="fa-solid fa-power-off"></i> 一键关闭当前所有全局世界书</button></div><div style="max-height: 50vh; overflow-y: auto; display:flex; flex-direction:column; gap:10px; padding:4px;" class="scrollableInnerFull">`;
   let __quickOrder = getSnapshotOrder();
   const __sortedQuickNames = Object.keys(snapshots).sort((a, b) => {
@@ -618,6 +617,37 @@ ${themeOverrideCSS} </style>`;
 };
 
 window.luluWbInitTabType = "global";
+
+// ✨ 内置矢量图标库（用户可从下拉框直接选）
+const LULU_FLOAT_ICONS = {
+  "fa-book-atlas": "📖 图集书（默认）",
+  "fa-book-journal-whills": "📓 魔法书",
+  "fa-book-open": "📖 打开的书",
+  "fa-bolt": "⚡ 闪电",
+  "fa-star": "⭐ 星星",
+  "fa-wand-magic-sparkles": "🪄 魔法棒",
+  "fa-dragon": "🐉 龙",
+  "fa-cat": "🐱 猫咪",
+  "fa-heart": "❤️ 爱心",
+  "fa-gem": "💎 宝石",
+  "fa-crown": "👑 皇冠",
+  "fa-feather": "🪶 羽毛",
+  "fa-moon": "🌙 月亮",
+  "fa-fire": "🔥 火焰",
+  "fa-ghost": "👻 幽灵",
+  "fa-paw": "🐾 脚印",
+  "fa-leaf": "🍃 叶子",
+  "fa-compass": "🧭 罗盘",
+};
+
+// ✨ 读取悬浮球外观配置（含图标、颜色）
+const getFloatAppearance = () => {
+  return JSON.parse(
+    localStorage.getItem("lulu_wb_floating_appearance") ||
+      '{"iconType":"fa","iconValue":"fa-book-atlas","emoji":"📖","imgUrl":"","useThemeColor":true,"bgColor":"#2a2e33","bgAlpha":100,"iconColor":"#70a1ff","borderColor":"#70a1ff"}',
+  );
+};
+
 const toggleFloatingButton = (show, forceUpdate = false) => {
   if (!show) {
     $("#lulu-wb-floating-btn").remove();
@@ -627,18 +657,76 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
   if ($("#lulu-wb-floating-btn").length > 0 && !forceUpdate) return;
   if (forceUpdate) {
     $("#lulu-wb-floating-style").remove();
+    $("#lulu-wb-floating-btn").remove(); // 强制更新时把旧球也删掉重建，才能换图标
   }
   const flConf = JSON.parse(
     localStorage.getItem("lulu_wb_floating_config") ||
       '{"size": 48, "opacity": 0.8}',
   );
+  const appear = getFloatAppearance();
+
+  // 把 #rrggbb + 透明度 转成 rgba 颜色
+  const luluHexToRgba = (hex, alpha) => {
+    let r = 0,
+      g = 0,
+      b = 0;
+    if (hex && hex.length === 7) {
+      r = parseInt(hex.substring(1, 3), 16);
+      g = parseInt(hex.substring(3, 5), 16);
+      b = parseInt(hex.substring(5, 7), 16);
+    }
+    return `rgba(${r},${g},${b},${alpha / 100})`;
+  };
+
+  // 决定颜色：跟随主题 or 自定义
+  const bgAlpha = appear.bgAlpha === undefined ? 100 : appear.bgAlpha;
+  const bgCss = appear.useThemeColor
+    ? "var(--SmartThemeBotMesColor, #2a2e33)"
+    : luluHexToRgba(appear.bgColor, bgAlpha);
+  const iconColorCss = appear.useThemeColor
+    ? "var(--SmartThemeQuoteColor, #70a1ff)"
+    : appear.iconColor;
+  const borderColorCss = appear.useThemeColor
+    ? "var(--SmartThemeQuoteColor, #70a1ff)"
+    : appear.borderColor;
+
   if ($("#lulu-wb-floating-style").length === 0) {
-    const styleHtml = `<style id="lulu-wb-floating-style"> #lulu-wb-floating-btn { position: fixed !important; top: 45vh !important; right: 15px !important; width: ${flConf.size}px !important; height: ${flConf.size}px !important; opacity: ${flConf.opacity} !important; background: var(--SmartThemeBotMesColor, #2a2e33) !important; color: var(--SmartThemeQuoteColor, #70a1ff) !important; border: 2px solid var(--SmartThemeQuoteColor, #70a1ff) !important; border-radius: 50% !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: ${flConf.size * 0.45}px !important; cursor: pointer !important; box-shadow: 0 4px 12px rgba(0,0,0,0.6) !important; z-index: 2147483647 !important; user-select: none !important; touch-action: none !important; -webkit-tap-highlight-color: transparent !important; transition: transform 0.2s, opacity 0.2s !important; } #lulu-wb-floating-btn:active { transform: scale(0.9) !important; } #lulu-wb-floating-btn:hover { opacity: 1 !important; } .lulu-float-menu-opts { position: absolute; right: calc(100% + 10px); top: 50%; transform: translateY(-50%); display: flex; gap: 8px; background: var(--SmartThemeBlurTintColor); padding: 8px; border-radius: 8px; border: 1px solid var(--SmartThemeBorderColor); box-shadow: 0 4px 8px rgba(0,0,0,0.4); opacity: 0; pointer-events: none; transition: 0.2s; white-space: nowrap; } .lulu-float-menu-opts.show { opacity: 1; pointer-events: auto; } .lulu-float-btn-opt { cursor: pointer; padding: 6px 12px; font-size: 13px; font-weight: bold; color: var(--SmartThemeBodyColor); background: var(--SmartThemeBotMesColor); border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px; } .lulu-float-btn-opt:hover { background: var(--SmartThemeQuoteColor); color: #fff; } </style>`;
+    const styleHtml = `<style id="lulu-wb-floating-style"> #lulu-wb-floating-btn { position: fixed !important; top: 45vh !important; right: 15px !important; width: ${flConf.size}px !important; height: ${flConf.size}px !important; opacity: ${flConf.opacity} !important; background: ${bgCss} !important; color: ${iconColorCss} !important; border: 2px solid ${borderColorCss} !important; border-radius: 50% !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: ${flConf.size * 0.45}px !important; cursor: pointer !important; box-shadow: 0 4px 12px rgba(0,0,0,0.6) !important; z-index: 2147483647 !important; user-select: none !important; touch-action: none !important; -webkit-tap-highlight-color: transparent !important; transition: transform 0.2s, opacity 0.2s !important; }
+ #lulu-wb-floating-btn img.lulu-float-img { width: 90% !important; height: 90% !important; object-fit: cover !important; border-radius: 50% !important; pointer-events: none !important; }
+ #lulu-wb-floating-btn span.lulu-float-emoji { font-size: ${flConf.size * 0.5}px !important; line-height: 1 !important; pointer-events: none !important; } #lulu-wb-floating-btn span.lulu-float-svg { width: 65% !important; height: 65% !important; display: flex !important; align-items: center !important; justify-content: center !important; pointer-events: none !important; } #lulu-wb-floating-btn span.lulu-float-svg svg { width: 100% !important; height: 100% !important; }
+ #lulu-wb-floating-btn > i { pointer-events: none !important; }
+ #lulu-wb-floating-btn:active { transform: scale(0.9) !important; } #lulu-wb-floating-btn:hover { opacity: 1 !important; } .lulu-float-menu-opts { position: absolute; right: calc(100% + 10px); top: 50%; transform: translateY(-50%); display: flex; gap: 8px; background: var(--SmartThemeBlurTintColor); padding: 8px; border-radius: 8px; border: 1px solid var(--SmartThemeBorderColor); box-shadow: 0 4px 8px rgba(0,0,0,0.4); opacity: 0; pointer-events: none; transition: 0.2s; white-space: nowrap; } .lulu-float-menu-opts.show { opacity: 1; pointer-events: auto; } .lulu-float-btn-opt { cursor: pointer; padding: 6px 12px; font-size: 13px; font-weight: bold; color: var(--SmartThemeBodyColor); background: var(--SmartThemeBotMesColor); border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px; } .lulu-float-btn-opt:hover { background: var(--SmartThemeQuoteColor); color: #fff; } </style>`;
     $("head").append(styleHtml);
   }
   if (forceUpdate && $("#lulu-wb-floating-btn").length > 0) return;
+
+  // 根据配置生成球里面的内容（图片链接 / SVG代码 / emoji / 矢量图标）
+  let $iconContent;
+  if (appear.iconType === "img" && appear.imgUrl) {
+    const val = appear.imgUrl.trim();
+    // 智能识别：如果内容是 SVG 代码，就直接插入；否则当成图片网址
+    if (val.toLowerCase().startsWith("<svg")) {
+      $iconContent = $("<span>", { class: "lulu-float-svg" }).html(val);
+    } else {
+      $iconContent = $("<img>", {
+        class: "lulu-float-img",
+        src: val,
+        alt: "icon",
+      });
+    }
+  } else if (appear.iconType === "emoji" && appear.emoji) {
+    $iconContent = $("<span>", {
+      class: "lulu-float-emoji",
+      text: appear.emoji,
+    });
+  } else {
+    $iconContent = $("<i>", {
+      class: `fa-solid ${appear.iconValue || "fa-book-atlas"}`,
+    });
+  }
+
   const $floatBtn = $("<div>", { id: "lulu-wb-floating-btn" })
-    .append($("<i>", { class: "fa-solid fa-book-atlas" }))
+    .append($iconContent)
     .append(
       $("<div>", { class: "lulu-float-menu-opts" })
         .append(
@@ -1400,12 +1488,23 @@ $menuBtn.on("click", async () => {
                         <span style="font-weight: bold; color: #51cf66;">🪄 原生分类同步</span>
                     </label>
                     <button id="wb-theme-quick-toggle" class="menu_button interactable btn-primary" style="margin: 0; padding: 4px 10px; min-width: unset; font-size: 13px; border-radius: 6px; flex-shrink: 0; white-space: nowrap;" title="一键切换深色/浅色护眼模式"><i class="fa-solid fa-circle-half-stroke"></i></button>
-                    <button id="wb-theme-toggle-btn" class="menu_button interactable btn-primary" style="margin: 0; padding: 4px 10px; min-width: unset; font-size: 13px; border-radius: 6px; flex-shrink: 0; white-space: nowrap;"><i class="fa-solid fa-palette"></i> 色彩微调</button>
+                    <button id="wb-theme-toggle-btn" class="menu_button interactable btn-primary" style="margin: 0; padding: 4px 10px; min-width: unset; font-size: 13px; border-radius: 6px; flex-shrink: 0; white-space: nowrap;"><i class="fa-solid fa-palette"></i> 外观设置</button>
                 </div>
             </div>
 
-            <!-- 皮肤设定的下拉内容区域 -->
+            <!-- 外观设定的下拉内容区域 -->
             <div id="wb-theme-config-panel" style="display:none; margin-bottom: 12px; border-radius: 8px; border: 1px dashed var(--SmartThemeQuoteColor); background: rgba(0,0,0,0.1); padding: 12px;">
+                <!-- 切换器：改面板 or 改悬浮球 -->
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px; padding-bottom:12px; border-bottom:1px dashed var(--SmartThemeBorderColor); flex-wrap:wrap;">
+                    <label style="font-size:13px; font-weight:bold; color:var(--SmartThemeQuoteColor);"><i class="fa-solid fa-sliders"></i> 当前设置：</label>
+                    <select id="wb-config-section-select" class="wb-input-dt" style="width:auto; padding:6px; margin:0; min-width:200px;">
+                        <option value="panel">🖼️ 管理面板皮肤</option>
+                        <option value="float">🔮 悬浮球外观</option>
+                    </select>
+                </div>
+
+                <!-- 面板皮肤设置区 -->
+                <div id="wb-config-panel-section">
                 <div style="font-weight: bold; margin-bottom: 10px; color: var(--SmartThemeQuoteColor); display:flex; align-items:center; gap:6px;">
                     <i class="fa-solid fa-paint-roller"></i> 皮肤调色板
                     <span style="font-weight:normal; font-size:12px; color:gray;">(独立于酒馆全局，随意调整)</span>
@@ -1464,6 +1563,13 @@ $menuBtn.on("click", async () => {
                             <button id="wb-theme-preset-save" class="menu_button interactable btn-success wb-nowrap-btn" style="margin:0; padding:4px 8px; font-size:11px; border:none; height: 30px;" title="保存当前配色方案"><i class="fa-solid fa-bookmark"></i> 存进配方盒</button>
                         </div>
                     </div>
+                </div>
+                </div>
+                <!-- 面板皮肤设置区 结束 -->
+
+                <!-- 悬浮球外观设置区（内容由脚本动态放入） -->
+                <div id="wb-config-float-section" style="display:none;">
+                    <div id="wb-float-appearance-inner"></div>
                 </div>
             </div>
 
@@ -2503,12 +2609,278 @@ $menuBtn.on("click", async () => {
     if ($ui.find("#wb-toggle-floating").is(":checked"))
       toggleFloatingButton(true, true);
   };
+  // 构建内置图标下拉选项
+  let iconOptionsHtml = "";
+  Object.keys(LULU_FLOAT_ICONS).forEach((key) => {
+    iconOptionsHtml += `<option value="${key}">${LULU_FLOAT_ICONS[key]}</option>`;
+  });
+
   $ui
     .find("#wb-toggle-floating")
     .parent()
     .after(
-      `<div id="lulu-float-config-area" style="display:none; align-items:center; gap:8px; margin-left:10px; flex-wrap:wrap;"><label style="font-size:12px; font-weight:bold; margin:0; color:gray;">大小: <input type="range" id="wb-float-size" min="30" max="70" value="48" style="width:60px; accent-color:var(--SmartThemeQuoteColor); cursor:pointer;"></label><label style="font-size:12px; font-weight:bold; margin:0; color:gray;">可视度: <input type="range" id="wb-float-opacity" min="0.2" max="1" step="0.1" value="0.8" style="width:60px; accent-color:var(--SmartThemeQuoteColor); cursor:pointer;"></label></div>`,
+      `<div id="lulu-float-config-area" style="display:none; align-items:center; gap:8px; margin-left:10px; flex-wrap:wrap;">
+        <label style="font-size:12px; font-weight:bold; margin:0; color:gray;">大小: <input type="range" id="wb-float-size" min="30" max="70" value="48" style="width:60px; accent-color:var(--SmartThemeQuoteColor); cursor:pointer;"></label>
+        <label style="font-size:12px; font-weight:bold; margin:0; color:gray;">可视度: <input type="range" id="wb-float-opacity" min="0.2" max="1" step="0.1" value="0.8" style="width:60px; accent-color:var(--SmartThemeQuoteColor); cursor:pointer;"></label>
+        <button id="wb-float-appearance-btn" class="menu_button interactable btn-primary" style="margin:0; padding:4px 10px; min-width:unset; font-size:12px; border-radius:6px; white-space:nowrap;"><i class="fa-solid fa-palette"></i> 悬浮球外观</button>
+      </div>
+      <div id="wb-float-appearance-panel" style="display:none; width:100%; margin-top:10px; padding:12px; border-radius:8px; border:1px dashed var(--SmartThemeQuoteColor); background:rgba(0,0,0,0.1);">
+        <div style="font-weight:bold; margin-bottom:10px; color:var(--SmartThemeQuoteColor);"><i class="fa-solid fa-wand-magic-sparkles"></i> 悬浮球外观自定义</div>
+
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          <!-- 图标类型 -->
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <label style="font-size:13px; font-weight:bold; min-width:70px;">图标类型：</label>
+            <select id="wb-float-icon-type" class="wb-input-dt" style="width:auto; padding:6px; margin:0;">
+              <option value="fa">🎨 内置矢量图标</option>
+              <option value="emoji">😀 输入 Emoji 表情</option>
+              <option value="img">🖼️ 图片链接</option>
+            </select>
+          </div>
+
+          <!-- 内置矢量图标 -->
+          <div id="wb-float-fa-row" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <label style="font-size:13px; font-weight:bold; min-width:70px;">选择图标：</label>
+            <select id="wb-float-fa-select" class="wb-input-dt" style="width:auto; padding:6px; margin:0; min-width:180px;">${iconOptionsHtml}</select>
+          </div>
+
+          <!-- Emoji -->
+          <div id="wb-float-emoji-row" style="display:none; align-items:center; gap:10px; flex-wrap:wrap;">
+            <label style="font-size:13px; font-weight:bold; min-width:70px;">Emoji：</label>
+            <input type="text" id="wb-float-emoji-input" class="wb-input-dt" placeholder="粘贴一个表情，如 🌸" maxlength="4" style="width:120px; padding:6px; margin:0; text-align:center; font-size:18px;">
+          </div>
+
+          <!-- 图片链接 或 SVG 代码 -->
+          <div id="wb-float-img-row" style="display:none; flex-direction:column; gap:6px;">
+            <label style="font-size:13px; font-weight:bold;">图片链接 或 SVG 代码：</label>
+            <textarea id="wb-float-img-input" class="wb-input-dt" placeholder="粘贴图片网址（https://.../xxx.png）
+或直接粘贴 <svg ...>...</svg> 代码" style="width:100%; box-sizing:border-box; padding:6px; margin:0; min-height:60px; resize:vertical; font-size:12px;"></textarea>
+            <span style="font-size:11px; color:gray;">* 图片建议正方形，会自动裁圆；SVG 代码也可以直接粘贴哦~</span>
+
+            <!-- 收藏区 -->
+            <div style="margin-top:8px; padding:10px; border-radius:6px; border:1px dashed var(--SmartThemeBorderColor); background:rgba(0,0,0,0.08);">
+              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+                <span style="font-size:12.5px; font-weight:bold; color:var(--SmartThemeQuoteColor);"><i class="fa-solid fa-bookmark"></i> 我的图标收藏</span>
+                <input type="text" id="wb-float-fav-name" class="wb-input-dt" placeholder="给上面的图标起个名字..." style="flex:1; min-width:120px; padding:5px 8px; margin:0; font-size:12px;">
+                <button id="wb-float-fav-save" class="menu_button interactable btn-success wb-nowrap-btn" style="margin:0; padding:5px 12px; border:none; font-size:12px;"><i class="fa-solid fa-plus"></i> 收藏当前</button>
+              </div>
+              <div id="wb-float-fav-list" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
+            </div>
+          </div>
+
+
+
+          <!-- 颜色设置 -->
+          <div style="border-top:1px dashed var(--SmartThemeBorderColor); padding-top:10px;">
+            <label style="cursor:pointer; display:flex; align-items:center; gap:6px; font-size:13px; margin-bottom:10px;">
+              <input type="checkbox" id="wb-float-use-theme" style="accent-color:var(--SmartThemeQuoteColor);">
+              <span style="font-weight:bold;">🎨 颜色跟随酒馆主题（勾选后下方颜色无效）</span>
+            </label>
+            <div id="wb-float-color-row" style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+              <div style="display:flex; align-items:center; gap:6px;">
+                <label style="font-size:12px; font-weight:bold;">球底色:</label>
+                <input type="color" id="wb-float-bg-color" value="#2a2e33" style="width:32px; height:28px; border:none; padding:0; cursor:pointer;">
+              </div>
+              <div style="display:flex; align-items:center; gap:6px;">
+                <label style="font-size:12px; font-weight:bold;">底色透明度:</label>
+                <input type="range" id="wb-float-bg-alpha" min="0" max="100" value="100" style="width:70px; accent-color:var(--SmartThemeQuoteColor); cursor:pointer;">
+                <span id="wb-float-bg-alpha-val" style="font-size:12px; min-width:34px;">100%</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:6px;">
+                <label style="font-size:12px; font-weight:bold;">图标色:</label>
+                <input type="color" id="wb-float-icon-color" value="#70a1ff" style="width:32px; height:28px; border:none; padding:0; cursor:pointer;">
+              </div>
+              <div style="display:flex; align-items:center; gap:6px;">
+                <label style="font-size:12px; font-weight:bold;">边框色:</label>
+                <input type="color" id="wb-float-border-color" value="#70a1ff" style="width:32px; height:28px; border:none; padding:0; cursor:pointer;">
+              </div>
+            </div>
+            <span style="font-size:11px; color:gray; display:block; margin-top:6px;">* 图片模式下“图标色”无效哦~</span>
+          </div>
+
+          <div style="display:flex; gap:8px;">
+            <button id="wb-float-appearance-save" class="menu_button interactable btn-success wb-nowrap-btn" style="margin:0; padding:8px 16px; border:none; font-weight:bold;"><i class="fa-solid fa-check"></i> 应用外观</button>
+            <button id="wb-float-appearance-reset" class="menu_button interactable btn-warning wb-nowrap-btn" style="margin:0; padding:8px 16px; border:none;"><i class="fa-solid fa-rotate-left"></i> 恢复默认</button>
+          </div>
+        </div>
+      </div>`,
     );
+
+  // ===== 图标收藏库 =====
+  const getIconFavorites = () => {
+    try {
+      return JSON.parse(
+        localStorage.getItem("lulu_wb_floating_icon_favs") || "[]",
+      );
+    } catch (e) {
+      return [];
+    }
+  };
+  const saveIconFavorites = (arr) => {
+    localStorage.setItem("lulu_wb_floating_icon_favs", JSON.stringify(arr));
+  };
+
+  // 生成一个小预览（图片 or SVG）
+  const buildFavPreview = (val) => {
+    const v = (val || "").trim();
+    if (v.toLowerCase().startsWith("<svg")) {
+      return `<span style="width:26px; height:26px; display:flex; align-items:center; justify-content:center; overflow:hidden;">${v.replace(/width="[^"]*"/, 'width="26"').replace(/height="[^"]*"/, 'height="26"')}</span>`;
+    }
+    return `<img src="${v}" style="width:26px; height:26px; object-fit:cover; border-radius:4px;" alt="icon">`;
+  };
+
+  const renderIconFavList = () => {
+    const favs = getIconFavorites();
+    const $list = $ui.find("#wb-float-fav-list").empty();
+    if (favs.length === 0) {
+      $list.html(
+        '<span style="font-size:11px; color:gray;">还没有收藏任何图标哦，粘贴后点“收藏当前”试试~</span>',
+      );
+      return;
+    }
+    favs.forEach((fav, idx) => {
+      const $item = $(
+        `<div class="lulu-fav-item" title="点击使用这个图标" style="display:flex; align-items:center; gap:6px; padding:5px 8px; border-radius:6px; border:1px solid var(--SmartThemeBorderColor); background:var(--SmartThemeBotMesColor); cursor:pointer; transition:0.2s;">
+          ${buildFavPreview(fav.value)}
+          <span style="font-size:12px; max-width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${fav.name || "未命名"}</span>
+          <i class="fa-solid fa-xmark lulu-fav-del" title="删除这个收藏" style="color:gray; font-size:12px; padding:2px; margin-left:2px;"></i>
+        </div>`,
+      );
+      // 点击整个卡片：填入输入框
+      $item.on("click", function (e) {
+        if ($(e.target).hasClass("lulu-fav-del")) return; // 点删除键不触发
+        $ui.find("#wb-float-img-input").val(fav.value);
+        $ui.find("#wb-float-fav-name").val(fav.name || "");
+        toastr.info(`已载入图标 [${fav.name}]，点下方“应用外观”即可生效~`);
+      });
+      // 删除
+      $item.find(".lulu-fav-del").on("click", function (e) {
+        e.stopPropagation();
+        const cur = getIconFavorites();
+        cur.splice(idx, 1);
+        saveIconFavorites(cur);
+        renderIconFavList();
+      });
+      $item.hover(
+        function () {
+          $(this).css("border-color", "var(--SmartThemeQuoteColor)");
+        },
+        function () {
+          $(this).css("border-color", "var(--SmartThemeBorderColor)");
+        },
+      );
+      $list.append($item);
+    });
+  };
+
+  // 收藏当前输入框里的内容
+  $ui.find("#wb-float-fav-save").on("click", () => {
+    const val = $ui.find("#wb-float-img-input").val().trim();
+    let name = $ui.find("#wb-float-fav-name").val().trim();
+    if (!val) return toastr.warning("上面的框还是空的呢，先粘贴图标再收藏哦~");
+    if (!name) name = "图标 " + (getIconFavorites().length + 1);
+    const favs = getIconFavorites();
+    favs.push({ name: name, value: val });
+    saveIconFavorites(favs);
+    $ui.find("#wb-float-fav-name").val("");
+    renderIconFavList();
+    toastr.success(`✨ 已收藏 [${name}]！`);
+  });
+  // ===== 图标收藏库结束 =====
+  // ===== 悬浮球外观设置的逻辑 =====
+  const loadFloatAppearanceUI = () => {
+    const ap = getFloatAppearance();
+    $ui.find("#wb-float-icon-type").val(ap.iconType || "fa");
+    $ui.find("#wb-float-fa-select").val(ap.iconValue || "fa-book-atlas");
+    $ui.find("#wb-float-emoji-input").val(ap.emoji || "📖");
+    $ui.find("#wb-float-img-input").val(ap.imgUrl || "");
+    $ui.find("#wb-float-use-theme").prop("checked", ap.useThemeColor !== false);
+    $ui.find("#wb-float-bg-color").val(ap.bgColor || "#2a2e33");
+    const _bgAlpha = ap.bgAlpha === undefined ? 100 : ap.bgAlpha;
+    $ui.find("#wb-float-bg-alpha").val(_bgAlpha);
+    $ui.find("#wb-float-bg-alpha-val").text(_bgAlpha + "%");
+    $ui.find("#wb-float-icon-color").val(ap.iconColor || "#70a1ff");
+    $ui.find("#wb-float-border-color").val(ap.borderColor || "#70a1ff");
+    updateFloatAppearanceRows();
+    renderIconFavList();
+  };
+
+  const updateFloatAppearanceRows = () => {
+    const type = $ui.find("#wb-float-icon-type").val();
+    $ui
+      .find("#wb-float-fa-row")
+      .css("display", type === "fa" ? "flex" : "none");
+    $ui
+      .find("#wb-float-emoji-row")
+      .css("display", type === "emoji" ? "flex" : "none");
+    $ui
+      .find("#wb-float-img-row")
+      .css("display", type === "img" ? "flex" : "none");
+    const useTheme = $ui.find("#wb-float-use-theme").is(":checked");
+    $ui.find("#wb-float-color-row").css("opacity", useTheme ? "0.4" : "1");
+    $ui
+      .find(
+        "#wb-float-bg-color, #wb-float-icon-color, #wb-float-border-color, #wb-float-bg-alpha",
+      )
+      .prop("disabled", useTheme);
+  };
+
+
+  // 下拉切换：面板皮肤 / 悬浮球外观
+  $ui.find("#wb-config-section-select").on("change", function () {
+    const val = $(this).val();
+    if (val === "float") {
+      $ui.find("#wb-config-panel-section").hide();
+      $ui.find("#wb-config-float-section").show();
+      loadFloatAppearanceUI();
+    } else {
+      $ui.find("#wb-config-float-section").hide();
+      $ui.find("#wb-config-panel-section").show();
+    }
+  });
+  $ui
+    .find("#wb-float-icon-type, #wb-float-use-theme")
+    .on("change", updateFloatAppearanceRows);
+  $ui.find("#wb-float-bg-alpha").on("input", function () {
+    $ui.find("#wb-float-bg-alpha-val").text($(this).val() + "%");
+  });
+
+  $ui.find("#wb-float-appearance-save").on("click", () => {
+    const newAppear = {
+      iconType: $ui.find("#wb-float-icon-type").val(),
+      iconValue: $ui.find("#wb-float-fa-select").val(),
+      emoji: $ui.find("#wb-float-emoji-input").val().trim() || "📖",
+      imgUrl: $ui.find("#wb-float-img-input").val().trim(),
+      useThemeColor: $ui.find("#wb-float-use-theme").is(":checked"),
+      bgColor: $ui.find("#wb-float-bg-color").val(),
+      bgAlpha: parseInt($ui.find("#wb-float-bg-alpha").val()),
+      iconColor: $ui.find("#wb-float-icon-color").val(),
+      borderColor: $ui.find("#wb-float-border-color").val(),
+    };
+    if (newAppear.iconType === "img" && !newAppear.imgUrl) {
+      return toastr.warning("选择了图片模式，但还没填图片链接哦~");
+    }
+    localStorage.setItem(
+      "lulu_wb_floating_appearance",
+      JSON.stringify(newAppear),
+    );
+    // 如果悬浮球开着，立即刷新它的样子
+    if ($ui.find("#wb-toggle-floating").is(":checked")) {
+      toggleFloatingButton(true, true);
+    }
+    toastr.success("✨ 悬浮球换新装成功啦！");
+  });
+
+  $ui.find("#wb-float-appearance-reset").on("click", () => {
+    localStorage.removeItem("lulu_wb_floating_appearance");
+    loadFloatAppearanceUI();
+    if ($ui.find("#wb-toggle-floating").is(":checked")) {
+      toggleFloatingButton(true, true);
+    }
+    toastr.info("悬浮球外观已恢复默认~");
+  });
+  // ===== 悬浮球外观设置逻辑结束 =====
+
   const curFlConf = JSON.parse(
     localStorage.getItem("lulu_wb_floating_config") ||
       '{"size": 48, "opacity": 0.8}',
@@ -3548,6 +3920,25 @@ $menuBtn.on("click", async () => {
     okButton: "关闭面板",
     onOpen: async () => {
       $(popup.dlg).addClass("wb-manager-dialog");
+
+      // 🔧 确保悬浮球外观面板被搬进「外观设置」的下拉容器里
+      const $floatPanel = $ui.find("#wb-float-appearance-panel");
+      const $target = $ui.find("#wb-float-appearance-inner");
+      if ($floatPanel.length && $target.length && $floatPanel.parent().attr("id") !== "wb-float-appearance-inner") {
+        $floatPanel.appendTo($target);
+        $floatPanel.css({
+          display: "block",
+          border: "none",
+          background: "transparent",
+          padding: "0",
+          "margin-top": "0",
+        });
+      }
+      $ui.find("#wb-float-appearance-btn").hide();
+      // 默认显示面板皮肤区，隐藏悬浮球区
+      $ui.find("#wb-config-float-section").hide();
+      $ui.find("#wb-config-panel-section").show();
+
       showTab(window.luluWbInitTabType || "global");
       await initiateDeepScan();
     },
@@ -6981,8 +7372,7 @@ $menuBtn.on("click", async () => {
         );
 
       const escapeReg = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const escapeHtml = (s) =>
-        String(s).replace(/</g, "<").replace(/>/g, ">");
+      const escapeHtml = (s) => String(s).replace(/</g, "<").replace(/>/g, ">");
 
       let matchList = [];
       let curMatchIdx = -1;
