@@ -1093,7 +1093,7 @@ $menuBtn.on("click", async () => {
             .badge-grey { background: rgba(150, 150, 150, 0.15); color: #999; border: 1px solid #999; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; margin-right: 4px; white-space: nowrap; }
 
             /* 酱新增：条目编辑分栏专用核心样式  */
-            #wb-entry-split-wrapper { display: flex; min-height: 55vh; max-height: 65vh; border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px; padding: 10px; background: var(--SmartThemeBotMesColor); gap: 10px; position: relative; overflow: hidden; }
+            #wb-entry-split-wrapper { display: flex; min-height: 70vh; max-height: 85vh; border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px; padding: 10px; background: var(--SmartThemeBotMesColor); gap: 10px; position: relative; overflow: hidden; }
             #wb-entry-list-side { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; transition: 0.3s ease; }
             #wb-entry-detail-side { flex: 1; display: none; flex-direction: column; border-left: 2px solid var(--SmartThemeBorderColor); padding-left: 10px; min-width: 0; transition: 0.3s ease; overflow: hidden; }
 
@@ -1157,6 +1157,25 @@ $menuBtn.on("click", async () => {
                 #wb-entry-detail-side > .scrollableInnerFull { flex: 1 1 auto; display: flex; flex-direction: column; overflow: hidden; }
                 #wb-entry-detail-side .wb-form-group:last-child { flex: 1 1 auto; overflow: hidden; display: flex; flex-direction: column; }
                 #wb-det-content { height: 100% !important; flex: 1 1 auto !important; margin-bottom: 4px; }
+            }
+/* ✨ 新增：独占/全屏编辑模式专用样式 */
+            #wb-entry-split-wrapper.lulu-fullscreen-mode #wb-entry-list-side {
+                width: 100% !important;
+                flex: 1 1 100% !important;
+                border-bottom: none !important;
+            }
+            #wb-entry-split-wrapper.lulu-fullscreen-mode #wb-entry-detail-side {
+                display: none !important; /* 没点开条目时隐藏右侧 */
+            }
+            #wb-entry-split-wrapper.lulu-fullscreen-mode.is-editing-entry #wb-entry-list-side {
+                display: none !important; /* 点开条目后隐藏左侧列表 */
+            }
+            #wb-entry-split-wrapper.lulu-fullscreen-mode.is-editing-entry #wb-entry-detail-side {
+                display: flex !important;
+                width: 100% !important;
+                flex: 1 1 100% !important;
+                border-left: none !important;
+                padding: 0 !important;
             }
 
             /* 📱 手机端适配 */
@@ -1802,6 +1821,11 @@ $menuBtn.on("click", async () => {
                             <input type="checkbox" id="wb-toggle-entry-preview" style="accent-color: var(--SmartThemeQuoteColor); transform:scale(1.1);">
                             <span style="color:var(--SmartThemeBodyColor); font-weight:bold;">📖 内容预览</span>
                         </label>
+<!-- ✨ 新增：独占编辑开关 -->
+                        <label style="cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 12px; margin: 0; font-weight: normal; background: rgba(125,125,125,0.1); padding: 6px 10px; border-radius: 6px; border: 1px solid var(--SmartThemeBorderColor); flex-shrink: 0;">
+                            <input type="checkbox" id="wb-toggle-entry-fullscreen" style="accent-color: #339af0; transform:scale(1.1);">
+                            <span style="color:var(--SmartThemeBodyColor); font-weight:bold;">📱 全屏编辑</span>
+                        </label>
                     </div>
                 </div>
 
@@ -1933,7 +1957,14 @@ $menuBtn.on("click", async () => {
                             </div>
                             <div class="wb-form-group" style="flex: 1; display: flex; flex-direction: column; margin-bottom: 0;">
                                 <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px;">
-                                    <label style="font-size: 13px; font-weight: bold; margin-bottom: 0; color: var(--SmartThemeQuoteColor);">📜 正文内容</label>
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <label style="font-size: 13px; font-weight: bold; margin-bottom: 0; color: var(--SmartThemeQuoteColor);">📜 正文内容</label>
+                                        <!-- ✨新增：调节字体大小的两个按钮 -->
+                                        <div style="display: flex; gap: 4px;">
+                                            <button id="wb-font-dec" class="menu_button interactable" style="margin:0; padding:2px 8px; font-size:12px; border-radius:4px; min-width:unset; line-height:1;" title="缩小字体">A-</button>
+                                            <button id="wb-font-inc" class="menu_button interactable" style="margin:0; padding:2px 8px; font-size:12px; border-radius:4px; min-width:unset; line-height:1;" title="放大字体">A+</button>
+                                        </div>
+                                    </div>
                                     <span id="wb-det-token-count" style="font-size: 11px; color: gray; background: rgba(125,125,125,0.15); padding: 2px 6px; border-radius: 4px;">0 Tokens</span>
                                 </div>
                                 <textarea id="wb-det-content" class="wb-input-dt" style="flex: 1; min-height: 150px; font-size: 13px; padding: 10px; resize: none;"></textarea>
@@ -2824,7 +2855,6 @@ $menuBtn.on("click", async () => {
       )
       .prop("disabled", useTheme);
   };
-
 
   // 下拉切换：面板皮肤 / 悬浮球外观
   $ui.find("#wb-config-section-select").on("change", function () {
@@ -3924,7 +3954,11 @@ $menuBtn.on("click", async () => {
       // 🔧 确保悬浮球外观面板被搬进「外观设置」的下拉容器里
       const $floatPanel = $ui.find("#wb-float-appearance-panel");
       const $target = $ui.find("#wb-float-appearance-inner");
-      if ($floatPanel.length && $target.length && $floatPanel.parent().attr("id") !== "wb-float-appearance-inner") {
+      if (
+        $floatPanel.length &&
+        $target.length &&
+        $floatPanel.parent().attr("id") !== "wb-float-appearance-inner"
+      ) {
         $floatPanel.appendTo($target);
         $floatPanel.css({
           display: "block",
@@ -6841,6 +6875,26 @@ $menuBtn.on("click", async () => {
     const isGroup =
       localStorage.getItem("lulu_wb_entry_group_view") !== "false";
     $ui.find("#wb-toggle-entry-group").prop("checked", isGroup);
+// ✨ 新增：独占全屏编辑的初始化与记忆功能
+    const isFullscreen = localStorage.getItem("lulu_wb_entry_fullscreen") === "true";
+    $ui.find("#wb-toggle-entry-fullscreen").prop("checked", isFullscreen);
+    if (isFullscreen) {
+      $ui.find("#wb-entry-split-wrapper").addClass("lulu-fullscreen-mode");
+    } else {
+      $ui.find("#wb-entry-split-wrapper").removeClass("lulu-fullscreen-mode");
+    }
+    $ui.find("#wb-entry-split-wrapper").removeClass("is-editing-entry"); // 刚打开书时确保在列表页
+
+    // 绑定全屏开关的点击事件
+    $ui.find("#wb-toggle-entry-fullscreen").off("change").on("change", function () {
+      const isFS = $(this).is(":checked");
+      localStorage.setItem("lulu_wb_entry_fullscreen", isFS);
+      if (isFS) {
+        $ui.find("#wb-entry-split-wrapper").addClass("lulu-fullscreen-mode");
+      } else {
+        $ui.find("#wb-entry-split-wrapper").removeClass("lulu-fullscreen-mode");
+      }
+    });
 
     renderEntryList();
     $ui
@@ -7943,7 +7997,27 @@ $menuBtn.on("click", async () => {
     $ui.find("#wb-det-token-count").text("...");
     wbTokenCalcTimer = setTimeout(updateWbTokenCount, 400);
   });
+// ✨ 新增：字体大小调节逻辑
+  let currentWbFontSize = parseInt(localStorage.getItem("lulu_wb_font_size")) || 13;
+  const applyWbFontSize = () => {
+    // 强制使用 important 覆盖原有的样式优先级
+    $ui.find("#wb-det-content")[0].style.setProperty("font-size", `${currentWbFontSize}px`, "important");
+  };
+  applyWbFontSize(); // 面板打开时初始化应用
 
+  $ui.find("#wb-font-inc").on("click", (e) => {
+    e.preventDefault();
+    currentWbFontSize = Math.min(32, currentWbFontSize + 1); // 最大限制放大到 32px
+    localStorage.setItem("lulu_wb_font_size", currentWbFontSize);
+    applyWbFontSize();
+  });
+  
+  $ui.find("#wb-font-dec").on("click", (e) => {
+    e.preventDefault();
+    currentWbFontSize = Math.max(9, currentWbFontSize - 1); // 最小限制缩小到 9px
+    localStorage.setItem("lulu_wb_font_size", currentWbFontSize);
+    applyWbFontSize();
+  });
   let tuneDetailIndex = -1;
   $ui.find("#wb-det-position").on("change", function () {
     const isDepth = $(this).val().startsWith("at_depth_");
@@ -7979,6 +8053,7 @@ $menuBtn.on("click", async () => {
   });
 
   const openDetailEditView = (index) => {
+    $ui.find("#wb-entry-split-wrapper").addClass("is-editing-entry"); // ✨新增：标记进入编辑状态
     tuneDetailIndex = index;
     const e = tuneEntries[index];
     $ui.find("#wb-detail-title").text(e.name || "空参数");
@@ -8147,6 +8222,7 @@ $menuBtn.on("click", async () => {
       $ui.find("#wb-entry-detail-side").hide();
       tuneDetailIndex = -1;
     }
+    $ui.find("#wb-entry-split-wrapper").removeClass("is-editing-entry"); // ✨新增：退出编辑状态
     renderEntryList();
   });
 
@@ -8194,7 +8270,7 @@ $menuBtn.on("click", async () => {
             }
           }
         }
-
+        $ui.find("#wb-entry-split-wrapper").removeClass("is-editing-entry"); // ✨新增：退出编辑状态  
         if (window.innerWidth > 768) {
           $ui.find("#wb-entry-detail-side").hide();
           tuneDetailIndex = -1;
