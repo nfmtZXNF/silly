@@ -3870,67 +3870,141 @@ $menuBtn.on("click", async () => {
 
     if (!from.wbName) return toastr.warning("源世界书还没选呢~");
     if (!to.wbName) return toastr.warning("目标世界书还没选哦~");
-    if (from.wbName === to.wbName)
-      return toastr.warning("源和目标是同一本书，没法搬运给自己啦 (>﹏<)");
     if (from.selected.size === 0)
       return toastr.warning("请先勾选要搬运的条目~");
 
+    // 判断是否是同一本书（复制模式）
+    const isSameBook = from.wbName === to.wbName;
+
     const count = from.selected.size;
-    const res = await SillyTavern.callGenericPopup(
-      `确认把 <strong style="color:var(--SmartThemeQuoteColor);">[${from.wbName}]</strong> 中选中的 <strong>${count}</strong> 个条目，复制到 <strong style="color:var(--SmartThemeQuoteColor);">[${to.wbName}]</strong> 吗？<br><br><span style="font-size:12px;color:gray;">（源书条目不受影响，是复制不是移动哦~）</span>`,
-      SillyTavern.POPUP_TYPE.CONFIRM,
-    );
-    if (res !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
 
-    await withLoadingOverlay(async () => {
-      // 取出要复制的条目（深拷贝，避免影响源数据）
-      const toCopy = [];
-      from.selected.forEach((idx) => {
-        if (from.entries[idx]) {
-          toCopy.push(JSON.parse(JSON.stringify(from.entries[idx])));
-        }
-      });
+    if (isSameBook) {
+      // 同一本书：复制条目模式
+      const res = await SillyTavern.callGenericPopup(
+        `确认在 <strong style="color:var(--SmartThemeQuoteColor);">[${from.wbName}]</strong> 中复制选中的 <strong>${count}</strong> 个条目吗？<br><br><span style="font-size:12px;color:gray;">（会在同一本书中创建副本，条目名后面会加上"- 副本"标记哦~）</span>`,
+        SillyTavern.POPUP_TYPE.CONFIRM,
+      );
+      if (res !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
 
-      // 读取目标书当前全部条目
-      let targetEntries = await getWorldbook(to.wbName);
+      await withLoadingOverlay(async () => {
+        // 取出要复制的条目（深拷贝）
+        const toCopy = [];
+        from.selected.forEach((idx) => {
+          if (from.entries[idx]) {
+            toCopy.push(JSON.parse(JSON.stringify(from.entries[idx])));
+          }
+        });
 
-      // 给复制来的条目分配新的唯一 uid，避免和目标书冲突
-      let baseUid = Date.now();
-      toCopy.forEach((e, i) => {
-        e.uid = baseUid + i;
-        if (e.id !== undefined) e.id = e.uid;
-        // 清掉可能残留的临时字段
-        delete e._lulu_ui_group;
-      });
+        // 读取当前书的全部条目
+        let currentEntries = await getWorldbook(from.wbName);
 
-      // 追加到目标书末尾
-      targetEntries = targetEntries.concat(toCopy);
-      await replaceWorldbook(to.wbName, targetEntries);
+        // 给复制的条目分配新uid并加"副本"后缀
+        let baseUid = Date.now();
+        toCopy.forEach((e, i) => {
+          e.uid = baseUid + i;
+          if (e.id !== undefined) e.id = e.uid;
 
-      // 目标书 Token 缓存失效（如果功能7的缓存变量存在）
-      if (typeof luluTokenCache !== "undefined")
-        delete luluTokenCache[to.wbName];
+          // 计算副本编号：看看同名的副本已经有几个了
+          const originalName = e.name || "未命名条目";
+          const copyPattern = new RegExp(
+            `^${originalName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*-\\s*副本(\\d*)$`
+          );
+          let maxCopyNum = 0;
+          currentEntries.forEach((existing) => {
+            const match = (existing.name || "").match(copyPattern);
+            if (match) {
+              const num = match[1] ? parseInt(match[1]) : 1;
+              if (num > maxCopyNum) maxCopyNum = num;
+            }
+          });
+          // 也检查已经准备要添加的副本（避免批量复制时编号重复）
+          toCopy.slice(0, i).forEach((prev) => {
+            const match = (prev.name || "").match(copyPattern);
+            if (match) {
+              const num = match[1] ? parseInt(match[1]) : 1;
+              if (num > maxCopyNum) maxCopyNum = num;
+            }
+          });
 
-      // 更新面板里目标侧的内存数据 + 刷新
-      to.entries = JSON.parse(JSON.stringify(targetEntries));
-      to.selected.clear();
-      if (to.expanded) to.expanded.clear();
-    }, `正在搬运 ${count} 个条目...`);
+          const copyNum = maxCopyNum + 1;
+          e.name = `${originalName} - 副本${copyNum > 1 ? copyNum : ""}`;
+          if (e.comment) e.comment = e.name;
+          if (e.title) e.title = e.name;
 
-    toastr.success(`✨ 成功复制 ${count} 个条目到 [${to.wbName}] 啦！`);
+          delete e._lulu_ui_group;
+        });
 
-    // 清空源侧勾选
-    from.selected.clear();
-    renderTransferList(fromSide);
-    renderTransferList(toSide);
-    updateTransferCount();
+        // 追加到书末尾
+        currentEntries = currentEntries.concat(toCopy);
+        await replaceWorldbook(from.wbName, currentEntries);
 
-    // 是否跳转到目标书编辑页
-    if ($ui.find("#wb-transfer-jump").is(":checked")) {
-      const targetWb = to.wbName;
-      $ui.find("#wb-transfer-view").hide();
-      // 用 openEntryTuneView 打开目标书的条目编辑，返回时回主界面
-      await openEntryTuneView(targetWb, "#wb-main-view");
+        if (typeof luluTokenCache !== "undefined")
+          delete luluTokenCache[from.wbName];
+
+        // 更新两侧的内存数据（因为是同一本书，两边都要刷新）
+        const freshEntries = JSON.parse(JSON.stringify(currentEntries));
+        from.entries = freshEntries;
+        from.selected.clear();
+        if (from.expanded) from.expanded.clear();
+        to.entries = freshEntries;
+        to.selected.clear();
+        if (to.expanded) to.expanded.clear();
+      }, `正在复制 ${count} 个条目...`);
+
+      toastr.success(`✨ 成功在 [${from.wbName}] 中复制了 ${count} 个条目的副本！`);
+
+      renderTransferList(fromSide);
+      renderTransferList(toSide);
+      updateTransferCount();
+
+    } else {
+      // 不同书：原有的搬运逻辑
+      const res = await SillyTavern.callGenericPopup(
+        `确认把 <strong style="color:var(--SmartThemeQuoteColor);">[${from.wbName}]</strong> 中选中的 <strong>${count}</strong> 个条目，复制到 <strong style="color:var(--SmartThemeQuoteColor);">[${to.wbName}]</strong> 吗？<br><br><span style="font-size:12px;color:gray;">（源书条目不受影响，是复制不是移动哦~）</span>`,
+        SillyTavern.POPUP_TYPE.CONFIRM,
+      );
+      if (res !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+
+      await withLoadingOverlay(async () => {
+        const toCopy = [];
+        from.selected.forEach((idx) => {
+          if (from.entries[idx]) {
+            toCopy.push(JSON.parse(JSON.stringify(from.entries[idx])));
+          }
+        });
+
+        let targetEntries = await getWorldbook(to.wbName);
+
+        let baseUid = Date.now();
+        toCopy.forEach((e, i) => {
+          e.uid = baseUid + i;
+          if (e.id !== undefined) e.id = e.uid;
+          delete e._lulu_ui_group;
+        });
+
+        targetEntries = targetEntries.concat(toCopy);
+        await replaceWorldbook(to.wbName, targetEntries);
+
+        if (typeof luluTokenCache !== "undefined")
+          delete luluTokenCache[to.wbName];
+
+        to.entries = JSON.parse(JSON.stringify(targetEntries));
+        to.selected.clear();
+        if (to.expanded) to.expanded.clear();
+      }, `正在搬运 ${count} 个条目...`);
+
+      toastr.success(`✨ 成功复制 ${count} 个条目到 [${to.wbName}] 啦！`);
+
+      from.selected.clear();
+      renderTransferList(fromSide);
+      renderTransferList(toSide);
+      updateTransferCount();
+
+      if ($ui.find("#wb-transfer-jump").is(":checked")) {
+        const targetWb = to.wbName;
+        $ui.find("#wb-transfer-view").hide();
+        await openEntryTuneView(targetWb, "#wb-main-view");
+      }
     }
   };
 
@@ -6875,8 +6949,9 @@ $menuBtn.on("click", async () => {
     const isGroup =
       localStorage.getItem("lulu_wb_entry_group_view") !== "false";
     $ui.find("#wb-toggle-entry-group").prop("checked", isGroup);
-// ✨ 新增：独占全屏编辑的初始化与记忆功能
-    const isFullscreen = localStorage.getItem("lulu_wb_entry_fullscreen") === "true";
+    // ✨ 新增：独占全屏编辑的初始化与记忆功能
+    const isFullscreen =
+      localStorage.getItem("lulu_wb_entry_fullscreen") === "true";
     $ui.find("#wb-toggle-entry-fullscreen").prop("checked", isFullscreen);
     if (isFullscreen) {
       $ui.find("#wb-entry-split-wrapper").addClass("lulu-fullscreen-mode");
@@ -6886,15 +6961,20 @@ $menuBtn.on("click", async () => {
     $ui.find("#wb-entry-split-wrapper").removeClass("is-editing-entry"); // 刚打开书时确保在列表页
 
     // 绑定全屏开关的点击事件
-    $ui.find("#wb-toggle-entry-fullscreen").off("change").on("change", function () {
-      const isFS = $(this).is(":checked");
-      localStorage.setItem("lulu_wb_entry_fullscreen", isFS);
-      if (isFS) {
-        $ui.find("#wb-entry-split-wrapper").addClass("lulu-fullscreen-mode");
-      } else {
-        $ui.find("#wb-entry-split-wrapper").removeClass("lulu-fullscreen-mode");
-      }
-    });
+    $ui
+      .find("#wb-toggle-entry-fullscreen")
+      .off("change")
+      .on("change", function () {
+        const isFS = $(this).is(":checked");
+        localStorage.setItem("lulu_wb_entry_fullscreen", isFS);
+        if (isFS) {
+          $ui.find("#wb-entry-split-wrapper").addClass("lulu-fullscreen-mode");
+        } else {
+          $ui
+            .find("#wb-entry-split-wrapper")
+            .removeClass("lulu-fullscreen-mode");
+        }
+      });
 
     renderEntryList();
     $ui
@@ -7997,11 +8077,14 @@ $menuBtn.on("click", async () => {
     $ui.find("#wb-det-token-count").text("...");
     wbTokenCalcTimer = setTimeout(updateWbTokenCount, 400);
   });
-// ✨ 新增：字体大小调节逻辑
-  let currentWbFontSize = parseInt(localStorage.getItem("lulu_wb_font_size")) || 13;
+  // ✨ 新增：字体大小调节逻辑
+  let currentWbFontSize =
+    parseInt(localStorage.getItem("lulu_wb_font_size")) || 13;
   const applyWbFontSize = () => {
     // 强制使用 important 覆盖原有的样式优先级
-    $ui.find("#wb-det-content")[0].style.setProperty("font-size", `${currentWbFontSize}px`, "important");
+    $ui
+      .find("#wb-det-content")[0]
+      .style.setProperty("font-size", `${currentWbFontSize}px`, "important");
   };
   applyWbFontSize(); // 面板打开时初始化应用
 
@@ -8011,7 +8094,7 @@ $menuBtn.on("click", async () => {
     localStorage.setItem("lulu_wb_font_size", currentWbFontSize);
     applyWbFontSize();
   });
-  
+
   $ui.find("#wb-font-dec").on("click", (e) => {
     e.preventDefault();
     currentWbFontSize = Math.max(9, currentWbFontSize - 1); // 最小限制缩小到 9px
@@ -8270,7 +8353,7 @@ $menuBtn.on("click", async () => {
             }
           }
         }
-        $ui.find("#wb-entry-split-wrapper").removeClass("is-editing-entry"); // ✨新增：退出编辑状态  
+        $ui.find("#wb-entry-split-wrapper").removeClass("is-editing-entry"); // ✨新增：退出编辑状态
         if (window.innerWidth > 768) {
           $ui.find("#wb-entry-detail-side").hide();
           tuneDetailIndex = -1;
