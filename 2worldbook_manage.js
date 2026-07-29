@@ -3907,7 +3907,7 @@ $menuBtn.on("click", async () => {
           // 计算副本编号：看看同名的副本已经有几个了
           const originalName = e.name || "未命名条目";
           const copyPattern = new RegExp(
-            `^${originalName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*-\\s*副本(\\d*)$`
+            `^${originalName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*-\\s*副本(\\d*)$`,
           );
           let maxCopyNum = 0;
           currentEntries.forEach((existing) => {
@@ -3951,12 +3951,13 @@ $menuBtn.on("click", async () => {
         if (to.expanded) to.expanded.clear();
       }, `正在复制 ${count} 个条目...`);
 
-      toastr.success(`✨ 成功在 [${from.wbName}] 中复制了 ${count} 个条目的副本！`);
+      toastr.success(
+        `✨ 成功在 [${from.wbName}] 中复制了 ${count} 个条目的副本！`,
+      );
 
       renderTransferList(fromSide);
       renderTransferList(toSide);
       updateTransferCount();
-
     } else {
       // 不同书：原有的搬运逻辑
       const res = await SillyTavern.callGenericPopup(
@@ -7034,19 +7035,98 @@ $menuBtn.on("click", async () => {
   $ui.find("#wb-btn-entry-batch-group").on("click", async () => {
     if (entryBatchSelected.size === 0)
       return toastr.warning("请先选中想要分类的条目哦~");
-    let newGroup = await SillyTavern.callGenericPopup(
-      "请输入这些条目想去的分组名称\\n(留空的话它们就会变回 '未分类' 哦):",
-      SillyTavern.POPUP_TYPE.INPUT,
+
+    // 1. 自动扫描当前世界书，提取出所有已经存在的分组名
+    const existingGroups = new Set();
+    tuneEntries.forEach((e) => {
+      if (e._lulu_ui_group && e._lulu_ui_group.trim() !== "") {
+        existingGroups.add(e._lulu_ui_group.trim());
+      }
+    });
+    const groupList = Array.from(existingGroups).sort();
+
+    // 2. 构建下拉选项
+    let optionsHtml = '<option value="">-- 请选择已有分组 --</option>';
+    groupList.forEach((g) => {
+      optionsHtml += `<option value="${g}">${g}</option>`;
+    });
+
+    // 3. 构建自定义弹窗的 UI 面板
+    const dialogHtml = `
+      <div style="padding:6px; font-family:sans-serif; min-width:280px; text-align:left;">
+        <div style="font-weight:bold; margin-bottom:10px; color:var(--SmartThemeQuoteColor); font-size:15px;">
+          <i class="fa-solid fa-folder-tree"></i> 把选中的 ${entryBatchSelected.size} 项条目归入分组
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">① 选择已有分组：</label>
+          <select id="lulu-entry-batch-grp-select" style="width:100%; box-sizing:border-box; padding:8px; border-radius:6px; border:1px solid var(--SmartThemeBorderColor); background:var(--lulu-input-bg, var(--SmartThemeBotMesColor)); color:var(--SmartThemeBodyColor);">
+            ${optionsHtml}
+          </select>
+        </div>
+
+        <div style="text-align:center; color:gray; font-size:12px; margin:8px 0;">—— 或者 ——</div>
+
+        <div>
+          <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">② 新建一个分组：</label>
+          <input type="text" id="lulu-entry-batch-grp-input" placeholder="输入新分组名字 (留空则为未分类)..." style="width:100%; box-sizing:border-box; padding:8px; border-radius:6px; border:1px solid var(--SmartThemeBorderColor); background:var(--lulu-input-bg, var(--SmartThemeBotMesColor)); color:var(--SmartThemeBodyColor);">
+        </div>
+        
+        <div style="font-size:11px; color:gray; margin-top:10px;">* 两个都填的话，会优先使用②新建的名字哦~ 两个都留空则解除分组。</div>
+      </div>
+    `;
+
+    const $dialog = $(dialogHtml);
+    // 复用脚本里的主题函数，确保弹窗和你的护眼主题保持一致
+    $dialog
+      .attr("id", "lulu-entry-batch-grp-dialog")
+      .prepend(
+        `<style>${buildPopupThemeCSS("dialog:has(#lulu-entry-batch-grp-dialog)")}</style>`,
+      );
+
+    // 交互小细节：选了下拉就清空输入框，输入了文字就清空下拉框
+    $dialog.find("#lulu-entry-batch-grp-select").on("change", function () {
+      if ($(this).val()) $dialog.find("#lulu-entry-batch-grp-input").val("");
+    });
+    $dialog.find("#lulu-entry-batch-grp-input").on("input", function () {
+      if ($(this).val().trim())
+        $dialog.find("#lulu-entry-batch-grp-select").val("");
+    });
+
+    // 4. 呼出确认弹窗
+    const result = await SillyTavern.callGenericPopup(
+      $dialog,
+      SillyTavern.POPUP_TYPE.CONFIRM,
       "",
+      { okButton: "确认改组", cancelButton: "取消" },
     );
-    if (newGroup !== null) {
-      entryBatchSelected.forEach((idx) => {
-        tuneEntries[idx]._lulu_ui_group = newGroup.trim();
-      });
-      entryBatchSelected.clear();
-      $ui.find("#wb-entry-batch-count").text("0");
-      renderEntryList();
-      toastr.success("批量改组完成！记得点绿色保存按钮才会生效哦~");
+
+    // 如果用户点了取消，直接返回
+    if (result !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+
+    // 5. 决定最终的分组名称（优先使用输入框里的新名字）
+    let finalGroup = $dialog.find("#lulu-entry-batch-grp-input").val().trim();
+    if (!finalGroup) {
+      finalGroup = $dialog.find("#lulu-entry-batch-grp-select").val() || "";
+    }
+
+    // 6. 执行批量改组
+    entryBatchSelected.forEach((idx) => {
+      tuneEntries[idx]._lulu_ui_group = finalGroup;
+    });
+
+    entryBatchSelected.clear();
+    $ui.find("#wb-entry-batch-count").text("0");
+    renderEntryList();
+
+    if (finalGroup) {
+      toastr.success(
+        `批量改组完成！已归入【${finalGroup}】。记得点绿色保存按钮才会生效哦~`,
+      );
+    } else {
+      toastr.success(
+        `批量解散分组完成！条目已变回未分类。记得点绿色保存按钮才会生效哦~`,
+      );
     }
   });
 
