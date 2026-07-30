@@ -2991,8 +2991,10 @@ $menuBtn.on("click", async () => {
     $overlay.fadeIn("fast");
     try {
       await asyncFunction();
+      return true; // 补丁：成功了就返回 true
     } catch (error) {
       toastr.error(`操作失败: ${error.message}`);
+      return false; // 补丁：失败了就返回 false，告诉外面出错了
     } finally {
       $overlay.fadeOut("slow");
     }
@@ -4618,6 +4620,16 @@ $menuBtn.on("click", async () => {
         c[newName] = [];
         saveBindingCache(c);
       }
+
+      // 新增的修复补丁：搬运条目的分组数据
+      let uiGroupsMap = getWbUiGroups();
+      if (uiGroupsMap[oldName]) {
+        uiGroupsMap[newName] = uiGroupsMap[oldName];
+        delete uiGroupsMap[oldName];
+        saveWbUiGroups(uiGroupsMap);
+      }
+      // 修复补丁结束
+
       let cData = getCategories();
       Object.keys(cData).forEach((k) => {
         if (cData[k].includes(oldName)) {
@@ -8018,7 +8030,7 @@ $menuBtn.on("click", async () => {
       openDetailEditView(0);
     });
   $ui.find("#wb-btn-entry-save").on("click", async () => {
-    await withLoadingOverlay(async () => {
+    let isSuccess = await withLoadingOverlay(async () => {
       const uiGroupsMap = getWbUiGroups();
       if (!uiGroupsMap[tuneWbName]) uiGroupsMap[tuneWbName] = {};
       const pureEntries = JSON.parse(JSON.stringify(tuneEntries));
@@ -8034,9 +8046,14 @@ $menuBtn.on("click", async () => {
       saveWbUiGroups(uiGroupsMap);
       await replaceWorldbook(tuneWbName, pureEntries);
     }, `写入中...`);
+        if (isSuccess === false) return; // 补丁：如果没成功，立刻停下，不要往下弹绿条了！
 
     originalTuneEntries = JSON.parse(JSON.stringify(tuneEntries));
-    delete luluTokenCache[tuneWbName]; // Token缓存失效（功能7）
+    // 修复补丁：先判断存不存在，防止代码在这里卡死崩溃
+    if (typeof luluTokenCache !== "undefined") {
+      delete luluTokenCache[tuneWbName]; // Token缓存失效（功能7）
+    }
+    // 修复补丁结束
     toastr.success(`[${tuneWbName}] 的修改已经成功保存啦！`);
     if (tuneReturnView === "#wb-main-view") renderData();
     else if (tuneReturnView === "#wb-char-view") renderCharView();
@@ -8297,7 +8314,8 @@ $menuBtn.on("click", async () => {
   $ui.find("#wb-btn-det-save").on("click", () => {
     if (tuneDetailIndex === -1) return;
     const e = tuneEntries[tuneDetailIndex],
-      pos = $ui.find("#wb-det-position").val(),
+      rawPos = $ui.find("#wb-det-position").val(),
+      pos = rawPos || "at_depth_system", // 补丁1：防止有些条目位置为空导致代码直接报错卡死
       order = parseInt($ui.find("#wb-det-order").val()) || 100;
     e.name = $ui.find("#wb-det-name").val();
     e.content = $ui.find("#wb-det-content").val();
@@ -8376,6 +8394,11 @@ $menuBtn.on("click", async () => {
       "lulu_wb_detail_params_enabled",
       $ui.find("#wb-det-advanced-toggle").is(":checked") ? "true" : "false",
     );
+
+    // 补丁2：给暂存按钮也加上 Token 缓存失效，防患于未然
+    if (typeof luluTokenCache !== "undefined") {
+      delete luluTokenCache[tuneWbName];
+    }
 
     if (typeof toastr !== "undefined") {
       toastr.info("当前内容已暂存，彻底保存还要另外点绿色的【确认】哦！");
