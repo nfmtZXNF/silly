@@ -1062,8 +1062,14 @@ $menuBtn.on("click", async () => {
             .btn-danger { color: #ff6b6b !important; border-color: #ff6b6b !important; background: rgba(255, 107, 107, 0.05) !important; }
             .btn-danger:hover { background: #ff6b6b !important; color: #fff !important; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
 
-            .btn-warning { color: #fcc419 !important; border-color: #fcc419 !important; background: rgba(252, 196, 25, 0.05) !important; }
+            .btn-warning { color: #fcc419 !important; border-color: #fcc419 !important; background: rgba(252, 196, 25, 0.08) !important; }
             .btn-warning:hover { background: #fcc419 !important; color: #212529 !important; }
+
+            .btn-secondary { color: gray !important; border-color: rgba(150,150,150,0.5) !important; background: rgba(150,150,150,0.15) !important; }
+            .btn-secondary:hover { background: gray !important; color: #fff !important; }
+
+            .btn-info { color: #339af0 !important; border-color: rgba(51,154,240,0.5) !important; background: rgba(51,154,240,0.15) !important; }
+            .btn-info:hover { background: #339af0 !important; color: #fff !important; }
 
             #dsnap-container { display: flex; min-height: 50vh; max-height: 65vh; border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px; padding: 10px; background: var(--SmartThemeBotMesColor); overflow: hidden; }
             #dsnap-wb-list-wrapper { flex: 0 0 40%; max-width: 380px; display: flex; flex-direction: column; border-right: 2px solid var(--SmartThemeBorderColor); padding-right: 10px; overflow: hidden;}
@@ -1889,20 +1895,20 @@ $menuBtn.on("click", async () => {
                             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px dashed rgba(255,107,107,0.3); padding-bottom: 8px;">
                                 <span style="color: #ff6b6b; font-weight: bold; font-size: 14px; white-space: nowrap;"><i class="fa-solid fa-triangle-exclamation"></i> 选中 (<span id="wb-entry-batch-count">0</span>)</span>
                                 <div style="display:flex; gap: 6px;">
-                                     <button class="menu_button interactable wb-nowrap-btn" id="wb-btn-entry-batch-select-all" style="margin: 0; padding: 4px 10px; font-size: 12px; background: rgba(0,0,0,0.2); border: 1px solid var(--SmartThemeBorderColor);"><i class="fa-solid fa-check-double"></i> 全页勾选</button>
-                                     <button class="menu_button interactable wb-nowrap-btn" id="wb-btn-entry-batch-deselect-all" style="margin: 0; padding: 4px 10px; font-size: 12px; background: rgba(0,0,0,0.2); border: 1px solid var(--SmartThemeBorderColor);"><i class="fa-regular fa-square"></i> 全页撤销</button>
+                                     <button class="menu_button interactable wb-nowrap-btn btn-primary" id="wb-btn-entry-batch-select-all" style="margin: 0; padding: 4px 10px; font-size: 12px;"><i class="fa-solid fa-check-double"></i> 全页勾选</button>
+                                     <button class="menu_button interactable wb-nowrap-btn btn-secondary" id="wb-btn-entry-batch-deselect-all" style="margin: 0; padding: 4px 10px; font-size: 12px;"><i class="fa-regular fa-square"></i> 全页撤销</button>
                                 </div>
                             </div>
                             <!-- 第二排：强迫症专享网格按钮区 -->
                             <div class="lulu-batch-grid">
                                  <button class="menu_button interactable btn-success wb-nowrap-btn" id="wb-btn-entry-batch-enable"><i class="fa-solid fa-toggle-on"></i> 批量启用</button>
-                                 <button class="menu_button interactable wb-nowrap-btn" id="wb-btn-entry-batch-disable" style="background: rgba(150, 150, 150, 0.15); color: gray; border: 1px solid rgba(150, 150, 150, 0.5);"><i class="fa-solid fa-toggle-off"></i> 批量关闭</button>
-                                 <button class="menu_button interactable btn-warning wb-nowrap-btn" id="wb-btn-entry-batch-group" style="background: rgba(252, 196, 25, 0.15); color: #fcc419; border: 1px solid rgba(252, 196, 25, 0.5);"><i class="fa-solid fa-folder-tree"></i> 批量改组</button>
-                                 <button class="menu_button interactable wb-nowrap-btn" id="wb-btn-entry-batch-prefix" style="background: rgba(252, 196, 25, 0.15); color: #fcc419; border: 1px solid rgba(252, 196, 25, 0.5);"><i class="fa-solid fa-tags"></i> 批量前缀</button>
-                                 <button class="menu_button interactable wb-nowrap-btn" id="wb-btn-entry-batch-position" style="background: rgba(51, 154, 240, 0.15); color: #339af0; border: 1px solid rgba(51, 154, 240, 0.5);"><i class="fa-solid fa-location-dot"></i> 批量位移</button>
-                                 <button class="menu_button interactable btn-primary wb-nowrap-btn" id="wb-btn-entry-batch-recursion" style="border: 1px solid var(--SmartThemeQuoteColor);"><i class="fa-solid fa-shield-halved"></i> 防止递归</button>
+                                 <button class="menu_button interactable btn-secondary wb-nowrap-btn" id="wb-btn-entry-batch-disable"><i class="fa-solid fa-toggle-off"></i> 批量关闭</button>
+                                 <button class="menu_button interactable btn-warning wb-nowrap-btn" id="wb-btn-entry-batch-group"><i class="fa-solid fa-folder-tree"></i> 批量改组</button>
+                                 <button class="menu_button interactable btn-warning wb-nowrap-btn" id="wb-btn-entry-batch-prefix"><i class="fa-solid fa-tags"></i> 批量前缀</button>
+                                 <button class="menu_button interactable btn-info wb-nowrap-btn" id="wb-btn-entry-batch-position"><i class="fa-solid fa-location-dot"></i> 批量位移</button>
+                                 <button class="menu_button interactable btn-primary wb-nowrap-btn" id="wb-btn-entry-batch-recursion"><i class="fa-solid fa-shield-halved"></i> 防止递归</button>
                                  <!-- 危险操作放最后，独占一行（通过CSS控制） -->
-                                 <button class="menu_button interactable btn-danger wb-nowrap-btn lulu-btn-danger-full" id="wb-btn-entry-confirm-delete" style="border: 1px solid #ff6b6b;"><i class="fa-solid fa-burst"></i> 暂存移除所选项</button>
+                                 <button class="menu_button interactable btn-danger wb-nowrap-btn lulu-btn-danger-full" id="wb-btn-entry-confirm-delete"><i class="fa-solid fa-burst"></i> 暂存移除所选项</button>
                             </div>
                         </div>
 
@@ -1999,10 +2005,10 @@ $menuBtn.on("click", async () => {
                                 <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px;">
                                     <div style="display: flex; align-items: center; gap: 10px;">
                                         <label style="font-size: 13px; font-weight: bold; margin-bottom: 0; color: var(--SmartThemeQuoteColor);">📜 正文内容</label>
-                                        <!-- ✨新增：调节字体大小的两个按钮 -->
+                                        <!-- 新增：调节字体大小的两个按钮 -->
                                         <div style="display: flex; gap: 4px;">
-                                            <button id="wb-font-dec" class="menu_button interactable" style="margin:0; padding:2px 8px; font-size:12px; border-radius:4px; min-width:unset; line-height:1;" title="缩小字体">A-</button>
-                                            <button id="wb-font-inc" class="menu_button interactable" style="margin:0; padding:2px 8px; font-size:12px; border-radius:4px; min-width:unset; line-height:1;" title="放大字体">A+</button>
+                                            <button id="wb-font-dec" class="menu_button interactable btn-primary" style="margin:0; padding:2px 8px; font-size:12px; border-radius:4px; min-width:unset; line-height:1;" title="缩小字体">A-</button>
+                                            <button id="wb-font-inc" class="menu_button interactable btn-primary" style="margin:0; padding:2px 8px; font-size:12px; border-radius:4px; min-width:unset; line-height:1;" title="放大字体">A+</button>
                                         </div>
                                     </div>
                                     <span id="wb-det-token-count" style="font-size: 11px; color: gray; background: rgba(125,125,125,0.15); padding: 2px 6px; border-radius: 4px;">0 Tokens</span>
@@ -6973,7 +6979,7 @@ $menuBtn.on("click", async () => {
       tuneEntries.forEach((e) => {
         // 1. 优先读取全局缓存的分组
         let group = getEntryUiGroup(wbName, e.uid);
-        
+
         // 2. 如果缓存没有，尝试读取条目自带的隐形扩展元数据 (兼容原生角色卡导入)
         if (!group && e.extensions && e.extensions.lulu_group) {
           group = e.extensions.lulu_group;
@@ -7255,10 +7261,13 @@ $menuBtn.on("click", async () => {
     renderEntryList();
     toastr.success("批量位移成功！记得点左下角绿色保存按钮才会生效哦~");
   });
-// 新增：批量开启条目
+  // 新增：批量开启条目
   $ui.find("#wb-btn-entry-batch-enable").on("click", () => {
-    if (entryBatchSelected.size === 0) return toastr.warning("请先选中要操作的条目哦~");
-    entryBatchSelected.forEach((idx) => { tuneEntries[idx].enabled = true; });
+    if (entryBatchSelected.size === 0)
+      return toastr.warning("请先选中要操作的条目哦~");
+    entryBatchSelected.forEach((idx) => {
+      tuneEntries[idx].enabled = true;
+    });
     entryBatchSelected.clear();
     renderEntryList();
     toastr.success("选中的条目已全部开启！记得点左下角保存哦~");
@@ -7266,13 +7275,16 @@ $menuBtn.on("click", async () => {
 
   // 新增：批量关闭条目
   $ui.find("#wb-btn-entry-batch-disable").on("click", () => {
-    if (entryBatchSelected.size === 0) return toastr.warning("请先选中要操作的条目哦~");
-    entryBatchSelected.forEach((idx) => { tuneEntries[idx].enabled = false; });
+    if (entryBatchSelected.size === 0)
+      return toastr.warning("请先选中要操作的条目哦~");
+    entryBatchSelected.forEach((idx) => {
+      tuneEntries[idx].enabled = false;
+    });
     entryBatchSelected.clear();
     renderEntryList();
     toastr.success("选中的条目已全部关闭！记得点左下角保存哦~");
   });
-// 新增：全局批量前缀功能
+  // 新增：全局批量前缀功能
   $ui.find("#wb-btn-entry-batch-prefix").on("click", async () => {
     if (entryBatchSelected.size === 0)
       return toastr.warning("请先选中要操作的条目哦~");
@@ -7298,16 +7310,17 @@ $menuBtn.on("click", async () => {
       const entry = tuneEntries[idx];
       let currentName = entry.name || "";
       const hasAnyPrefix = currentName.match(/^【.*?】/);
-      
-      // 提取条目的真实所在分组名
-      const grpName = entry._lulu_ui_group || ""; 
-      const isUncategorized = !grpName || grpName === "📁 未分类条目" || grpName.trim() === "";
 
-      if (btnRes === 888) { 
+      // 提取条目的真实所在分组名
+      const grpName = entry._lulu_ui_group || "";
+      const isUncategorized =
+        !grpName || grpName === "📁 未分类条目" || grpName.trim() === "";
+
+      if (btnRes === 888) {
         // 【批量添加】
         if (isUncategorized) return; // 未分类的没法加前缀，直接跳过
         const desiredPrefix = `【${grpName.trim()}】`;
-        
+
         if (hasAnyPrefix) {
           // 有老前缀但不对，替换掉
           if (hasAnyPrefix[0] !== desiredPrefix) {
@@ -7319,7 +7332,7 @@ $menuBtn.on("click", async () => {
           entry.name = desiredPrefix + currentName;
           changedCount++;
         }
-      } else if (btnRes === 999) { 
+      } else if (btnRes === 999) {
         // 【批量移除】
         if (hasAnyPrefix) {
           entry.name = currentName.replace(/^【.*?】\s*/, "");
@@ -7331,13 +7344,15 @@ $menuBtn.on("click", async () => {
     entryBatchSelected.clear();
     $ui.find("#wb-entry-batch-count").text("0");
     renderEntryList();
-    
+
     if (changedCount > 0) {
-      toastr.success(`批量处理了 ${changedCount} 个条目的前缀！记得点击左下角绿色保存生效哦~`);
+      toastr.success(
+        `批量处理了 ${changedCount} 个条目的前缀！记得点击左下角绿色保存生效哦~`,
+      );
       // 如果当前详情页正是刚才改过的条目，顺便刷新一下显示
       if (tuneDetailIndex !== -1 && entryBatchSelected.has(tuneDetailIndex)) {
-         $ui.find("#wb-det-name").val(tuneEntries[tuneDetailIndex].name);
-         $ui.find("#wb-detail-title").text(tuneEntries[tuneDetailIndex].name);
+        $ui.find("#wb-det-name").val(tuneEntries[tuneDetailIndex].name);
+        $ui.find("#wb-detail-title").text(tuneEntries[tuneDetailIndex].name);
       }
     } else {
       toastr.info("检查了一遍，发现选中的条目都不需要修改呢~");
@@ -7429,7 +7444,7 @@ $menuBtn.on("click", async () => {
       // 如果条目原本就有【XXX】前缀，换组时自动帮它改前缀
       let currentName = entry.name || "";
       const hasAnyPrefix = currentName.match(/^【.*?】/);
-      
+
       if (hasAnyPrefix) {
         if (finalGroup && finalGroup !== "📁 未分类条目") {
           // 如果移动到了新分组，前缀换成新分组名
@@ -7564,15 +7579,15 @@ $menuBtn.on("click", async () => {
       // 批量模式只留【选全组/撤全组】，普通模式什么都不留
       const groupBtnsHtml = isEntryBatchMode
         ? `
-             <button class="menu_button interactable wb-nowrap-btn wb-group-select-all" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(51, 154, 240, 0.15); color:#339af0; border:1px solid rgba(51, 154, 240, 0.5);" title="勾选本组"><i class="fa-solid fa-check-double"></i> 选全组</button>
-             <button class="menu_button interactable wb-nowrap-btn wb-group-deselect-all" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(150, 150, 150, 0.15); color:gray; border:1px solid rgba(150, 150, 150, 0.5);" title="撤销本组"><i class="fa-regular fa-square"></i> 撤全组</button>
+             <button class="menu_button interactable wb-nowrap-btn btn-info wb-group-select-all" style="margin:0; padding:4px 8px; font-size:11px;" title="勾选本组"><i class="fa-solid fa-check-double"></i> 选全组</button>
+             <button class="menu_button interactable wb-nowrap-btn btn-secondary wb-group-deselect-all" style="margin:0; padding:4px 8px; font-size:11px;" title="撤销本组"><i class="fa-regular fa-square"></i> 撤全组</button>
           `
         : ``;
 
       // 改名和删除只使用纯图标，极度节省空间
       const editBtnsHtml = isDraggable ? `
-             <button class="menu_button interactable wb-nowrap-btn wb-group-rename" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(51, 154, 240, 0.15); color:#339af0; border:1px solid rgba(51, 154, 240, 0.5);" title="重命名该分组"><i class="fa-solid fa-pen"></i></button>
-             <button class="menu_button interactable wb-nowrap-btn wb-group-delete" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(255, 107, 107, 0.15); color:#ff6b6b; border:1px solid rgba(255, 107, 107, 0.5);" title="删除分组或解散"><i class="fa-solid fa-trash"></i></button>
+             <button class="menu_button interactable wb-nowrap-btn btn-info wb-group-rename" style="margin:0; padding:4px 8px; font-size:11px;" title="重命名该分组"><i class="fa-solid fa-pen"></i></button>
+             <button class="menu_button interactable wb-nowrap-btn btn-danger wb-group-delete" style="margin:0; padding:4px 8px; font-size:11px;" title="删除分组或解散"><i class="fa-solid fa-trash"></i></button>
           ` : "";
 
       const $gHeader =
@@ -7713,10 +7728,13 @@ $menuBtn.on("click", async () => {
           // 给组内每个条目更新分组名，如果原本带有前缀，也一并更新前缀
           gEntries.forEach((entry) => {
             entry._lulu_ui_group = finalName;
-            
+
             let currentName = entry.name || "";
             if (currentName.match(/^【.*?】/)) {
-              entry.name = currentName.replace(/^【.*?】\s*/, `【${finalName}】`);
+              entry.name = currentName.replace(
+                /^【.*?】\s*/,
+                `【${finalName}】`,
+              );
             }
           });
 
@@ -7858,7 +7876,7 @@ $menuBtn.on("click", async () => {
         );
         $right.append(
           $(
-            '<button class="menu_button interactable wb-nowrap-btn" style="color:var(--SmartThemeQuoteColor); margin:0;" title="修改内容"><i class="fa fa-pen-nib"></i></button>',
+            '<button class="menu_button interactable wb-nowrap-btn btn-primary" style="margin:0;" title="修改内容"><i class="fa fa-pen-nib"></i></button>',
           ).on("click", () => openDetailEditView(index)),
         );
         $item.append($chk, $info, $right);
@@ -8375,7 +8393,7 @@ $menuBtn.on("click", async () => {
     await withLoadingOverlay(async () => {
       const uiGroupsMap = getWbUiGroups();
       if (!uiGroupsMap[tuneWbName]) uiGroupsMap[tuneWbName] = {};
-      
+
       // 1. 获取酒馆最底层的完整数据（把整个超市的账本拿过来，包含隐藏的仓库数据）
       let rootObj = {};
       try {
@@ -8397,9 +8415,10 @@ $menuBtn.on("click", async () => {
         if (e._lulu_ui_group && e._lulu_ui_group.trim() !== "") {
           grpName = e._lulu_ui_group.trim();
           uiGroupsMap[tuneWbName][e.uid] = grpName;
-          
+
           // 给展示柜数据打上分组标签
-          if (!e.extensions || typeof e.extensions !== "object") e.extensions = {};
+          if (!e.extensions || typeof e.extensions !== "object")
+            e.extensions = {};
           e.extensions.lulu_group = grpName;
         } else {
           delete uiGroupsMap[tuneWbName][e.uid];
@@ -8408,14 +8427,23 @@ $menuBtn.on("click", async () => {
           }
         }
         delete e._lulu_ui_group;
-        
+
         entriesDict[e.uid] = e;
 
         // 2. 最关键的一步：给仓库底层数据（originalData）也打上分组标签！导出PNG全靠它！
-        if (rootObj.originalData && Array.isArray(rootObj.originalData.entries)) {
-          let origEntry = rootObj.originalData.entries.find(x => x.uid === e.uid || x.id === e.uid);
+        if (
+          rootObj.originalData &&
+          Array.isArray(rootObj.originalData.entries)
+        ) {
+          let origEntry = rootObj.originalData.entries.find(
+            (x) => x.uid === e.uid || x.id === e.uid,
+          );
           if (origEntry) {
-            if (!origEntry.extensions || typeof origEntry.extensions !== "object") origEntry.extensions = {};
+            if (
+              !origEntry.extensions ||
+              typeof origEntry.extensions !== "object"
+            )
+              origEntry.extensions = {};
             if (grpName !== "") {
               origEntry.extensions.lulu_group = grpName;
             } else {
@@ -8437,7 +8465,6 @@ $menuBtn.on("click", async () => {
         contentType: "application/json",
         data: JSON.stringify({ name: tuneWbName, data: rootObj }),
       });
-      
     }, `写入中...`);
 
     originalTuneEntries = JSON.parse(JSON.stringify(tuneEntries));
@@ -8445,7 +8472,7 @@ $menuBtn.on("click", async () => {
     if (typeof luluTokenCache !== "undefined") {
       delete luluTokenCache[tuneWbName]; // Token缓存失效
     }
-    
+
     toastr.success(`[${tuneWbName}] 的修改已经成功保存啦！`);
     if (tuneReturnView === "#wb-main-view") renderData();
     else if (tuneReturnView === "#wb-char-view") renderCharView();
@@ -9140,7 +9167,7 @@ $menuBtn.on("click", async () => {
               );
             }
           });
-// 替换成这句：绕开对方劫持的假 append，用最底层的原生方法强行把分组头塞进去
+          // 替换成这句：绕开对方劫持的假 append，用最底层的原生方法强行把分组头塞进去
           $container[0].appendChild($header[0]);
         } else {
           $header.find(".lulu-g-count").text(`(${groupCounts[gName]}项)`);
