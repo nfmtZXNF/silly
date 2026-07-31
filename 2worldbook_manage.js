@@ -1365,7 +1365,7 @@ $menuBtn.on("click", async () => {
                 #wb-entry-batch-actions > div:first-child > div:last-child {
                     grid-column: 1 / -1;
                     display: grid !important;
-                    grid-template-columns: 1fr 1fr;
+                    grid-template-columns: 1fr 1fr 1fr 1fr;
                     gap: 4px !important;
                 }
                 #wb-entry-batch-actions i { font-size: 10px !important; }
@@ -1480,6 +1480,13 @@ $menuBtn.on("click", async () => {
                     max-height: 160px !important;
                 }
                 /* ========== 搬运台手机适配 结束 ========== */
+
+                /* 📱 修复手机端“全屏编辑”模式下列表无法占满屏幕的留白问题 */
+                #wb-entry-split-wrapper.lulu-fullscreen-mode #wb-entry-list-side {
+                    flex: 1 1 100% !important;
+                    max-height: none !important;
+                    height: 100% !important;
+                }
             }
         </style>
     `;
@@ -1861,6 +1868,8 @@ $menuBtn.on("click", async () => {
                                 </div>
                                 <div style="display:flex; gap: 8px; flex-wrap: wrap;">
                                      <button class="menu_button interactable btn-warning wb-nowrap-btn" id="wb-btn-entry-batch-group" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px; background: rgba(252, 196, 25, 0.15); color: #fcc419;"><i class="fa-solid fa-folder-tree"></i> 批量改组</button>
+                                     <button class="menu_button interactable wb-nowrap-btn" id="wb-btn-entry-batch-position" style="margin: 0; border: 1px solid rgba(51, 154, 240, 0.5); font-size: 13px; padding: 6px 14px; background: rgba(51, 154, 240, 0.15); color: #339af0;"><i class="fa-solid fa-location-dot"></i> 批量位移</button>
+                                     <button class="menu_button interactable btn-primary wb-nowrap-btn" id="wb-btn-entry-batch-recursion" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-shield-halved"></i> 防止递归</button>
                                      <button class="menu_button interactable btn-danger wb-nowrap-btn" id="wb-btn-entry-confirm-delete" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-burst"></i> 暂存移除</button>
                                 </div>
                             </div>
@@ -2991,10 +3000,8 @@ $menuBtn.on("click", async () => {
     $overlay.fadeIn("fast");
     try {
       await asyncFunction();
-      return true; // 补丁：成功了就返回 true
     } catch (error) {
       toastr.error(`操作失败: ${error.message}`);
-      return false; // 补丁：失败了就返回 false，告诉外面出错了
     } finally {
       $overlay.fadeOut("slow");
     }
@@ -7043,6 +7050,164 @@ $menuBtn.on("click", async () => {
       );
     }
   });
+  //  新增：批量防止递归开关
+  $ui.find("#wb-btn-entry-batch-recursion").on("click", async () => {
+    if (entryBatchSelected.size === 0)
+      return toastr.warning("请先选中要修改的条目哦~");
+
+    const btnRes = await SillyTavern.callGenericPopup(
+      `<div style="margin-bottom:8px;">要对选中的 <strong>${entryBatchSelected.size}</strong> 项条目进行什么操作呢？</div><span style="font-size:12px; color:gray;">(开启后，条目的“不可递归”与“防止进一步递归”将同时生效)</span>`,
+      SillyTavern.POPUP_TYPE.TEXT,
+      "",
+      {
+        okButton: "取消操作",
+        customButtons: [
+          { text: "开启防递归", result: 888, classes: ["btn-success"] },
+          { text: "关闭防递归", result: 999, classes: ["btn-danger"] },
+        ],
+      },
+    );
+
+    if (btnRes !== 888 && btnRes !== 999) return;
+
+    const isPrevent = btnRes === 888;
+
+    // 遍历所有选中的条目，修改它们的底层变量
+    entryBatchSelected.forEach((idx) => {
+      const e = tuneEntries[idx];
+      if (!e.recursion) {
+        e.recursion = {
+          prevent_incoming: false,
+          prevent_outgoing: false,
+          delay_until: null,
+        };
+      }
+      e.recursion.prevent_incoming = isPrevent;
+      e.recursion.prevent_outgoing = isPrevent;
+      e.exclude_recursion = isPrevent;
+      e.prevent_recursion = isPrevent;
+    });
+
+    // 清空选择并刷新列表
+    entryBatchSelected.clear();
+    $ui.find("#wb-entry-batch-count").text("0");
+    renderEntryList();
+
+    toastr.success(
+      isPrevent
+        ? "批量开启防递归成功！记得点左下角绿色保存按钮才会生效哦~"
+        : "批量关闭防递归成功！记得点左下角绿色保存按钮才会生效哦~",
+    );
+  });
+  // 新增：批量修改位置/深度
+  $ui.find("#wb-btn-entry-batch-position").on("click", async () => {
+    if (entryBatchSelected.size === 0)
+      return toastr.warning("请先选中要移动的条目哦~");
+
+    const dialogHtml = `
+      <div style="padding:6px; font-family:sans-serif; min-width:300px; text-align:left;">
+        <div style="font-weight:bold; margin-bottom:10px; color:var(--SmartThemeQuoteColor); font-size:15px;">
+          <i class="fa-solid fa-location-dot"></i> 将选中的 ${entryBatchSelected.size} 项条目移动至：
+        </div>
+        
+        <div style="margin-bottom:12px;">
+            <label style="font-size: 12px; font-weight: bold; margin-bottom: 4px; display:block;">📍 插入位置：</label>
+            <select id="lulu-batch-pos-select" style="width:100%; box-sizing:border-box; padding:8px; border-radius:6px; border:1px solid var(--SmartThemeBorderColor); background:var(--lulu-input-bg, var(--SmartThemeBotMesColor)); color:var(--SmartThemeBodyColor);">
+                <option value="before_character_definition">角色定义前</option>
+                <option value="after_character_definition">角色定义后</option>
+                <option value="before_example_messages">示例消息前</option>
+                <option value="after_example_messages">示例消息后</option>
+                <option value="before_author_note">作者注释前</option>
+                <option value="after_author_note">作者注释后</option>
+                <option value="at_depth_system">@D ⚙️系统深度</option>
+                <option value="at_depth_user">@D 👤用户深度</option>
+                <option value="at_depth_assistant">@D 🤖助手深度</option>
+            </select>
+        </div>
+        
+        <div id="lulu-batch-depth-container" style="display:none; margin-bottom:12px;">
+            <label style="font-size: 12px; font-weight: bold; margin-bottom: 4px; display:block;">🌊 深度（仅当选择 @D深度 时有效）：</label>
+            <input type="number" id="lulu-batch-depth-input" value="0" style="width:100%; box-sizing:border-box; padding:8px; border-radius:6px; border:1px solid var(--SmartThemeBorderColor); background:var(--lulu-input-bg, var(--SmartThemeBotMesColor)); color:var(--SmartThemeBodyColor);">
+        </div>
+        
+        <div style="margin-bottom:12px;">
+            <label style="font-size: 12px; font-weight: bold; margin-bottom: 4px; display:block;">🔢 顺序（Order参数）：</label>
+            <input type="number" id="lulu-batch-order-input" value="100" style="width:100%; box-sizing:border-box; padding:8px; border-radius:6px; border:1px solid var(--SmartThemeBorderColor); background:var(--lulu-input-bg, var(--SmartThemeBotMesColor)); color:var(--SmartThemeBodyColor);">
+        </div>
+        
+        <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 11px; color: gray;">
+            <input type="checkbox" id="lulu-batch-keep-order" checked style="accent-color: var(--SmartThemeQuoteColor);">
+            <span>不修改顺序 (保留条目原有的顺序，仅改变插入位置)</span>
+        </label>
+      </div>
+    `;
+
+    const $dialog = $(dialogHtml);
+    // 注入护眼主题
+    $dialog
+      .attr("id", "lulu-entry-batch-pos-dialog")
+      .prepend(
+        `<style>${buildPopupThemeCSS("dialog:has(#lulu-entry-batch-pos-dialog)")}</style>`,
+      );
+
+    // 智能联动：选到深度时才展示深度的数字框
+    $dialog.find("#lulu-batch-pos-select").on("change", function () {
+      const isDepth = $(this).val().startsWith("at_depth_");
+      $dialog
+        .find("#lulu-batch-depth-container")
+        .css("display", isDepth ? "block" : "none");
+    });
+
+    // 如果勾选了“保留顺序”，就把输入框禁用变灰
+    $dialog.find("#lulu-batch-keep-order").on("change", function () {
+      $dialog
+        .find("#lulu-batch-order-input")
+        .prop("disabled", $(this).is(":checked"));
+    });
+    $dialog.find("#lulu-batch-order-input").prop("disabled", true);
+
+    const result = await SillyTavern.callGenericPopup(
+      $dialog,
+      SillyTavern.POPUP_TYPE.CONFIRM,
+      "",
+      { okButton: "确认转移", cancelButton: "取消" },
+    );
+
+    if (result !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+
+    const rawPos = $dialog.find("#lulu-batch-pos-select").val();
+    const newDepth =
+      parseInt($dialog.find("#lulu-batch-depth-input").val()) || 0;
+    const keepOrder = $dialog.find("#lulu-batch-keep-order").is(":checked");
+    const newOrder =
+      parseInt($dialog.find("#lulu-batch-order-input").val()) || 100;
+
+    // 执行后台写入
+    entryBatchSelected.forEach((idx) => {
+      const e = tuneEntries[idx];
+      const currentOrder = e.position?.order ?? 100;
+      const finalOrder = keepOrder ? currentOrder : newOrder;
+
+      if (rawPos.startsWith("at_depth_")) {
+        e.position = {
+          type: "at_depth",
+          role: rawPos.replace("at_depth_", ""),
+          depth: newDepth,
+          order: finalOrder,
+        };
+      } else {
+        e.position = {
+          type: rawPos,
+          order: finalOrder,
+        };
+      }
+    });
+
+    entryBatchSelected.clear();
+    $ui.find("#wb-entry-batch-count").text("0");
+    renderEntryList();
+    toastr.success("批量位移成功！记得点左下角绿色保存按钮才会生效哦~");
+  });
 
   $ui.find("#wb-btn-entry-batch-group").on("click", async () => {
     if (entryBatchSelected.size === 0)
@@ -7247,12 +7412,22 @@ $menuBtn.on("click", async () => {
       const dragIcon = isDraggable
         ? `<i class="fa-solid fa-hand-paper lulu-panel-drag-handle" style="cursor:grab; margin-right:8px; color:gray;" title="按住拖拽排序"></i>`
         : "";
+      // 改：判断是否在批量模式下，展示不同的按钮
+      const groupBtnsHtml = isEntryBatchMode
+        ? `
+                    <button class="menu_button interactable wb-nowrap-btn wb-group-select-all" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(51, 154, 240, 0.15); color:#339af0; border:1px solid rgba(51, 154, 240, 0.5);" title="批量勾选本组所有条目"><i class="fa-solid fa-check-double"></i> 勾选全组</button>
+                    <button class="menu_button interactable wb-nowrap-btn wb-group-deselect-all" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(150, 150, 150, 0.15); color:gray; border:1px solid rgba(150, 150, 150, 0.5);" title="撤销勾选本组"><i class="fa-regular fa-square"></i> 撤销全组</button>
+      `
+        : `
+                    <button class="menu_button interactable wb-nowrap-btn wb-group-enable-all" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(81, 207, 102, 0.15); color:#51cf66; border:1px solid rgba(81, 207, 102, 0.5);" title="开启该组所有条目"><i class="fa-solid fa-check"></i> 全开</button>
+                    <button class="menu_button interactable wb-nowrap-btn wb-group-disable-all" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(150, 150, 150, 0.15); color:gray; border:1px solid rgba(150, 150, 150, 0.5);" title="关闭该组所有条目"><i class="fa-solid fa-xmark"></i> 全关</button>
+      `;
+
       const $gHeader =
         $(`<div class="lulu-ui-group-header" data-groupname="${groupName}" draggable="${isDraggable ? "true" : "false"}" style="background: rgba(0,0,0,0.15); padding:8px 12px; margin-top:8px; border-radius:6px; cursor:pointer; font-weight:bold; color:var(--SmartThemeBodyColor); border:1px solid var(--SmartThemeBorderColor); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
                 <span style="display:flex; align-items:center;">${dragIcon}<i class="fa-solid ${isCollapsed ? "fa-chevron-right" : "fa-chevron-down"}" style="margin-right:6px; color:var(--SmartThemeQuoteColor);"></i>${groupName}<span style="font-size:12px; color:gray; font-weight:normal; margin-left:4px;">( ${gEntries.length} 项 )</span></span>
                 <div style="display:flex; gap:6px;" class="lulu-group-ctrls">${isDraggable ? `<i class="fa-solid fa-arrow-up lulu-btn-up" title="上移" style="padding:6px; font-size:12px; color:gray; cursor:pointer; background:rgba(125,125,125,0.15); border-radius:4px; transition:0.2s;"></i><i class="fa-solid fa-arrow-down lulu-btn-down" title="下移" style="padding:6px; font-size:12px; color:gray; cursor:pointer; background:rgba(125,125,125,0.15); border-radius:4px; margin-right:10px; transition:0.2s;"></i>` : ""}
-                    <button class="menu_button interactable wb-nowrap-btn wb-group-enable-all" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(81, 207, 102, 0.15); color:#51cf66; border:1px solid rgba(81, 207, 102, 0.5);" title="开启该组所有条目"><i class="fa-solid fa-check"></i> 全开</button>
-                    <button class="menu_button interactable wb-nowrap-btn wb-group-disable-all" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(150, 150, 150, 0.15); color:gray; border:1px solid rgba(150, 150, 150, 0.5);" title="关闭该组所有条目"><i class="fa-solid fa-xmark"></i> 全关</button>
+                    ${groupBtnsHtml}
                     ${isDraggable ? `<button class="menu_button interactable wb-nowrap-btn wb-group-rename" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(51, 154, 240, 0.15); color:#339af0; border:1px solid rgba(51, 154, 240, 0.5);" title="重命名该分组"><i class="fa-solid fa-pen"></i> 改名</button>` : ""}
                     ${isDraggable ? `<button class="menu_button interactable wb-nowrap-btn wb-group-delete" style="margin:0; padding:4px 8px; font-size:11px; background:rgba(255, 107, 107, 0.15); color:#ff6b6b; border:1px solid rgba(255, 107, 107, 0.5);" title="删除分组或解散"><i class="fa-solid fa-trash"></i> 删除</button>` : ""}
                 </div></div>`);
@@ -7362,6 +7537,26 @@ $menuBtn.on("click", async () => {
       $gHeader.find(".wb-group-disable-all").on("click", (e) => {
         e.stopPropagation();
         gEntries.forEach((entry) => (entry.enabled = false));
+        renderEntryList();
+      });
+
+      // 新增：分组批量勾选逻辑
+      $gHeader.find(".wb-group-select-all").on("click", (e) => {
+        e.stopPropagation();
+        gEntries.forEach((entry) => {
+          const index = tuneEntries.indexOf(entry);
+          if (index !== -1) entryBatchSelected.add(index);
+        });
+        $ui.find("#wb-entry-batch-count").text(entryBatchSelected.size);
+        renderEntryList();
+      });
+      $gHeader.find(".wb-group-deselect-all").on("click", (e) => {
+        e.stopPropagation();
+        gEntries.forEach((entry) => {
+          const index = tuneEntries.indexOf(entry);
+          if (index !== -1) entryBatchSelected.delete(index);
+        });
+        $ui.find("#wb-entry-batch-count").text(entryBatchSelected.size);
         renderEntryList();
       });
       $gHeader.find(".wb-group-rename").on("click", async (e) => {
@@ -8030,7 +8225,7 @@ $menuBtn.on("click", async () => {
       openDetailEditView(0);
     });
   $ui.find("#wb-btn-entry-save").on("click", async () => {
-    let isSuccess = await withLoadingOverlay(async () => {
+    await withLoadingOverlay(async () => {
       const uiGroupsMap = getWbUiGroups();
       if (!uiGroupsMap[tuneWbName]) uiGroupsMap[tuneWbName] = {};
       const pureEntries = JSON.parse(JSON.stringify(tuneEntries));
@@ -8046,7 +8241,6 @@ $menuBtn.on("click", async () => {
       saveWbUiGroups(uiGroupsMap);
       await replaceWorldbook(tuneWbName, pureEntries);
     }, `写入中...`);
-        if (isSuccess === false) return; // 补丁：如果没成功，立刻停下，不要往下弹绿条了！
 
     originalTuneEntries = JSON.parse(JSON.stringify(tuneEntries));
     // 修复补丁：先判断存不存在，防止代码在这里卡死崩溃
@@ -8314,8 +8508,7 @@ $menuBtn.on("click", async () => {
   $ui.find("#wb-btn-det-save").on("click", () => {
     if (tuneDetailIndex === -1) return;
     const e = tuneEntries[tuneDetailIndex],
-      rawPos = $ui.find("#wb-det-position").val(),
-      pos = rawPos || "at_depth_system", // 补丁1：防止有些条目位置为空导致代码直接报错卡死
+      pos = $ui.find("#wb-det-position").val(),
       order = parseInt($ui.find("#wb-det-order").val()) || 100;
     e.name = $ui.find("#wb-det-name").val();
     e.content = $ui.find("#wb-det-content").val();
@@ -8394,11 +8587,6 @@ $menuBtn.on("click", async () => {
       "lulu_wb_detail_params_enabled",
       $ui.find("#wb-det-advanced-toggle").is(":checked") ? "true" : "false",
     );
-
-    // 补丁2：给暂存按钮也加上 Token 缓存失效，防患于未然
-    if (typeof luluTokenCache !== "undefined") {
-      delete luluTokenCache[tuneWbName];
-    }
 
     if (typeof toastr !== "undefined") {
       toastr.info("当前内容已暂存，彻底保存还要另外点绿色的【确认】哦！");
