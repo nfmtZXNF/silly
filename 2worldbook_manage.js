@@ -1461,10 +1461,10 @@ $menuBtn.on("click", async () => {
                     max-width: 100% !important;
                     display: block !important;
                 }
-                /* 三个开关（启用分组/内容预览/全屏编辑）整齐三等分一排 */
+                /* 四个按钮（启用分组/按前缀分组/内容预览/全屏编辑）2×2整齐排列 */
                 #wb-entry-view > div:first-child > div {
                     display: grid !important;
-                    grid-template-columns: 1fr 1fr 1fr !important;
+                    grid-template-columns: 1fr 1fr !important;
                     gap: 4px !important;
                     width: 100% !important;
                 }
@@ -2047,6 +2047,8 @@ $menuBtn.on("click", async () => {
                             <input type="checkbox" id="wb-toggle-entry-group" style="accent-color: #51cf66; transform:scale(1.1);">
                             <span style="color:var(--SmartThemeBodyColor); font-weight:bold;">🗂️ 启用分组</span>
                         </label>
+                        <!-- ✨ 按前缀分组（把带【】前缀的条目一键归入分组） -->
+                        <button id="wb-btn-prefix-group" class="menu_button interactable btn-warning wb-nowrap-btn" style="margin: 0; padding: 6px 10px; font-size: 12px; border-radius: 6px; flex-shrink: 0; border:none;" title="扫描带【】前缀的条目，一键按前缀归入分组（会参考对照表，不会乱分）"><i class="fa-solid fa-wand-magic-sparkles"></i> 按前缀分组</button>
                         <!-- 📖 预览开关就在这里哦 -->
                         <label style="cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 12px; margin: 0; font-weight: normal; background: rgba(125,125,125,0.1); padding: 6px 10px; border-radius: 6px; border: 1px solid var(--SmartThemeBorderColor); flex-shrink: 0;">
                             <input type="checkbox" id="wb-toggle-entry-preview" style="accent-color: var(--SmartThemeQuoteColor); transform:scale(1.1);">
@@ -7299,26 +7301,22 @@ $menuBtn.on("click", async () => {
           group = e.extensions.lulu_group;
         }
 
-        // 3. 如果还是没有，尝试智能识别名字前缀 (例如【世界观】XXX)
+        // 3. 如果还是没有，尝试根据名字前缀识别（例如【世界观】XXX）
+        //    ✨ B折中规则：是不是分组，由对照表说了算，不由前缀长相说了算
         if (!group && e.name) {
           const prefixMatch = e.name.match(/^【(.*?)】/);
           if (prefixMatch && prefixMatch[1]) {
             const rawPrefix = prefixMatch[1].trim();
-            // ✨ 关键：拿前缀去对照表里查长分组名
-            //    - 前缀登记在对照表里 → 还原成长分组名（分组党）
-            //    - 前缀没登记（纯装饰前缀） → 若对照表存在则不当分组；对照表不存在则按老规矩当分组名（向下兼容）
             if (luluPrefixMap && luluPrefixMap[rawPrefix]) {
+              // 前缀登记在对照表里 → 还原成长分组名
               group = luluPrefixMap[rawPrefix];
-            } else if (Object.keys(luluPrefixMap).length > 0) {
-              // 这本书有对照表，但这个前缀没登记 → 判定为"纯装饰前缀"，不分组
-              group = "";
             } else {
-              // 这本书压根没有对照表（老书/老卡）→ 保持老逻辑，前缀直接当分组名
-              group = rawPrefix;
+              // 前缀没登记（无论这本书有没有对照表）→ 一律不当分组
+              // 想按前缀分组的话，请点顶部的「按前缀分组」按钮
+              group = "";
             }
           }
         }
-
         e._lulu_ui_group = group || "";
 
         if (!e.key) e.key = e.strategy?.keys || [];
@@ -7391,7 +7389,118 @@ $menuBtn.on("click", async () => {
     localStorage.setItem("lulu_wb_entry_group_view", $(this).is(":checked"));
     renderEntryList();
   });
+  // ✨ 按前缀分组：把带【xxx】前缀的条目一键归入分组
+  //    - 对照表优先：前缀能查到长分组名就用长名，查不到就用前缀本身
+  //    - 只改内存 _lulu_ui_group，不碰对照表，交给保存逻辑善后（增强版会自动补对照表）
+  //    - 默认全勾，装饰前缀可取消
+  $ui
+    .find("#wb-btn-prefix-group")
+    .off("click")
+    .on("click", async () => {
+      if (!tuneEntries || tuneEntries.length === 0)
+        return toastr.warning("这本书还没有条目可以分组哦~");
 
+      // 先读这本书当前的对照表（前缀 → 长分组名）
+      const prefixMap = readGroupMapFromEntries(tuneEntries);
+
+      // 扫描所有带【】前缀、且当前还没分组的条目，按"真正的分组名"聚合
+      // 结构：{ 真正分组名: { prefix: 显示的前缀, entries: [条目...], resolved: 是否来自对照表 } }
+      const groupBuckets = {};
+      tuneEntries.forEach((e) => {
+        if (isLuluMapEntry(e)) return; // 跳过对照表条目
+        if (e._lulu_ui_group && e._lulu_ui_group.trim() !== "") return; // 已经有分组的不动
+        const m = (e.name || "").match(/^【(.*?)】/);
+        if (!m || !m[1]) return;
+        const rawPrefix = m[1].trim();
+        if (!rawPrefix) return;
+        // 对照表优先：查得到就用长名，查不到用前缀本身
+        const realGroup = resolveGroupByPrefix(prefixMap, rawPrefix);
+        if (!groupBuckets[realGroup]) {
+          groupBuckets[realGroup] = {
+            prefix: rawPrefix,
+            entries: [],
+            resolved: realGroup !== rawPrefix, // true 表示是从对照表还原出来的长名
+          };
+        }
+        groupBuckets[realGroup].entries.push(e);
+      });
+
+      const groupNames = Object.keys(groupBuckets);
+      if (groupNames.length === 0)
+        return toastr.info(
+          "没有扫描到可分组的前缀条目呢~（已经分过组的条目不会重复处理哦）",
+        );
+
+      // 构建弹窗：列出识别到的分组，默认全勾
+      let listHtml = "";
+      groupNames.forEach((grp, idx) => {
+        const b = groupBuckets[grp];
+        // 对照表还原的显示成【前缀】→ 长分组名，让你一眼看出被正确归位
+        const labelHtml = b.resolved
+          ? `【${b.prefix}】 <i class="fa-solid fa-arrow-right" style="font-size:10px; color:gray; margin:0 4px;"></i> <strong style="color:#51cf66;">${grp}</strong> <span style="font-size:10px; color:gray;">(来自对照表)</span>`
+          : `【${b.prefix}】 <span style="font-size:11px; color:gray;">→ 分组「${grp}」</span>`;
+        listHtml += `
+          <label style="display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:6px; background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); margin-bottom:6px; cursor:pointer;">
+            <input type="checkbox" class="lulu-prefix-grp-chk" data-grp="${encodeURIComponent(grp)}" checked style="accent-color:#51cf66; flex-shrink:0;">
+            <span style="flex:1; min-width:0; font-size:13px; word-break:break-all;">${labelHtml}</span>
+            <span style="font-size:11px; color:gray; white-space:nowrap;">${b.entries.length} 条</span>
+          </label>`;
+      });
+
+      const dialogHtml = `
+        <div style="padding:6px; font-family:sans-serif; min-width:300px; max-width:420px; text-align:left;">
+          <h3 style="margin-top:0; color:var(--SmartThemeQuoteColor); border-bottom:2px solid var(--SmartThemeBorderColor); padding-bottom:10px;">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> 按前缀分组
+            <span style="font-size:12px; font-weight:normal; color:gray;">${tuneWbName}</span>
+          </h3>
+          <div style="font-size:12px; color:gray; margin-bottom:12px; line-height:1.5;">
+            扫描到以下带前缀的条目分组，默认全部勾选。<br>
+            如果某个前缀其实只是装饰、不想分组，取消勾选即可~
+          </div>
+          <div style="max-height:45vh; overflow-y:auto; padding-right:4px;">${listHtml}</div>
+          <div style="font-size:11px; color:gray; margin-top:10px;">* 确认后只是暂存分组，记得点左下角绿色「确认并覆盖源文件」才会真正生效哦~</div>
+        </div>`;
+
+      const $dlg = $(dialogHtml);
+      $dlg
+        .attr("id", "lulu-prefix-grp-dialog")
+        .prepend(
+          `<style>${buildPopupThemeCSS("dialog:has(#lulu-prefix-grp-dialog)")}</style>`,
+        );
+
+      const result = await SillyTavern.callGenericPopup(
+        $dlg,
+        SillyTavern.POPUP_TYPE.CONFIRM,
+        "",
+        { okButton: "确认分组", cancelButton: "取消" },
+      );
+      if (result !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+
+      // 收集被勾选的分组
+      const chosenGroups = new Set();
+      $dlg.find(".lulu-prefix-grp-chk:checked").each(function () {
+        chosenGroups.add(decodeURIComponent($(this).attr("data-grp")));
+      });
+
+      if (chosenGroups.size === 0)
+        return toastr.info("一个都没勾，那就先不分组啦~");
+
+      // 执行分组：给对应条目设 _lulu_ui_group
+      let count = 0;
+      chosenGroups.forEach((grp) => {
+        const b = groupBuckets[grp];
+        if (!b) return;
+        b.entries.forEach((e) => {
+          e._lulu_ui_group = grp;
+          count++;
+        });
+      });
+
+      renderEntryList();
+      toastr.success(
+        `✨ 已把 ${count} 个条目按前缀归入 ${chosenGroups.size} 个分组！记得点左下角绿色保存按钮才会写入哦~`,
+      );
+    });
   $ui.find("#wb-btn-entry-batch").on("click", function () {
     isEntryBatchMode = !isEntryBatchMode;
     if (isEntryBatchMode) {
@@ -9087,7 +9196,9 @@ $menuBtn.on("click", async () => {
         delete e._lulu_ui_group;
       });
       saveWbUiGroups(uiGroupsMap);
-      // ✨ 收集当前用到的"前缀→长分组名"映射，只登记那些"前缀≠分组名"的
+      // ✨ 增强版：收集当前用到的"前缀→长分组名"映射
+      //    只要一个分组存在，就登记进对照表（哪怕前缀=分组名，记成 {"世界观":"世界观"}）
+      //    这样"前缀=分组名"的书导出后也带对照表，别人导入能自动还原
       const prefixMapUsed = {};
       const seenGroups = new Set();
       pureEntries.forEach((e) => {
@@ -9098,8 +9209,7 @@ $menuBtn.on("click", async () => {
         if (grp && !seenGroups.has(grp)) {
           seenGroups.add(grp);
           const prefix = getGroupPrefix(tuneWbName, grp);
-          // 只有"前缀和分组名不一样"时，才需要写进对照表
-          if (prefix && prefix !== grp) {
+          if (prefix) {
             prefixMapUsed[prefix] = grp;
           }
         }
