@@ -57,6 +57,150 @@ const getEntryUiGroup = (wbName, uid) => {
   const map = getWbUiGroups();
   return map[wbName] && map[wbName][uid] ? map[wbName][uid] : "";
 };
+// ========== 【自定义前缀 + 对照表】工具函数 开始 ==========
+// 对照表条目的固定标题标记（脚本靠它认出这是对照表，不是普通条目）
+const LULU_MAP_ENTRY_TAG = "[LULU_GROUP_MAP]";
+
+// 判断某个条目是不是"对照表条目"
+const isLuluMapEntry = (entry) => {
+  if (!entry) return false;
+  const n = entry.name || entry.comment || "";
+  return typeof n === "string" && n.indexOf(LULU_MAP_ENTRY_TAG) === 0;
+};
+
+// 从一整本世界书的条目数组里，读出对照表对象（前缀 -> 长分组名）
+// 读不到就返回空对象 {}
+const readGroupMapFromEntries = (entries) => {
+  if (!Array.isArray(entries)) return {};
+  const mapEntry = entries.find((e) => isLuluMapEntry(e));
+  if (!mapEntry || !mapEntry.content) return {};
+  try {
+    const obj = JSON.parse(mapEntry.content);
+    return obj && typeof obj === "object" && !Array.isArray(obj) ? obj : {};
+  } catch (e) {
+    return {};
+  }
+};
+
+// 根据"前缀"反查"长分组名"；查不到就原样返回前缀本身（向下兼容）
+const resolveGroupByPrefix = (prefixMap, prefix) => {
+  if (!prefix) return "";
+  if (prefixMap && prefixMap[prefix]) return prefixMap[prefix];
+  return prefix;
+};
+
+// 根据"长分组名"正查"前缀"；查不到就返回长分组名本身（表示前缀=分组名）
+const resolvePrefixByGroup = (prefixMap, groupName) => {
+  if (!groupName) return "";
+  if (prefixMap && typeof prefixMap === "object") {
+    for (const [prefix, grp] of Object.entries(prefixMap)) {
+      if (grp === groupName) return prefix;
+    }
+  }
+  return groupName;
+};
+// —— 记住"每本书里，每个分组该用什么前缀" ——
+// 存在全局变量 lulu_wb_group_prefix 里，结构：{ 世界书名: { 长分组名: 前缀 } }
+const getGroupPrefixStore = () => {
+  let vars = getVariables({ type: "global" });
+  let store = vars.lulu_wb_group_prefix;
+  if (typeof store === "string") {
+    try {
+      store = JSON.parse(store);
+    } catch (e) {
+      store = {};
+    }
+  }
+  return store && typeof store === "object" && !Array.isArray(store)
+    ? store
+    : {};
+};
+const saveGroupPrefixStore = (obj) => {
+  updateVariablesWith(
+    (v) => {
+      v.lulu_wb_group_prefix = obj;
+      return v;
+    },
+    { type: "global" },
+  );
+};
+// 取某本书某个分组的前缀；没设过就默认返回分组名本身
+const getGroupPrefix = (wbName, groupName) => {
+  const store = getGroupPrefixStore();
+  if (store[wbName] && store[wbName][groupName])
+    return store[wbName][groupName];
+  return groupName;
+};
+// 设置某本书某个分组的前缀
+const setGroupPrefix = (wbName, groupName, prefix) => {
+  const store = getGroupPrefixStore();
+  if (!store[wbName]) store[wbName] = {};
+  store[wbName][groupName] = prefix;
+  saveGroupPrefixStore(store);
+};
+// —— 核心：根据当前所有条目，生成/更新/清理对照表条目 ——
+// 传入某本书的条目数组(会直接修改它)，返回处理后的数组
+// prefixMapUsed 是一个 {前缀: 长分组名} 对象，由外面收集好传进来
+const syncMapEntryIntoEntries = (entries, prefixMapUsed) => {
+  if (!Array.isArray(entries)) return entries;
+
+  // 先找出已有的对照表条目（可能有，也可能没有）
+  const mapIdx = entries.findIndex((e) => isLuluMapEntry(e));
+
+  // 如果对照表内容为空（没有任何"前缀≠分组名"的映射），就不需要对照表条目
+  const needMap = prefixMapUsed && Object.keys(prefixMapUsed).length > 0;
+
+  if (!needMap) {
+    // 不需要了 → 如果原来有对照表条目，删掉它
+    if (mapIdx !== -1) entries.splice(mapIdx, 1);
+    return entries;
+  }
+
+  // 需要对照表 → 生成内容
+  const contentJson = JSON.stringify(prefixMapUsed);
+  const mapName = LULU_MAP_ENTRY_TAG + " 请勿删除/开启（本插件分组数据）";
+
+  if (mapIdx !== -1) {
+    // 已有 → 更新它，并强制关闭
+    const m = entries[mapIdx];
+    m.name = mapName;
+    m.comment = mapName;
+    m.title = mapName;
+    m.content = contentJson;
+    m.enabled = false;
+    m.disable = true;
+    m.disabled = true;
+    if (m.strategy) m.strategy.type = "constant";
+    m._lulu_ui_group = "";
+  } else {
+    // 没有 → 新建一个关闭状态的条目
+    entries.push({
+      uid: Date.now() + Math.floor(Math.random() * 100000),
+      name: mapName,
+      comment: mapName,
+      title: mapName,
+      enabled: false,
+      disable: true,
+      disabled: true,
+      content: contentJson,
+      group: "",
+      key: [],
+      keys: [],
+      _lulu_ui_group: "",
+      strategy: { type: "constant", keys: [] },
+      position: { type: "at_depth", role: "system", depth: 0, order: 100 },
+      recursion: {
+        prevent_incoming: true,
+        prevent_outgoing: true,
+        delay_until: null,
+      },
+      exclude_recursion: true,
+      prevent_recursion: true,
+    });
+  }
+  return entries;
+};
+// ========== 【自定义前缀 + 对照表】工具函数 结束 ==========
 let isEntryBatchMode = false;
 let entryBatchSelected = new Set();
 
@@ -644,10 +788,9 @@ const LULU_FLOAT_ICONS = {
 const getFloatAppearance = () => {
   return JSON.parse(
     localStorage.getItem("lulu_wb_floating_appearance") ||
-      '{"iconType":"fa","iconValue":"fa-book-atlas","emoji":"📖","imgUrl":"","useThemeColor":true,"bgColor":"#2a2e33","bgAlpha":100,"iconColor":"#70a1ff","borderColor":"#70a1ff"}',
+      '{"iconType":"fa","iconValue":"fa-book-atlas","emoji":"📖","imgUrl":"","useThemeColor":true,"bgColor":"#2a2e33","bgAlpha":100,"iconColor":"#70a1ff","borderColor":"#70a1ff","borderAlpha":100}',
   );
 };
-
 const toggleFloatingButton = (show, forceUpdate = false) => {
   if (!show) {
     $("#lulu-wb-floating-btn").remove();
@@ -686,9 +829,11 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
   const iconColorCss = appear.useThemeColor
     ? "var(--SmartThemeQuoteColor, #70a1ff)"
     : appear.iconColor;
+  const borderAlpha =
+    appear.borderAlpha === undefined ? 100 : appear.borderAlpha;
   const borderColorCss = appear.useThemeColor
     ? "var(--SmartThemeQuoteColor, #70a1ff)"
-    : appear.borderColor;
+    : luluHexToRgba(appear.borderColor, borderAlpha);
 
   if ($("#lulu-wb-floating-style").length === 0) {
     const styleHtml = `<style id="lulu-wb-floating-style"> #lulu-wb-floating-btn { position: fixed !important; top: 45vh !important; right: 15px !important; width: ${flConf.size}px !important; height: ${flConf.size}px !important; opacity: ${flConf.opacity} !important; background: ${bgCss} !important; color: ${iconColorCss} !important; border: 2px solid ${borderColorCss} !important; border-radius: 50% !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: ${flConf.size * 0.45}px !important; cursor: pointer !important; box-shadow: 0 4px 12px rgba(0,0,0,0.6) !important; z-index: 2147483647 !important; user-select: none !important; touch-action: none !important; -webkit-tap-highlight-color: transparent !important; transition: transform 0.2s, opacity 0.2s !important; }
@@ -999,8 +1144,8 @@ $menuBtn.on("click", async () => {
             .wb-list-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; align-content: start; max-height: 55vh; overflow-y: auto; background: var(--SmartThemeBlurTintColor); border-radius: 8px; border: 1px solid var(--SmartThemeBorderColor); padding: 10px; position: relative; }
             .wb-snapshot-list { display: flex; flex-direction: column; gap: 8px; max-height: 35vh; overflow-y: auto; background: var(--SmartThemeBlurTintColor); border-radius: 8px; border: 1px solid var(--SmartThemeBorderColor); padding: 10px; }
 
-            .wb-item-wrapper { display: flex; flex-direction: column; background: var(--SmartThemeBotMesColor); border-radius: 6px; border: 1px solid var(--SmartThemeBorderColor); transition: 0.2s; overflow: hidden; padding: 10px; gap: 4px; }
-            .wb-item-wrapper:hover { border-color: var(--SmartThemeQuoteColor); box-shadow: 0 4px 8px rgba(0,0,0,0.1); transform: translateY(-1px); z-index: 10; }
+            .wb-item-wrapper { display: flex; flex-direction: column; background: var(--SmartThemeBotMesColor); border-radius: 6px; border: 1px solid var(--SmartThemeBorderColor); border-left: 3px solid rgba(125,125,125,0.35); transition: 0.2s; overflow: hidden; padding: 10px; gap: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+            .wb-item-wrapper:hover { border-color: var(--SmartThemeQuoteColor); box-shadow: 0 4px 8px rgba(0,0,0,0.18); transform: translateY(-1px); z-index: 10; }
 
             .wb-item-header { display: flex; justify-content: flex-start; align-items: flex-start; gap: 8px; width: 100%; overflow: hidden; }
             .wb-item-title-area { display: flex; align-items: flex-start; gap: 8px; flex: 1; min-width: 0; padding-bottom: 2px; }
@@ -1025,6 +1170,16 @@ $menuBtn.on("click", async () => {
 
             .wb-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
             .wb-controls-group { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; flex-shrink: 0; justify-content: flex-end;}
+            /* 给筛选下拉框一个明确可见的边框，避免看起来没有边界 */
+            .wb-toolbar select.wb-input-dt {
+                border: 1px solid var(--SmartThemeQuoteColor) !important;
+                border-radius: 6px !important;
+                background: var(--lulu-input-bg, var(--SmartThemeBotMesColor)) !important;
+            }
+            .wb-toolbar select.wb-input-dt:hover {
+                border-color: var(--SmartThemeQuoteColor) !important;
+                box-shadow: 0 0 0 1px var(--SmartThemeQuoteColor) inset;
+            }
 
             .wb-btn-group { display: flex; gap: 10px; margin: 10px 0; flex-wrap: wrap; }
             .wb-action-btn { flex: 1; min-width: 140px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; padding: 10px; border-radius: 6px; background: transparent; color: var(--SmartThemeBodyColor); border: 1px solid var(--SmartThemeBorderColor); transition: 0.2s; font-weight: bold; font-size: 13px; box-sizing: border-box; text-align: center; white-space: nowrap; word-break: keep-all; }
@@ -1183,7 +1338,7 @@ $menuBtn.on("click", async () => {
                 border-left: none !important;
                 padding: 0 !important;
             }
-/* 强迫症专属：批量操作网格布局 */
+            /* 强迫症专属：批量操作网格布局 */
             .lulu-batch-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
@@ -1200,9 +1355,6 @@ $menuBtn.on("click", async () => {
                 .lulu-batch-grid {
                     grid-template-columns: 1fr 1fr !important; /* 手机端绝对严格2列对齐 */
                     gap: 6px !important;
-                }
-                .lulu-batch-grid .lulu-btn-danger-full {
-                    grid-column: 1 / -1; /* 危险的删除按钮跨越两列，拉满更美观 */
                 }
                 #wb-entry-batch-actions {
                     padding: 8px !important;
@@ -1262,8 +1414,8 @@ $menuBtn.on("click", async () => {
                 #wb-main-ops-grid .wb-action-btn { width: 100%; min-width: 0 !important; padding: 7px 4px !important; font-size: 10.8px !important; line-height: 1.18 !important; }
                 .wb-action-btn { width: 100%; min-width: 0 !important; padding: 8px 6px !important; font-size: 11.5px !important; }
 
-                .wb-list-grid { grid-template-columns: 1fr; padding: 7px; gap: 8px; }
-                .wb-item-wrapper { padding: 8px; }
+                .wb-list-grid { grid-template-columns: 1fr; padding: 7px; gap: 10px; }
+                .wb-item-wrapper { padding: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); border-left-width: 4px; }
                 .wb-item-bottom { flex-direction: row; align-items: center; gap: 6px; flex-wrap: wrap; }
                 .wb-item-actions { width: auto; justify-content: flex-start; flex-wrap: nowrap !important; gap: 4px !important; flex-shrink: 0; }
                 .wb-item-actions .wb-icon-btn { width: 24px !important; height: 24px !important; font-size: 10.5px !important; }
@@ -1290,7 +1442,45 @@ $menuBtn.on("click", async () => {
                 #wb-detailed-snap-view .wb-btn-group { order: -1; margin-bottom: 10px; }
 
                 /* 条目页：继续强压缩顶部 */
-                #wb-entry-view > div:first-child { margin-bottom: 4px !important; gap: 4px !important; padding-bottom: 2px; }
+                #wb-entry-view > div:first-child {
+                    margin-bottom: 4px !important;
+                    gap: 4px !important;
+                    padding-bottom: 2px;
+                    flex-direction: column !important;
+                    align-items: stretch !important;
+                }
+                /* 标题行：不换行超长省略号，不再把整个面板撑成竖长条 */
+                #wb-entry-view > div:first-child > span:first-child {
+                    width: 100% !important;
+                    min-width: 0 !important;
+                }
+                #wb-entry-title {
+                    white-space: nowrap !important;
+                    overflow: hidden !important;
+                    text-overflow: ellipsis !important;
+                    max-width: 100% !important;
+                    display: block !important;
+                }
+                /* 三个开关（启用分组/内容预览/全屏编辑）整齐三等分一排 */
+                #wb-entry-view > div:first-child > div {
+                    display: grid !important;
+                    grid-template-columns: 1fr 1fr 1fr !important;
+                    gap: 4px !important;
+                    width: 100% !important;
+                }
+                #wb-entry-view > div:first-child > div label {
+                    width: 100% !important;
+                    box-sizing: border-box !important;
+                    justify-content: center !important;
+                    padding: 5px 2px !important;
+                    font-size: 10.5px !important;
+                    margin: 0 !important;
+                }
+                #wb-entry-view > div:first-child > div label span {
+                    white-space: nowrap !important;
+                    overflow: hidden !important;
+                    text-overflow: ellipsis !important;
+                }
                 #wb-entry-view > div:first-child label { padding: 3px 7px !important; font-size: 10.8px !important; }
                 #wb-entry-list-side > div:first-child { gap: 5px !important; margin-bottom: 5px !important; }
                 #wb-entry-list-side > div:first-child input,
@@ -1536,14 +1726,14 @@ $menuBtn.on("click", async () => {
 
             <div id="wb-top-control-bar" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 8px; flex-wrap: wrap; gap: 10px;">
                 <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                    <h2 style="margin: 0; font-size: 18px; color: var(--SmartThemeQuoteColor); font-weight: bold; white-space: nowrap;"><i class="fa-solid fa-book-journal-whills"></i> 世界书综合管理中枢</h2>
+                    <h2 style="margin: 0; font-size: 18px; color: var(--SmartThemeQuoteColor); font-weight: bold; white-space: nowrap;"><i class="fa-solid fa-book-journal-whills"></i> 世界书管理</h2>
                     <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px; margin: 0; white-space: nowrap; background: rgba(125,125,125,0.1); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--SmartThemeBorderColor);">
                         <input type="checkbox" id="wb-toggle-floating" style="accent-color: var(--SmartThemeQuoteColor); transform: scale(1.1);">
-                        <span style="font-weight: bold; color: var(--SmartThemeQuoteColor);">🔮 开启悬浮球</span>
+                        <span style="font-weight: bold; color: var(--SmartThemeQuoteColor);">悬浮球</span>
                     </label>
                     <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px; margin: 0; white-space: nowrap; background: rgba(125,125,125,0.1); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--SmartThemeBorderColor);">
                         <input type="checkbox" id="wb-toggle-native-magic" style="accent-color: #51cf66; transform: scale(1.1);">
-                        <span style="font-weight: bold; color: #51cf66;">🪄 原生分类同步</span>
+                        <span style="font-weight: bold; color: #51cf66;">原生分类同步</span>
                     </label>
                     <button id="wb-theme-quick-toggle" class="menu_button interactable btn-primary" style="margin: 0; padding: 4px 10px; min-width: unset; font-size: 13px; border-radius: 6px; flex-shrink: 0; white-space: nowrap;" title="一键切换深色/浅色护眼模式"><i class="fa-solid fa-circle-half-stroke"></i></button>
                     <button id="wb-theme-toggle-btn" class="menu_button interactable btn-primary" style="margin: 0; padding: 4px 10px; min-width: unset; font-size: 13px; border-radius: 6px; flex-shrink: 0; white-space: nowrap;"><i class="fa-solid fa-palette"></i> 外观设置</button>
@@ -1695,9 +1885,11 @@ $menuBtn.on("click", async () => {
                         <span style="color: var(--SmartThemeQuoteColor); font-weight: bold; font-size: 14px; margin-top: 4px;"><i class="fa-solid fa-check-double"></i> 选中的世界书 (<span id="wb-batch-count">0</span>)：</span>
                         <div style="display:flex; gap: 8px; flex-wrap: wrap;">
                              <button class="menu_button interactable btn-warning wb-nowrap-btn" id="wb-btn-batch-group" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px; background: rgba(252, 196, 25, 0.15); color: #fcc419;"><i class="fa-solid fa-folder-tree"></i> 批量分组</button>
+                             <button class="menu_button interactable btn-secondary wb-nowrap-btn" id="wb-btn-batch-ungroup" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-folder-minus"></i> 批量移出分类</button>
                              <button class="menu_button interactable btn-primary wb-nowrap-btn" id="wb-btn-batch-export" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-file-export"></i> 批量打包导出</button>
                              <button class="menu_button interactable btn-danger wb-nowrap-btn" id="wb-btn-confirm-delete" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-burst"></i> 确认永久删除</button>
                         </div>
+
                     </div>
                     <div id="wb-batch-selected-list" style="display: flex; flex-wrap: wrap; gap: 6px; max-height: 80px; overflow-y: auto;"></div>
                 </div>
@@ -1906,11 +2098,10 @@ $menuBtn.on("click", async () => {
                                  <button class="menu_button interactable btn-secondary wb-nowrap-btn" id="wb-btn-entry-batch-disable"><i class="fa-solid fa-toggle-off"></i> 批量关闭</button>
                                  <button class="menu_button interactable btn-warning wb-nowrap-btn" id="wb-btn-entry-batch-group"><i class="fa-solid fa-folder-tree"></i> 批量改组</button>
                                  <button class="menu_button interactable btn-warning wb-nowrap-btn" id="wb-btn-entry-batch-prefix"><i class="fa-solid fa-tags"></i> 批量前缀</button>
-                                 <button class="menu_button interactable btn-info wb-nowrap-btn" id="wb-btn-entry-batch-position"><i class="fa-solid fa-location-dot"></i> 批量位移</button>
-                                 <button class="menu_button interactable btn-primary wb-nowrap-btn" id="wb-btn-entry-batch-strategy"><i class="fa-solid fa-lightbulb"></i> 批量灯色</button>
                                  <button class="menu_button interactable btn-primary wb-nowrap-btn" id="wb-btn-entry-batch-recursion"><i class="fa-solid fa-shield-halved"></i> 防止递归</button>
-                                 <!-- 危险操作放最后，独占一行（通过CSS控制） -->
-                                 <button class="menu_button interactable btn-danger wb-nowrap-btn lulu-btn-danger-full" id="wb-btn-entry-confirm-delete"><i class="fa-solid fa-burst"></i> 暂存移除所选项</button>
+                                 <button class="menu_button interactable btn-primary wb-nowrap-btn" id="wb-btn-entry-batch-strategy"><i class="fa-solid fa-lightbulb"></i> 批量灯色</button>
+                                 <button class="menu_button interactable btn-info wb-nowrap-btn" id="wb-btn-entry-batch-position"><i class="fa-solid fa-location-dot"></i> 批量位移</button>
+                                 <button class="menu_button interactable btn-danger wb-nowrap-btn" id="wb-btn-entry-confirm-delete"><i class="fa-solid fa-burst"></i> 暂存移除所选项</button>
                             </div>
                         </div>
 
@@ -1985,6 +2176,13 @@ $menuBtn.on("click", async () => {
                                     <span><strong style="color: var(--SmartThemeBodyColor);">详细参数</strong></span>
                                 </label>
                                 <div id="wb-det-advanced-panel" style="display:none; flex-wrap: wrap; gap: 8px; align-items: flex-end;">
+                                    <div class="wb-form-group" style="min-width: 130px; flex: 1; margin-bottom: 0;">
+                                        <label style="font-size: 12px; font-weight: bold; margin-bottom: 4px; color: var(--SmartThemeQuoteColor);">🆔 UID</label>
+                                        <div style="display:flex; gap:4px; align-items:center;">
+                                            <input type="text" id="wb-det-uid" class="wb-input-dt" readonly style="flex:1; min-width:0; cursor:default; background:rgba(125,125,125,0.1) !important;" title="这是条目的唯一ID，只读">
+                                            <button id="wb-det-uid-copy" class="menu_button interactable btn-primary" style="margin:0; padding:0 10px; height:26px; min-width:unset; border-radius:4px; flex-shrink:0;" title="一键复制UID"><i class="fa-solid fa-copy"></i></button>
+                                        </div>
+                                    </div>
                                     <div class="wb-form-group" style="width: 70px; margin-bottom: 0;">
                                         <label style="font-size: 12px; font-weight: bold; margin-bottom: 4px; color: var(--SmartThemeQuoteColor);">🎲 概率%</label>
                                         <input type="number" id="wb-det-probability" class="wb-input-dt" min="0" max="100" placeholder="100">
@@ -2698,11 +2896,7 @@ $menuBtn.on("click", async () => {
     .find("#wb-toggle-floating")
     .parent()
     .after(
-      `<div id="lulu-float-config-area" style="display:none; align-items:center; gap:8px; margin-left:10px; flex-wrap:wrap;">
-        <label style="font-size:12px; font-weight:bold; margin:0; color:gray;">大小: <input type="range" id="wb-float-size" min="30" max="70" value="48" style="width:60px; accent-color:var(--SmartThemeQuoteColor); cursor:pointer;"></label>
-        <label style="font-size:12px; font-weight:bold; margin:0; color:gray;">可视度: <input type="range" id="wb-float-opacity" min="0.2" max="1" step="0.1" value="0.8" style="width:60px; accent-color:var(--SmartThemeQuoteColor); cursor:pointer;"></label>
-        <button id="wb-float-appearance-btn" class="menu_button interactable btn-primary" style="margin:0; padding:4px 10px; min-width:unset; font-size:12px; border-radius:6px; white-space:nowrap;"><i class="fa-solid fa-palette"></i> 悬浮球外观</button>
-      </div>
+      `<div id="lulu-float-config-area" style="display:none;"></div>
       <div id="wb-float-appearance-panel" style="display:none; width:100%; margin-top:10px; padding:12px; border-radius:8px; border:1px dashed var(--SmartThemeQuoteColor); background:rgba(0,0,0,0.1);">
         <div style="font-weight:bold; margin-bottom:10px; color:var(--SmartThemeQuoteColor);"><i class="fa-solid fa-wand-magic-sparkles"></i> 悬浮球外观自定义</div>
 
@@ -2748,7 +2942,11 @@ $menuBtn.on("click", async () => {
           </div>
 
 
-
+          <!-- 大小与可视度（从顶部搬进来） -->
+          <div style="border-top:1px dashed var(--SmartThemeBorderColor); padding-top:10px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+            <label style="font-size:12px; font-weight:bold; margin:0;">大小: <input type="range" id="wb-float-size" min="30" max="70" value="48" style="width:80px; accent-color:var(--SmartThemeQuoteColor); cursor:pointer; vertical-align:middle;"></label>
+            <label style="font-size:12px; font-weight:bold; margin:0;">可视度: <input type="range" id="wb-float-opacity" min="0.2" max="1" step="0.1" value="0.8" style="width:80px; accent-color:var(--SmartThemeQuoteColor); cursor:pointer; vertical-align:middle;"></label>
+          </div>
           <!-- 颜色设置 -->
           <div style="border-top:1px dashed var(--SmartThemeBorderColor); padding-top:10px;">
             <label style="cursor:pointer; display:flex; align-items:center; gap:6px; font-size:13px; margin-bottom:10px;">
@@ -2772,6 +2970,11 @@ $menuBtn.on("click", async () => {
               <div style="display:flex; align-items:center; gap:6px;">
                 <label style="font-size:12px; font-weight:bold;">边框色:</label>
                 <input type="color" id="wb-float-border-color" value="#70a1ff" style="width:32px; height:28px; border:none; padding:0; cursor:pointer;">
+              </div>
+              <div style="display:flex; align-items:center; gap:6px;">
+                <label style="font-size:12px; font-weight:bold;">边框透明度:</label>
+                <input type="range" id="wb-float-border-alpha" min="0" max="100" value="100" style="width:70px; accent-color:var(--SmartThemeQuoteColor); cursor:pointer;">
+                <span id="wb-float-border-alpha-val" style="font-size:12px; min-width:34px;">100%</span>
               </div>
             </div>
             <span style="font-size:11px; color:gray; display:block; margin-top:6px;">* 图片模式下“图标色”无效哦~</span>
@@ -2880,6 +3083,9 @@ $menuBtn.on("click", async () => {
     $ui.find("#wb-float-bg-alpha-val").text(_bgAlpha + "%");
     $ui.find("#wb-float-icon-color").val(ap.iconColor || "#70a1ff");
     $ui.find("#wb-float-border-color").val(ap.borderColor || "#70a1ff");
+    const _bdAlpha = ap.borderAlpha === undefined ? 100 : ap.borderAlpha;
+    $ui.find("#wb-float-border-alpha").val(_bdAlpha);
+    $ui.find("#wb-float-border-alpha-val").text(_bdAlpha + "%");
     updateFloatAppearanceRows();
     renderIconFavList();
   };
@@ -2899,7 +3105,7 @@ $menuBtn.on("click", async () => {
     $ui.find("#wb-float-color-row").css("opacity", useTheme ? "0.4" : "1");
     $ui
       .find(
-        "#wb-float-bg-color, #wb-float-icon-color, #wb-float-border-color, #wb-float-bg-alpha",
+        "#wb-float-bg-color, #wb-float-icon-color, #wb-float-border-color, #wb-float-bg-alpha, #wb-float-border-alpha",
       )
       .prop("disabled", useTheme);
   };
@@ -2922,6 +3128,9 @@ $menuBtn.on("click", async () => {
   $ui.find("#wb-float-bg-alpha").on("input", function () {
     $ui.find("#wb-float-bg-alpha-val").text($(this).val() + "%");
   });
+  $ui.find("#wb-float-border-alpha").on("input", function () {
+    $ui.find("#wb-float-border-alpha-val").text($(this).val() + "%");
+  });
 
   $ui.find("#wb-float-appearance-save").on("click", () => {
     const newAppear = {
@@ -2934,6 +3143,7 @@ $menuBtn.on("click", async () => {
       bgAlpha: parseInt($ui.find("#wb-float-bg-alpha").val()),
       iconColor: $ui.find("#wb-float-icon-color").val(),
       borderColor: $ui.find("#wb-float-border-color").val(),
+      borderAlpha: parseInt($ui.find("#wb-float-border-alpha").val()),
     };
     if (newAppear.iconType === "img" && !newAppear.imgUrl) {
       return toastr.warning("选择了图片模式，但还没填图片链接哦~");
@@ -2972,9 +3182,6 @@ $menuBtn.on("click", async () => {
   $ui.find("#wb-toggle-floating").on("change", function () {
     const isEnable = $(this).is(":checked");
     localStorage.setItem("lulu_wb_floating_enabled", isEnable);
-    $ui
-      .find("#lulu-float-config-area")
-      .css("display", isEnable ? "flex" : "none");
     toggleFloatingButton(isEnable, true);
     if (typeof toastr !== "undefined") {
       toastr.success(
@@ -2984,9 +3191,6 @@ $menuBtn.on("click", async () => {
       );
     }
   });
-  if ($ui.find("#wb-toggle-floating").is(":checked")) {
-    $ui.find("#lulu-float-config-area").css("display", "flex");
-  }
 
   const isNativeMagicEnabledNow =
     localStorage.getItem("lulu_wb_native_magic_enabled") !== "false";
@@ -5109,6 +5313,88 @@ $menuBtn.on("click", async () => {
     );
     renderData();
   });
+  // ✨ 批量移出分类/收藏夹
+  $ui.find("#wb-btn-batch-ungroup").on("click", async () => {
+    if (batchSelected.size === 0)
+      return toastr.warning("请先勾选需要移出分类的世界书哦~");
+
+    const cats = getCategories();
+    // 统计：选中的这些书，都出现在哪些分类里
+    const relatedCats = Object.keys(cats).filter((c) => {
+      if (!Array.isArray(cats[c])) return false;
+      return Array.from(batchSelected).some((wb) => cats[c].includes(wb));
+    });
+
+    if (relatedCats.length === 0) {
+      return toastr.info("选中的世界书本来就不在任何分类里呢~");
+    }
+
+    // 构建下拉选项：所有相关分类 + 一个"全部移出"
+    let optionsHtml = '<option value="__ALL__">🧹 从所有分类中移出</option>';
+    relatedCats.forEach((c) => {
+      optionsHtml += `<option value="${c}">${c}</option>`;
+    });
+
+    const dialogHtml = `
+      <div style="padding:6px; font-family:sans-serif; min-width:280px; text-align:left;">
+        <div style="font-weight:bold; margin-bottom:10px; color:var(--SmartThemeQuoteColor); font-size:15px;">
+          <i class="fa-solid fa-folder-minus"></i> 把选中的 ${batchSelected.size} 本书移出分类
+        </div>
+        <div style="margin-bottom:8px;">
+          <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">选择要移出的分类：</label>
+          <select id="lulu-batch-ungrp-select" style="width:100%; box-sizing:border-box; padding:8px; border-radius:6px; border:1px solid var(--SmartThemeBorderColor); background:var(--lulu-input-bg, var(--SmartThemeBotMesColor)); color:var(--SmartThemeBodyColor);">
+            ${optionsHtml}
+          </select>
+        </div>
+        <div style="font-size:11px; color:gray; margin-top:8px;">* 只是把书从分类里拿出来，世界书本身安然无恙哦~</div>
+      </div>
+    `;
+
+    const $dialog = $(dialogHtml);
+    $dialog
+      .attr("id", "lulu-batch-ungrp-dialog")
+      .prepend(
+        `<style>${buildPopupThemeCSS("dialog:has(#lulu-batch-ungrp-dialog)")}</style>`,
+      );
+
+    const result = await SillyTavern.callGenericPopup(
+      $dialog,
+      SillyTavern.POPUP_TYPE.CONFIRM,
+      "",
+      { okButton: "确认移出", cancelButton: "取消" },
+    );
+
+    if (result !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+
+    const target = $dialog.find("#lulu-batch-ungrp-select").val();
+    let data = getCategories();
+    let removeCount = 0;
+
+    if (target === "__ALL__") {
+      // 从所有分类里移出
+      Object.keys(data).forEach((c) => {
+        if (!Array.isArray(data[c])) return;
+        const before = data[c].length;
+        data[c] = data[c].filter((wb) => !batchSelected.has(wb));
+        removeCount += before - data[c].length;
+      });
+    } else {
+      // 只从指定分类移出
+      if (Array.isArray(data[target])) {
+        const before = data[target].length;
+        data[target] = data[target].filter((wb) => !batchSelected.has(wb));
+        removeCount = before - data[target].length;
+      }
+    }
+
+    saveCategories(data);
+    toastr.success(
+      target === "__ALL__"
+        ? `已将选中的书从所有分类中移出（共 ${removeCount} 次移出操作）！`
+        : `已将选中的书移出分类 [${target}]！`,
+    );
+    renderData();
+  });
   const renderCharView = () => {
     let vars = getVariables({ type: "global" });
     let charSnaps = vars.wb_char_snapshots;
@@ -6980,9 +7266,33 @@ $menuBtn.on("click", async () => {
       }
 
       tuneEntries = JSON.parse(JSON.stringify(fetched));
+      // ✨ 先读出这本书的"前缀→长分组名"对照表
+      const luluPrefixMap = readGroupMapFromEntries(tuneEntries);
+      // ✨ 把对照表里的"前缀↔长分组名"关系，同步进前缀记忆库
+      //    这样别人的卡导入后，你也能接着编辑/使用这些自定义前缀
+      if (luluPrefixMap && Object.keys(luluPrefixMap).length > 0) {
+        const _prefixStore = getGroupPrefixStore();
+        if (!_prefixStore[wbName]) _prefixStore[wbName] = {};
+        for (const [prefix, longGroup] of Object.entries(luluPrefixMap)) {
+          // 记忆结构是 { 长分组名: 前缀 }
+          _prefixStore[wbName][longGroup] = prefix;
+        }
+        saveGroupPrefixStore(_prefixStore);
+      }
       tuneEntries.forEach((e) => {
+        // 0. 如果这是对照表条目本身，跳过，不给它分组
+        if (isLuluMapEntry(e)) {
+          e._lulu_ui_group = "";
+          if (!e.key) e.key = e.strategy?.keys || [];
+          if (!e.keys) e.keys = e.strategy?.keys || [];
+          return;
+        }
+
         // 1. 优先读取全局缓存的分组
-        let group = getEntryUiGroup(wbName, e.uid);
+        //    ✨ 但如果这本书带有对照表（说明是"完整分组信息的书"），就跳过本地缓存，以对照表/前缀为准
+        //    这样跨设备、覆盖导入同名书时，不会被本地旧缓存干扰
+        const _hasMap = luluPrefixMap && Object.keys(luluPrefixMap).length > 0;
+        let group = _hasMap ? "" : getEntryUiGroup(wbName, e.uid);
 
         // 2. 如果缓存没有，尝试读取条目自带的隐形扩展元数据 (兼容原生角色卡导入)
         if (!group && e.extensions && e.extensions.lulu_group) {
@@ -6993,7 +7303,19 @@ $menuBtn.on("click", async () => {
         if (!group && e.name) {
           const prefixMatch = e.name.match(/^【(.*?)】/);
           if (prefixMatch && prefixMatch[1]) {
-            group = prefixMatch[1].trim();
+            const rawPrefix = prefixMatch[1].trim();
+            // ✨ 关键：拿前缀去对照表里查长分组名
+            //    - 前缀登记在对照表里 → 还原成长分组名（分组党）
+            //    - 前缀没登记（纯装饰前缀） → 若对照表存在则不当分组；对照表不存在则按老规矩当分组名（向下兼容）
+            if (luluPrefixMap && luluPrefixMap[rawPrefix]) {
+              group = luluPrefixMap[rawPrefix];
+            } else if (Object.keys(luluPrefixMap).length > 0) {
+              // 这本书有对照表，但这个前缀没登记 → 判定为"纯装饰前缀"，不分组
+              group = "";
+            } else {
+              // 这本书压根没有对照表（老书/老卡）→ 保持老逻辑，前缀直接当分组名
+              group = rawPrefix;
+            }
           }
         }
 
@@ -7341,78 +7663,235 @@ $menuBtn.on("click", async () => {
     renderEntryList();
     toastr.success("选中的条目已全部关闭！记得点左下角保存哦~");
   });
-  // ✨ 新增：全局批量前缀功能
+  // ✨ 批量前缀功能（三选项版：加/去 + 分组名/自定义 + 是否作为分组）
   $ui.find("#wb-btn-entry-batch-prefix").on("click", async () => {
     if (entryBatchSelected.size === 0)
       return toastr.warning("请先选中要操作的条目哦~");
 
-    const btnRes = await SillyTavern.callGenericPopup(
-      `<div style="margin-bottom:8px;">要对选中的 <strong>${entryBatchSelected.size}</strong> 项条目进行【智能前缀】操作吗？</div>
-       <span style="font-size:12px; color:gray;">(添加时，脚本会自动读取每个条目当前所在的分组，并打上对应的【分组名】前缀；未分类的条目会被自动跳过哦)</span>`,
-      SillyTavern.POPUP_TYPE.TEXT,
+    const dialogHtml = `
+      <div style="padding:6px; font-family:sans-serif; min-width:300px; max-width:400px; text-align:left;">
+        <div style="font-weight:bold; margin-bottom:12px; color:var(--SmartThemeQuoteColor); font-size:15px;">
+          <i class="fa-solid fa-tags"></i> 批量前缀操作（选中 ${entryBatchSelected.size} 项）
+        </div>
+
+        <div style="margin-bottom:12px; padding:10px; background:rgba(0,0,0,0.1); border-radius:6px;">
+          <div style="font-size:12px; font-weight:bold; margin-bottom:8px; color:var(--SmartThemeQuoteColor);">① 操作类型：</div>
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px; margin-bottom:6px; cursor:pointer;">
+            <input type="radio" name="lulu-pre-action" value="add" checked style="accent-color:var(--SmartThemeQuoteColor);"> <span>加前缀</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer;">
+            <input type="radio" name="lulu-pre-action" value="remove" style="accent-color:var(--SmartThemeQuoteColor);"> <span>去前缀</span>
+          </label>
+        </div>
+
+        <div id="lulu-pre-add-opts">
+          <div style="margin-bottom:12px; padding:10px; background:rgba(0,0,0,0.1); border-radius:6px;">
+            <div style="font-size:12px; font-weight:bold; margin-bottom:8px; color:var(--SmartThemeQuoteColor);">② 前缀来源：</div>
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px; margin-bottom:6px; cursor:pointer;">
+              <input type="radio" name="lulu-pre-source" value="group" checked style="accent-color:var(--SmartThemeQuoteColor);"> <span>用分组名（默认）</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px; margin-bottom:6px; cursor:pointer;">
+              <input type="radio" name="lulu-pre-source" value="custom" style="accent-color:var(--SmartThemeQuoteColor);"> <span>自定义前缀：</span>
+            </label>
+            <input type="text" id="lulu-pre-custom-input" class="text_pole" placeholder="输入自定义前缀..." disabled style="width:100%; box-sizing:border-box; padding:7px; margin-top:2px; opacity:0.5;">
+          </div>
+
+          <div style="margin-bottom:6px; padding:10px; background:rgba(0,0,0,0.1); border-radius:6px;">
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer;">
+              <input type="checkbox" id="lulu-pre-asgroup" checked disabled style="accent-color:#51cf66;"> <span style="font-weight:bold;">作为分组标记（登记进对照表）</span>
+            </label>
+            <div style="font-size:11px; color:gray; margin-top:6px; line-height:1.5;">
+              ☑ 勾选 = 是分组，导入后能还原分组<br>
+              ☐ 不勾 = 纯装饰前缀，脚本不当分组
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const $dlg = $(dialogHtml);
+    $dlg
+      .attr("id", "lulu-batch-prefix-dialog")
+      .prepend(
+        `<style>${buildPopupThemeCSS("dialog:has(#lulu-batch-prefix-dialog)")}</style>`,
+      );
+
+    // —— 交互联动 ——
+    // 切换 加/去前缀：去前缀时隐藏下面的选项
+    $dlg.find('input[name="lulu-pre-action"]').on("change", function () {
+      $dlg
+        .find("#lulu-pre-add-opts")
+        .css("display", $(this).val() === "add" ? "block" : "none");
+    });
+    // 切换 前缀来源：自定义时启用输入框；用分组名时锁死"作为分组"
+    const refreshSourceState = () => {
+      const src = $dlg.find('input[name="lulu-pre-source"]:checked').val();
+      const $custom = $dlg.find("#lulu-pre-custom-input");
+      const $asGroup = $dlg.find("#lulu-pre-asgroup");
+      if (src === "custom") {
+        $custom.prop("disabled", false).css("opacity", "1");
+        $asGroup.prop("disabled", false); // 自定义时可自由勾选
+      } else {
+        $custom.prop("disabled", true).css("opacity", "0.5");
+        $asGroup.prop("checked", true).prop("disabled", true); // 用分组名 → 强制勾死作为分组（防呆）
+      }
+    };
+    $dlg.find('input[name="lulu-pre-source"]').on("change", refreshSourceState);
+    refreshSourceState();
+
+    const result = await SillyTavern.callGenericPopup(
+      $dlg,
+      SillyTavern.POPUP_TYPE.CONFIRM,
       "",
-      {
-        okButton: "取消操作",
-        customButtons: [
-          { text: "全部加前缀", result: 888, classes: ["btn-success"] },
-          { text: "全部去前缀", result: 999, classes: ["btn-danger"] },
-        ],
-      },
+      { okButton: "确认执行", cancelButton: "取消" },
     );
+    if (result !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
 
-    if (btnRes !== 888 && btnRes !== 999) return;
+    const action = $dlg.find('input[name="lulu-pre-action"]:checked').val();
 
-    let changedCount = 0;
-    entryBatchSelected.forEach((idx) => {
-      const entry = tuneEntries[idx];
-      let currentName = entry.name || "";
-      const hasAnyPrefix = currentName.match(/^【.*?】/);
+    // ===== 去前缀 =====
+    if (action === "remove") {
+      let changedCount = 0;
+      entryBatchSelected.forEach((idx) => {
+        const entry = tuneEntries[idx];
+        const currentName = entry.name || "";
+        if (currentName.match(/^【.*?】/)) {
+          entry.name = currentName.replace(/^【.*?】\s*/, "");
+          changedCount++;
+        }
+      });
+      entryBatchSelected.clear();
+      $ui.find("#wb-entry-batch-count").text("0");
+      renderEntryList();
+      if (changedCount > 0)
+        toastr.success(
+          `已移除 ${changedCount} 个条目的前缀！记得点左下角保存~`,
+        );
+      else toastr.info("选中的条目都没有前缀呢~");
+      return;
+    }
 
-      // 提取条目的真实所在分组名
-      const grpName = entry._lulu_ui_group || "";
-      const isUncategorized =
-        !grpName || grpName === "📁 未分类条目" || grpName.trim() === "";
+    // ===== 加前缀 =====
+    const source = $dlg.find('input[name="lulu-pre-source"]:checked').val();
+    const asGroup = $dlg.find("#lulu-pre-asgroup").is(":checked");
 
-      if (btnRes === 888) {
-        // 【批量添加】
-        if (isUncategorized) return; // 未分类的没法加前缀，直接跳过
-        const desiredPrefix = `【${grpName.trim()}】`;
-
+    if (source === "group") {
+      // —— 用分组名当前缀（自动读各自分组，未分类的跳过）——
+      let changedCount = 0;
+      entryBatchSelected.forEach((idx) => {
+        const entry = tuneEntries[idx];
+        const grp = entry._lulu_ui_group || "";
+        if (!grp || grp === "📁 未分类条目" || grp.trim() === "") return;
+        // 用分组名时，前缀就用该分组当前设置的前缀
+        const prefix = getGroupPrefix(tuneWbName, grp.trim());
+        const desiredPrefix = `【${prefix}】`;
+        let currentName = entry.name || "";
+        const hasAnyPrefix = currentName.match(/^【.*?】/);
         if (hasAnyPrefix) {
-          // 有老前缀但不对，替换掉
           if (hasAnyPrefix[0] !== desiredPrefix) {
             entry.name = currentName.replace(/^【.*?】\s*/, desiredPrefix);
             changedCount++;
           }
         } else {
-          // 没有前缀，直接加
           entry.name = desiredPrefix + currentName;
           changedCount++;
         }
-      } else if (btnRes === 999) {
-        // 【批量移除】
-        if (hasAnyPrefix) {
-          entry.name = currentName.replace(/^【.*?】\s*/, "");
-          changedCount++;
-        }
-      }
+      });
+      entryBatchSelected.clear();
+      $ui.find("#wb-entry-batch-count").text("0");
+      renderEntryList();
+      if (changedCount > 0)
+        toastr.success(
+          `已为 ${changedCount} 个条目加上分组前缀！记得点左下角保存~`,
+        );
+      else toastr.info("检查了一遍，选中的条目要么没分组、要么前缀已正确~");
+      return;
+    }
+
+    // —— 自定义前缀 ——
+    const customPrefix = $dlg.find("#lulu-pre-custom-input").val().trim();
+    if (!customPrefix) return toastr.warning("自定义前缀不能为空哦~");
+
+    // 检查选中条目跨了几个分组
+    const selectedGroups = new Set();
+    entryBatchSelected.forEach((idx) => {
+      const g = tuneEntries[idx]._lulu_ui_group || "";
+      if (g && g.trim() && g !== "📁 未分类条目") selectedGroups.add(g.trim());
     });
 
-    entryBatchSelected.clear();
-    $ui.find("#wb-entry-batch-count").text("0");
-    renderEntryList();
+    if (asGroup) {
+      // 作为分组：需要处理"跨组"和"确定归入哪个分组"
+      let targetGroup = "";
 
-    if (changedCount > 0) {
-      toastr.success(
-        `批量处理了 ${changedCount} 个条目的前缀！记得点击左下角绿色保存生效哦~`,
-      );
-      // 如果当前详情页正是刚才改过的条目，顺便刷新一下显示
-      if (tuneDetailIndex !== -1 && entryBatchSelected.has(tuneDetailIndex)) {
-        $ui.find("#wb-det-name").val(tuneEntries[tuneDetailIndex].name);
-        $ui.find("#wb-detail-title").text(tuneEntries[tuneDetailIndex].name);
+      if (selectedGroups.size > 1) {
+        // 跨了多个分组 → 询问是否合并成新分组
+        const confirmMerge = await SillyTavern.callGenericPopup(
+          `选中的条目来自 ${selectedGroups.size} 个不同分组，无法统一前缀。<br><br>是否把它们<strong style="color:var(--SmartThemeQuoteColor);">合并成一个新分组</strong>？`,
+          SillyTavern.POPUP_TYPE.CONFIRM,
+        );
+        if (confirmMerge !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+        let newGrpName = await SillyTavern.callGenericPopup(
+          "给这个新分组起个名字（真名，会随卡还原）：",
+          SillyTavern.POPUP_TYPE.INPUT,
+          customPrefix,
+        );
+        if (!newGrpName || !(newGrpName = newGrpName.trim())) return;
+        targetGroup = newGrpName;
+      } else if (selectedGroups.size === 1) {
+        targetGroup = Array.from(selectedGroups)[0];
+      } else {
+        // 都没分组 → 用自定义前缀名当新分组真名
+        targetGroup = customPrefix;
       }
+
+      // 检查前缀撞车
+      const store2 = getGroupPrefixStore();
+      const bookStore2 = store2[tuneWbName] || {};
+      for (const [otherGrp, otherPrefix] of Object.entries(bookStore2)) {
+        if (otherGrp !== targetGroup && otherPrefix === customPrefix) {
+          return toastr.error(
+            `前缀【${customPrefix}】已被分组「${otherGrp}」占用啦~`,
+          );
+        }
+      }
+
+      // 登记前缀 + 给条目归组 + 加前缀
+      setGroupPrefix(tuneWbName, targetGroup, customPrefix);
+      entryBatchSelected.forEach((idx) => {
+        const entry = tuneEntries[idx];
+        entry._lulu_ui_group = targetGroup;
+        let currentName = entry.name || "";
+        const desiredPrefix = `【${customPrefix}】`;
+        if (currentName.match(/^【.*?】/)) {
+          entry.name = currentName.replace(/^【.*?】\s*/, desiredPrefix);
+        } else {
+          entry.name = desiredPrefix + currentName;
+        }
+      });
+      entryBatchSelected.clear();
+      $ui.find("#wb-entry-batch-count").text("0");
+      renderEntryList();
+      toastr.success(
+        `✨ 已用前缀【${customPrefix}】标记为分组「${targetGroup}」！记得点左下角保存~`,
+      );
     } else {
-      toastr.info("检查了一遍，发现选中的条目都不需要修改呢~");
+      // 纯装饰前缀：只加前缀，不动分组、不登记对照表
+      entryBatchSelected.forEach((idx) => {
+        const entry = tuneEntries[idx];
+        let currentName = entry.name || "";
+        const desiredPrefix = `【${customPrefix}】`;
+        if (currentName.match(/^【.*?】/)) {
+          entry.name = currentName.replace(/^【.*?】\s*/, desiredPrefix);
+        } else {
+          entry.name = desiredPrefix + currentName;
+        }
+      });
+      entryBatchSelected.clear();
+      $ui.find("#wb-entry-batch-count").text("0");
+      renderEntryList();
+      toastr.success(
+        `✨ 已加上装饰前缀【${customPrefix}】（不作为分组）！记得点左下角保存~`,
+      );
     }
   });
   $ui.find("#wb-btn-entry-batch-group").on("click", async () => {
@@ -7527,7 +8006,97 @@ $menuBtn.on("click", async () => {
       );
     }
   });
+  // ✨ 打开"设置分组前缀"的弹窗
+  const openSetPrefixDialog = async (groupName) => {
+    const curPrefix = getGroupPrefix(tuneWbName, groupName);
+    const isDefault = curPrefix === groupName;
 
+    const dialogHtml = `
+    <div style="padding:6px; font-family:sans-serif; min-width:280px; text-align:left;">
+      <div style="font-weight:bold; margin-bottom:10px; color:var(--SmartThemeQuoteColor); font-size:15px;">
+        <i class="fa-solid fa-tag"></i> 设置分组前缀
+      </div>
+      <div style="font-size:12px; color:gray; margin-bottom:12px; line-height:1.5;">
+        分组真名：<strong style="color:var(--SmartThemeBodyColor);">${groupName}</strong><br>
+        你可以给它设一个更短的前缀，条目名前面会显示这个短前缀，<br>但别人导入后依然能还原成上面的真名哦~
+      </div>
+      <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">✏️ 前缀文字（留空则用分组真名）：</label>
+      <input type="text" id="lulu-set-prefix-input" class="text_pole" placeholder="例如：设定" value="${isDefault ? "" : curPrefix}" style="width:100%; box-sizing:border-box; padding:8px;">
+      <div style="font-size:11px; color:gray; margin-top:8px;">* 前缀不要和其他分组重复哦~ 显示效果会是【前缀】条目名</div>
+    </div>
+  `;
+
+    const $dlg = $(dialogHtml);
+    $dlg
+      .attr("id", "lulu-set-prefix-dialog")
+      .prepend(
+        `<style>${buildPopupThemeCSS("dialog:has(#lulu-set-prefix-dialog)")}</style>`,
+      );
+
+    const result = await SillyTavern.callGenericPopup(
+      $dlg,
+      SillyTavern.POPUP_TYPE.CONFIRM,
+      "",
+      { okButton: "确认", cancelButton: "取消" },
+    );
+    if (result !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+
+    let newPrefix = $dlg.find("#lulu-set-prefix-input").val().trim();
+    // 留空 = 用分组真名
+    if (!newPrefix) newPrefix = groupName;
+
+    // 检查前缀是否和"别的分组"撞车
+    const store = getGroupPrefixStore();
+    const bookStore = store[tuneWbName] || {};
+    for (const [otherGrp, otherPrefix] of Object.entries(bookStore)) {
+      if (otherGrp !== groupName && otherPrefix === newPrefix) {
+        return toastr.error(
+          `前缀【${newPrefix}】已经被分组「${otherGrp}」占用啦，换一个吧~`,
+        );
+      }
+    }
+    // 也要检查是否和别的分组"真名"撞车（避免歧义）
+    const allGroups = new Set();
+    tuneEntries.forEach((e) => {
+      if (
+        e._lulu_ui_group &&
+        e._lulu_ui_group.trim() &&
+        e._lulu_ui_group !== groupName
+      ) {
+        allGroups.add(e._lulu_ui_group.trim());
+      }
+    });
+    if (allGroups.has(newPrefix)) {
+      return toastr.error(
+        `前缀【${newPrefix}】和另一个分组的真名撞车了，换一个吧~`,
+      );
+    }
+
+    setGroupPrefix(tuneWbName, groupName, newPrefix);
+
+    // 立即更新这个组内所有条目的显示前缀（全组统一，无论原来有没有前缀）
+    tuneEntries.forEach((e) => {
+      if (e._lulu_ui_group === groupName) {
+        const curName = e.name || "";
+        if (curName.match(/^【.*?】/)) {
+          // 本来有前缀 → 替换成新前缀
+          e.name = curName.replace(/^【.*?】\s*/, `【${newPrefix}】`);
+        } else {
+          // 本来没前缀 → 直接加上新前缀
+          e.name = `【${newPrefix}】` + curName;
+        }
+      }
+    });
+
+    renderEntryList();
+    if (newPrefix === groupName) {
+      toastr.success(`分组「${groupName}」已改回使用真名做前缀~`);
+    } else {
+      toastr.success(
+        `✨ 分组「${groupName}」的前缀已设为【${newPrefix}】！记得左下角点保存哦~`,
+      );
+    }
+  };
   let wbEntryGroupState = {};
 
   const renderEntryList = () => {
@@ -7538,6 +8107,8 @@ $menuBtn.on("click", async () => {
     const showPreview = $ui.find("#wb-toggle-entry-preview").is(":checked");
 
     const filteredEntries = tuneEntries.filter((entry) => {
+      // ✨ 对照表条目是脚本内部数据，不显示在列表里
+      if (isLuluMapEntry(entry)) return false;
       const searchStr =
         `${entry.name || ""} ${(entry.strategy?.keys || []).join(",")} ${showPreview ? entry.content || "" : ""}`.toLowerCase();
       return !keyword || searchStr.includes(keyword);
@@ -7641,10 +8212,11 @@ $menuBtn.on("click", async () => {
           `
         : ``;
 
-      // 改名和删除只使用纯图标，极度节省空间
+      // 改名、设前缀、删除只使用纯图标，节省空间
       const editBtnsHtml = isDraggable
         ? `
              <button class="menu_button interactable wb-nowrap-btn btn-info wb-group-rename" style="margin:0; padding:4px 8px; font-size:11px;" title="重命名该分组"><i class="fa-solid fa-pen"></i></button>
+             <button class="menu_button interactable wb-nowrap-btn btn-warning wb-group-prefix" style="margin:0; padding:4px 8px; font-size:11px;" title="设置该分组的显示前缀"><i class="fa-solid fa-tag"></i></button>
              <button class="menu_button interactable wb-nowrap-btn btn-danger wb-group-delete" style="margin:0; padding:4px 8px; font-size:11px;" title="删除分组或解散"><i class="fa-solid fa-trash"></i></button>
           `
         : "";
@@ -7784,6 +8356,23 @@ $menuBtn.on("click", async () => {
           const finalName = newName.trim();
           if (finalName === "📁 未分类条目")
             return toastr.warning("这个名字是系统预留的哦，换一个吧~");
+
+          // ✨ 先读出旧分组的前缀，并把前缀记忆迁移到新分组名下
+          const oldPrefix = getGroupPrefix(tuneWbName, groupName);
+          const wasCustomPrefix = oldPrefix !== groupName; // 之前是否用了自定义前缀
+          const prefixStore = getGroupPrefixStore();
+          if (prefixStore[tuneWbName]) {
+            if (wasCustomPrefix) {
+              // 自定义前缀：把记忆搬到新组名下，前缀值保持不变
+              prefixStore[tuneWbName][finalName] = oldPrefix;
+            }
+            // 删掉旧组名的记忆
+            delete prefixStore[tuneWbName][groupName];
+            saveGroupPrefixStore(prefixStore);
+          }
+          // 决定条目名前缀该用什么：有自定义就沿用旧前缀，没有就用新分组名
+          const displayPrefix = wasCustomPrefix ? oldPrefix : finalName;
+
           // 给组内每个条目更新分组名，如果原本带有前缀，也一并更新前缀
           gEntries.forEach((entry) => {
             entry._lulu_ui_group = finalName;
@@ -7792,7 +8381,7 @@ $menuBtn.on("click", async () => {
             if (currentName.match(/^【.*?】/)) {
               entry.name = currentName.replace(
                 /^【.*?】\s*/,
-                `【${finalName}】`,
+                `【${displayPrefix}】`,
               );
             }
           });
@@ -7813,6 +8402,11 @@ $menuBtn.on("click", async () => {
             `分组名字已经改成【${finalName}】啦！记得左下角点保存哦~`,
           );
         }
+      });
+
+      $gHeader.find(".wb-group-prefix").on("click", async (e) => {
+        e.stopPropagation();
+        await openSetPrefixDialog(groupName);
       });
 
       $gHeader.find(".wb-group-delete").on("click", async (e) => {
@@ -7844,6 +8438,12 @@ $menuBtn.on("click", async () => {
             (entry) => !uidsToRemove.includes(entry.uid),
           );
           delete wbEntryGroupState[groupName];
+          // ✨ 清理该分组的前缀记忆
+          const _ps888 = getGroupPrefixStore();
+          if (_ps888[tuneWbName]) {
+            delete _ps888[tuneWbName][groupName];
+            saveGroupPrefixStore(_ps888);
+          }
           renderEntryList();
           toastr.success(
             `【${groupName}】内容已被彻底扫除干净啦！记得按绿色保存按钮哦~`,
@@ -7851,6 +8451,12 @@ $menuBtn.on("click", async () => {
         } else if (btnRes === 999) {
           gEntries.forEach((entry) => (entry._lulu_ui_group = ""));
           delete wbEntryGroupState[groupName];
+          // ✨ 清理该分组的前缀记忆
+          const _ps999 = getGroupPrefixStore();
+          if (_ps999[tuneWbName]) {
+            delete _ps999[tuneWbName][groupName];
+            saveGroupPrefixStore(_ps999);
+          }
           renderEntryList();
           toastr.success(
             `【${groupName}】已解散，里面的内容已经安全返回未分类区啦。`,
@@ -7904,10 +8510,17 @@ $menuBtn.on("click", async () => {
             .prop("checked", entry.enabled)
             .on("change", function () {
               entry.enabled = $(this).is(":checked");
-              renderEntryList();
+              // ✨ 只更新当前这一条的外观，不整个列表重画（更顺滑）
+              const _isEn = entry.enabled;
+              $item.css({
+                "border-left-color": _isEn ? "var(--okGreen)" : "gray",
+                background: _isEn
+                  ? "var(--SmartThemeBotMesColor)"
+                  : "rgba(125,125,125,0.08)",
+                opacity: _isEn ? "1" : "0.55",
+              });
             });
         }
-
         let previewHtml = "";
         if (showPreview && entry.content) {
           previewHtml = `<div class="content-preview">${entry.content.replace(/</g, "<").replace(/>/g, ">")}</div>`;
@@ -8474,6 +9087,25 @@ $menuBtn.on("click", async () => {
         delete e._lulu_ui_group;
       });
       saveWbUiGroups(uiGroupsMap);
+      // ✨ 收集当前用到的"前缀→长分组名"映射，只登记那些"前缀≠分组名"的
+      const prefixMapUsed = {};
+      const seenGroups = new Set();
+      pureEntries.forEach((e) => {
+        const grp =
+          e.extensions && e.extensions.lulu_group
+            ? e.extensions.lulu_group
+            : "";
+        if (grp && !seenGroups.has(grp)) {
+          seenGroups.add(grp);
+          const prefix = getGroupPrefix(tuneWbName, grp);
+          // 只有"前缀和分组名不一样"时，才需要写进对照表
+          if (prefix && prefix !== grp) {
+            prefixMapUsed[prefix] = grp;
+          }
+        }
+      });
+      // 根据映射，生成/更新/清理对照表条目
+      syncMapEntryIntoEntries(pureEntries, prefixMapUsed);
       await replaceWorldbook(tuneWbName, pureEntries);
     }, `写入中...`);
     if (isSuccess === false) return; // 补丁：如果没成功，立刻停下，不要往下弹绿条了！
@@ -8662,6 +9294,50 @@ $menuBtn.on("click", async () => {
     applyAdvancedParamVisibility();
   });
 
+  // ✨ 一键复制 UID
+  $ui.find("#wb-det-uid-copy").on("click", async (e) => {
+    e.preventDefault();
+    const uidVal = $ui.find("#wb-det-uid").val();
+    if (uidVal === "" || uidVal === null || uidVal === undefined) {
+      return toastr.warning("这个条目还没有 UID 呢~");
+    }
+    let copied = false;
+    // 优先用现代剪贴板 API
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(String(uidVal));
+        copied = true;
+      }
+    } catch (err) {
+      copied = false;
+    }
+    // 兜底方案（某些手机/旧环境不支持上面的 API）
+    if (!copied) {
+      try {
+        const $temp = $("<textarea>")
+          .val(String(uidVal))
+          .css({ position: "fixed", left: "-9999px", top: "0" })
+          .appendTo("body");
+        $temp[0].select();
+        document.execCommand("copy");
+        $temp.remove();
+        copied = true;
+      } catch (err2) {
+        copied = false;
+      }
+    }
+    if (copied) {
+      toastr.success(`✨ UID [${uidVal}] 已复制到剪贴板~`);
+      // 按钮变个勾勾反馈一下
+      const $btn = $ui.find("#wb-det-uid-copy");
+      const oldHtml = $btn.html();
+      $btn.html('<i class="fa-solid fa-check"></i>');
+      setTimeout(() => $btn.html(oldHtml), 1200);
+    } else {
+      toastr.error("复制失败了，可以手动长按选中框里的 UID 复制哦~");
+    }
+  });
+
   const openDetailEditView = (index) => {
     $ui.find("#wb-entry-split-wrapper").addClass("is-editing-entry"); // ✨新增：标记进入编辑状态
     tuneDetailIndex = index;
@@ -8690,6 +9366,10 @@ $menuBtn.on("click", async () => {
         false;
     $ui.find("#wb-det-exclude-recursion").prop("checked", !!isExclude);
     $ui.find("#wb-det-prevent-recursion").prop("checked", !!isPrevent);
+    // 填充 UID（只读）
+    $ui
+      .find("#wb-det-uid")
+      .val(e.uid !== undefined && e.uid !== null ? e.uid : "");
     $ui
       .find("#wb-det-probability")
       .val(
@@ -8905,6 +9585,81 @@ $menuBtn.on("click", async () => {
     if (window.lulu_native_sync_interval)
       clearInterval(window.lulu_native_sync_interval);
 
+    // ✨ 判断某个分组当前是"全开""全关"还是"混合"状态
+    const luluGetGroupState = (grpName) => {
+      const $switches = $(`.world_entry[data-lulu-grp="${grpName}"]`).find(
+        ".killSwitch",
+      );
+      if ($switches.length === 0) return "empty";
+      let onCount = 0;
+      $switches.each(function () {
+        if ($(this).hasClass("fa-toggle-on")) onCount++;
+      });
+      if (onCount === 0) return "off"; // 全关
+      if (onCount === $switches.length) return "on"; // 全开
+      return "mixed"; // 混合
+    };
+
+    // ✨ 一键开关某个原生分组内所有条目
+    const luluToggleGroupEntries = (grpName, enable) => {
+      const $switches = $(`.world_entry[data-lulu-grp="${grpName}"]`).find(
+        ".killSwitch",
+      );
+      if ($switches.length === 0) {
+        if (typeof toastr !== "undefined")
+          toastr.info("这个分组里好像没有可操作的条目呢~");
+        return;
+      }
+      let count = 0;
+      $switches.each(function () {
+        const isOn = $(this).hasClass("fa-toggle-on");
+        // 只有当前状态和目标状态不一致时，才点击切换
+        if (isOn !== enable) {
+          this.click();
+          count++;
+        }
+      });
+      if (typeof toastr !== "undefined") {
+        toastr.success(
+          enable
+            ? `已开启分组「${grpName}」内 ${count} 个条目！`
+            : `已关闭分组「${grpName}」内 ${count} 个条目！`,
+        );
+      }
+      // 点完后刷新一下按钮图标显示
+      luluUpdateGroupSwitchIcon(grpName);
+    };
+
+    // ✨ 根据分组状态，更新表头那个一键开关图标的样子
+    const luluUpdateGroupSwitchIcon = (grpName) => {
+      const $btn = $(
+        `.lulu-native-group-header[data-groupname="${grpName}"] .lulu-grp-toggle`,
+      );
+      if (!$btn.length) return;
+      const state = luluGetGroupState(grpName);
+      if (state === "on") {
+        // 全开 → 显示"开"图标，绿色，点击会全关
+        $btn
+          .removeClass("fa-toggle-off")
+          .addClass("fa-toggle-on")
+          .css("color", "#51cf66")
+          .attr("data-next", "off")
+          .attr("title", "本组已全开，点击一键全关");
+      } else {
+        // 全关或混合 → 显示"关"图标，灰色，点击会全开
+        $btn
+          .removeClass("fa-toggle-on")
+          .addClass("fa-toggle-off")
+          .css("color", "gray")
+          .attr("data-next", "on")
+          .attr(
+            "title",
+            state === "mixed"
+              ? "本组部分开启，点击一键全开"
+              : "本组已全关，点击一键全开",
+          );
+      }
+    };
     let groupFoldState = JSON.parse(
       localStorage.getItem("lulu_wb_native_fold_state") || "{}",
     );
@@ -8916,13 +9671,29 @@ $menuBtn.on("click", async () => {
     let currentActiveWbName = null;
     let cachedWbEntries = [];
     let isFetching = false;
+    let isRendering = false;
+    let luluLastSyncFingerprint = "";
     window.lulu_native_sync_interval = setInterval(async () => {
+      if (isRendering) return;
       const isNativeMagicEnabled =
         localStorage.getItem("lulu_wb_native_magic_enabled") !== "false";
       const $entries = $(".world_entry");
       if ($entries.length === 0) return;
       const $container = $entries.first().parent();
       if (!$container.length) return;
+      // ✨ 内容指纹：状态没变就直接跳过（注意：指纹要等画完了才记录，不能在这里就记）
+      let luluCurrentFp = null;
+      if (isNativeMagicEnabled) {
+        const _wbName =
+          $(".move_entry_button").first().attr("data-current-world") || "";
+        const _order = localStorage.getItem("lulu_wb_native_group_order") || "";
+        const _fold = localStorage.getItem("lulu_wb_native_fold_state") || "";
+        const _headerCount = $container.children(
+          ".lulu-native-group-header",
+        ).length;
+        luluCurrentFp = `${_wbName}|${$entries.length}|${_order}|${_fold}|${_headerCount}`;
+        if (luluCurrentFp === luluLastSyncFingerprint) return;
+      }
       if (!isNativeMagicEnabled) {
         if ($container.css("display") === "flex") {
           $container.css({ display: "", "flex-direction": "" });
@@ -8960,12 +9731,26 @@ $menuBtn.on("click", async () => {
       const groupCounts = {};
       $entries.each(function (index) {
         const $entry = $(this);
-        let myGroup = "📁 未分类条目";
         const entryTitle =
           $entry.find('textarea[name="comment"]').val()?.trim() || "";
+        // ✨ 如果是对照表条目，直接隐藏它，不参与分组显示
+        if (entryTitle.indexOf(LULU_MAP_ENTRY_TAG) === 0) {
+          $entry.css("display", "none");
+          $entry.attr("data-lulu-grp", "__LULU_MAP__");
+          return true; // 相当于 continue，跳过这一条
+        }
+        let myGroup = "📁 未分类条目";
         let foundEntry = cachedWbEntries.find(
           (e) => e.name === entryTitle || e.comment === entryTitle,
         );
+        if (!foundEntry) {
+          const domUid = parseInt($entry.attr("uid") || $entry.data("id"), 10);
+          if (!isNaN(domUid)) {
+            foundEntry = cachedWbEntries.find(
+              (e) => e.uid === domUid || e.id === domUid,
+            );
+          }
+        }
         if (!foundEntry) {
           const domUid = parseInt($entry.attr("uid") || $entry.data("id"), 10);
           if (!isNaN(domUid)) {
@@ -9026,7 +9811,7 @@ $menuBtn.on("click", async () => {
             ? ""
             : `<div style="display:flex; gap: 6px; margin-right: 15px;" class="lulu-sort-btns"><i class="fa-solid fa-arrow-up lulu-move-up" title="将此分类上移" style="padding:4px; font-size:14px; color:gray; transition:0.2s; cursor:pointer;"></i><i class="fa-solid fa-arrow-down lulu-move-down" title="将此分类下移" style="padding:4px; font-size:14px; color:gray; transition:0.2s; cursor:pointer;"></i></div>`;
           $header = $(
-            `<div class="lulu-native-group-header" data-groupname="${gName}" draggable="${isDraggable ? "true" : "false"}" style="background: var(--SmartThemeBlurTintColor, rgba(0,0,0,0.15)); padding:10px 14px; margin: 10px 0 6px 0; border-radius:6px; font-weight:bold; color:var(--SmartThemeQuoteColor, #70a1ff); border:1px solid var(--SmartThemeBorderColor, gray); display:flex; justify-content:space-between; align-items:center; user-select:none; transition: 0.2s; flex-shrink: 0; align-content: center;"><span style="display:flex; align-items:center;">${dragIconHtml}<span class="lulu-click-fold" style="display:flex; align-items:center; cursor:pointer;"><i class="fa-solid ${isFolded ? "fa-chevron-right" : "fa-chevron-down"} lulu-fold-icon" style="margin-right:8px; width: 16px; text-align:center;"></i><span style="font-size: 14.5px;" class="lulu-g-title">${gName}</span><span style="font-size: 11px; font-weight: normal; color: gray; margin-left: 6px;" class="lulu-g-count">(${groupCounts[gName]}项)</span></span></span><span style="display:flex; align-items:center;">${sortButtonsHtml}<span style="font-size:11.5px; font-weight:normal; color:gray; opacity: 0.6;"><i class="fa-solid fa-link"></i> 分组内会根据选项排序哦</span></span></div>`,
+            `<div class="lulu-native-group-header" data-groupname="${gName}" draggable="${isDraggable ? "true" : "false"}" style="background: var(--SmartThemeBlurTintColor, rgba(0,0,0,0.15)); padding:10px 14px; margin: 10px 0 6px 0; border-radius:6px; font-weight:bold; color:var(--SmartThemeQuoteColor, #70a1ff); border:1px solid var(--SmartThemeBorderColor, gray); display:flex; justify-content:space-between; align-items:center; user-select:none; transition: 0.2s; flex-shrink: 0; align-content: center; gap: 6px; flex-wrap: wrap;"><span style="display:flex; align-items:center; min-width:0;">${dragIconHtml}<span class="lulu-click-fold" style="display:flex; align-items:center; cursor:pointer; min-width:0;"><i class="fa-solid ${isFolded ? "fa-chevron-right" : "fa-chevron-down"} lulu-fold-icon" style="margin-right:8px; width: 16px; text-align:center; flex-shrink:0;"></i><span style="font-size: 14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" class="lulu-g-title">${gName}</span><span style="font-size: 11px; font-weight: normal; color: gray; margin-left: 6px; flex-shrink:0;" class="lulu-g-count">(${groupCounts[gName]}项)</span></span></span><span style="display:flex; align-items:center; gap:6px; flex-shrink:0;">${sortButtonsHtml}<i class="fa-solid fa-toggle-off lulu-grp-toggle" title="一键开关本组所有条目" data-next="on" style="padding:5px; font-size:15px; color:gray; cursor:pointer; transition:0.2s;"></i></span></div>`,
           );
           $header.hover(
             function () {
@@ -9052,33 +9837,40 @@ $menuBtn.on("click", async () => {
               $(this).css("transform", "scale(1)");
             },
           );
-          $header.find(".lulu-click-fold").on("click", function (e) {
-            e.stopPropagation();
-            if ($(this).data("lulu-click-locked")) return;
-            $(this).data("lulu-click-locked", true);
-            setTimeout(() => $(this).data("lulu-click-locked", false), 250);
-            const grp = $header.attr("data-groupname");
-            const isNowFolded = !groupFoldState[grp];
-            groupFoldState[grp] = isNowFolded;
-            saveFoldState();
-            const $icon = $(this).find(".lulu-fold-icon");
-            if (isNowFolded)
-              $icon.removeClass("fa-chevron-down").addClass("fa-chevron-right");
-            else
-              $icon.removeClass("fa-chevron-right").addClass("fa-chevron-down");
-            $container
-              .children(`.world_entry[data-lulu-grp="${grp}"]`)
-              .each(function () {
-                if (isNowFolded) {
-                  $(this).addClass("lulu-folded-hide");
-                } else {
-                  $(this).removeClass("lulu-folded-hide");
-                  $(this).css({ display: "", margin: "" });
-                }
-              });
-          });
+          $header
+            .find(".lulu-click-fold")
+            .off("click.luluFold")
+            .on("click.luluFold", function (e) {
+              e.stopPropagation();
+              if ($(this).data("lulu-click-locked")) return;
+              $(this).data("lulu-click-locked", true);
+              setTimeout(() => $(this).data("lulu-click-locked", false), 250);
+              const grp = $header.attr("data-groupname");
+              const isNowFolded = !groupFoldState[grp];
+              groupFoldState[grp] = isNowFolded;
+              saveFoldState();
+              const $icon = $(this).find(".lulu-fold-icon");
+              if (isNowFolded)
+                $icon
+                  .removeClass("fa-chevron-down")
+                  .addClass("fa-chevron-right");
+              else
+                $icon
+                  .removeClass("fa-chevron-right")
+                  .addClass("fa-chevron-down");
+              $container
+                .children(`.world_entry[data-lulu-grp="${grp}"]`)
+                .each(function () {
+                  if (isNowFolded) {
+                    $(this).addClass("lulu-folded-hide");
+                  } else {
+                    $(this).removeClass("lulu-folded-hide");
+                    $(this).css({ display: "", margin: "" });
+                  }
+                });
+            });
           if (isDraggable) {
-            $header.on("dragstart", function (e) {
+            $header.off("dragstart").on("dragstart", function (e) {
               e.originalEvent.dataTransfer.setData("text/plain", gName);
               $(this).addClass("lulu-drag-ghost");
             });
@@ -9138,34 +9930,52 @@ $menuBtn.on("click", async () => {
               }
             });
           }
-          $header.find(".lulu-move-up").on("click", function (e) {
-            e.stopPropagation();
-            const idx = luluGroupOrder.indexOf(gName);
-            if (idx > 0) {
-              [luluGroupOrder[idx - 1], luluGroupOrder[idx]] = [
-                luluGroupOrder[idx],
-                luluGroupOrder[idx - 1],
-              ];
-              localStorage.setItem(
-                "lulu_wb_native_group_order",
-                JSON.stringify(luluGroupOrder),
-              );
-            }
-          });
-          $header.find(".lulu-move-down").on("click", function (e) {
-            e.stopPropagation();
-            const idx = luluGroupOrder.indexOf(gName);
-            if (idx !== -1 && idx < luluGroupOrder.length - 1) {
-              [luluGroupOrder[idx + 1], luluGroupOrder[idx]] = [
-                luluGroupOrder[idx],
-                luluGroupOrder[idx + 1],
-              ];
-              localStorage.setItem(
-                "lulu_wb_native_group_order",
-                JSON.stringify(luluGroupOrder),
-              );
-            }
-          });
+          $header
+            .find(".lulu-move-up")
+            .off("click")
+            .on("click", function (e) {
+              e.stopPropagation();
+              const idx = luluGroupOrder.indexOf(gName);
+              if (idx > 0) {
+                [luluGroupOrder[idx - 1], luluGroupOrder[idx]] = [
+                  luluGroupOrder[idx],
+                  luluGroupOrder[idx - 1],
+                ];
+                localStorage.setItem(
+                  "lulu_wb_native_group_order",
+                  JSON.stringify(luluGroupOrder),
+                );
+              }
+            });
+          $header
+            .find(".lulu-move-down")
+            .off("click")
+            .on("click", function (e) {
+              e.stopPropagation();
+              const idx = luluGroupOrder.indexOf(gName);
+              if (idx !== -1 && idx < luluGroupOrder.length - 1) {
+                [luluGroupOrder[idx + 1], luluGroupOrder[idx]] = [
+                  luluGroupOrder[idx],
+                  luluGroupOrder[idx + 1],
+                ];
+                localStorage.setItem(
+                  "lulu_wb_native_group_order",
+                  JSON.stringify(luluGroupOrder),
+                );
+              }
+            });
+
+          // ✨ 单个一键开关：根据当前状态智能全开/全关
+          $header
+            .find(".lulu-grp-toggle")
+            .off("click")
+            .on("click", function (e) {
+              e.stopPropagation();
+              const grp = $header.attr("data-groupname");
+              const next = $(this).attr("data-next"); // "on" 或 "off"
+              luluToggleGroupEntries(grp, next === "on");
+            });
+
           $container.append($header);
         } else {
           $header.find(".lulu-g-count").text(`(${groupCounts[gName]}项)`);
@@ -9175,7 +9985,17 @@ $menuBtn.on("click", async () => {
           else
             $icon.removeClass("fa-chevron-right").addClass("fa-chevron-down");
         }
+        // ✨ 每轮同步都更新一下这个分组的一键开关图标
+        luluUpdateGroupSwitchIcon(gName);
         $header.css("order", baseOrder);
+        // ✨ 关键修复：每次循环都实时读取最新折叠状态，而不是用创建表头时的旧变量
+        const isFoldedNow = groupFoldState[gName] === true;
+        // 顺便同步一下图标，保证图标和实际状态一致
+        const $iconSync = $header.find(".lulu-fold-icon");
+        if (isFoldedNow)
+          $iconSync.removeClass("fa-chevron-down").addClass("fa-chevron-right");
+        else
+          $iconSync.removeClass("fa-chevron-right").addClass("fa-chevron-down");
         $container
           .children(`.world_entry[data-lulu-grp="${gName}"]`)
           .each(function () {
@@ -9183,7 +10003,7 @@ $menuBtn.on("click", async () => {
               $(this).attr("data-lulu-native-index") || 0,
             );
             $(this).css("order", baseOrder + 1 + nativeIdx);
-            if (isFolded) {
+            if (isFoldedNow) {
               if (!$(this).hasClass("lulu-folded-hide"))
                 $(this).addClass("lulu-folded-hide");
             } else {
@@ -9194,10 +10014,17 @@ $menuBtn.on("click", async () => {
             }
           });
       });
+
       $container.children(".lulu-native-group-header").each(function () {
         const gName = $(this).attr("data-groupname");
         if (!groupCounts[gName]) $(this).remove();
       });
-    }, 300);
+      // ✨ 走到这里说明这一轮真的把分组画完了，现在才记录指纹
+      if (luluCurrentFp !== null) luluLastSyncFingerprint = luluCurrentFp;
+      isRendering = true;
+      setTimeout(() => {
+        isRendering = false;
+      }, 150);
+    }, 500);
   })();
 });
