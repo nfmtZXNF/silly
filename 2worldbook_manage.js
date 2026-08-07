@@ -2107,11 +2107,11 @@ $menuBtn.on("click", async () => {
                 #wb-search-input { margin-bottom: 6px !important; padding: 7px !important; font-size: 12px !important; }
 
                 .wb-toolbar { flex-direction: column; align-items: stretch; gap: 6px; margin-bottom: 6px; }
-                .wb-toolbar > div:first-child { width: 100%; display: grid; grid-template-columns: 1fr; gap: 6px; }
+                .wb-toolbar > div:first-child { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
                 .wb-toolbar > div:first-child > div:first-child { grid-column: 1 / -1; display: grid !important; grid-template-columns: 1fr auto; gap: 6px; margin-right: 0 !important; width: 100%; }
                 .wb-toolbar > div:first-child > #wb-filter-state { grid-column: 1 / -1; }
                 .wb-toolbar > div:first-child > #wb-sort-select { grid-column: 1 / -1; }
-                .wb-toolbar > div:first-child > label { grid-column: 1 / -1; justify-content: flex-start; }
+                .wb-toolbar > div:first-child > label { grid-column: auto !important; justify-content: center !important; padding: 6px 2px !important; font-size: 11.5px !important; white-space: nowrap; }
                 .wb-controls-group {
                     width: 100%;
                     display: grid !important;
@@ -2650,6 +2650,8 @@ $menuBtn.on("click", async () => {
                              <button class="menu_button interactable btn-secondary wb-nowrap-btn" id="wb-btn-batch-ungroup" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-folder-minus"></i> 批量移出分类</button>
                              <button class="menu_button interactable btn-primary wb-nowrap-btn" id="wb-btn-batch-export" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-file-export"></i> 批量打包导出</button>
                              <button class="menu_button interactable btn-danger wb-nowrap-btn" id="wb-btn-confirm-delete" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-burst"></i> 确认永久删除</button>
+                             <button class="menu_button interactable btn-warning wb-nowrap-btn" id="wb-btn-batch-lock" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-lock"></i> 批量锁定</button>
+                             <button class="menu_button interactable btn-info wb-nowrap-btn" id="wb-btn-batch-skip" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-eye-slash"></i> 批量跳过对照</button>
                         </div>
 
                     </div>
@@ -5805,6 +5807,40 @@ $menuBtn.on("click", async () => {
     }
     renderData();
   });
+  $ui.find("#wb-btn-batch-lock").on("click", () => {
+    if (batchSelected.size === 0)
+      return toastr.warning("请先勾选需要锁定的世界书哦~");
+    let lockList = getLockedWbs();
+    let addCount = 0;
+    batchSelected.forEach((wb) => {
+      if (!lockList.includes(wb)) {
+        lockList.push(wb);
+        addCount++;
+      }
+    });
+    saveLockedWbs(lockList);
+    toastr.success(
+      `已锁定 ${addCount} 本世界书（共选中 ${batchSelected.size} 本）~`,
+    );
+    renderData();
+  });
+
+  $ui.find("#wb-btn-batch-skip").on("click", () => {
+    if (batchSelected.size === 0)
+      return toastr.warning("请先勾选需要标记跳过的世界书哦~");
+    let skipList = getScanSkipList();
+    let addCount = 0;
+    batchSelected.forEach((wb) => {
+      if (!skipList.includes(wb)) {
+        skipList.push(wb);
+        addCount++;
+      }
+    });
+    saveScanSkipList(skipList);
+    toastr.success(`已标记 ${addCount} 本世界书跳过全库对照~`);
+    renderData();
+  });
+
   $ui.find("#wb-btn-batch-export").on("click", async () => {
     if (batchSelected.size === 0)
       return toastr.warning("请先勾选需要导出的世界书哦~");
@@ -7716,8 +7752,8 @@ $menuBtn.on("click", async () => {
               
               <!-- 优化后的操作区 -->
               <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px; padding-top:8px; border-top:1px dashed rgba(125,125,125,0.2);">
-                <select class="lulu-scan-action wb-input-dt" data-idx="${i}" style="...">
-  <option value="extract">📥 另存卡内原版为新书 (推荐)</option>
+                <select class="lulu-scan-action wb-input-dt" data-idx="${i}" style="min-height:44px; padding:8px 10px; font-size:14px; width:100%; box-sizing:border-box; pointer-events:auto; touch-action:manipulation; position:relative; z-index:5; background:var(--SmartThemeBotMesColor)!important; color:var(--SmartThemeBodyColor)!important; border:1px solid var(--SmartThemeBorderColor)!important; border-radius:6px;">
+  <option value="extract">📥 另存卡内原版为新书</option>
   <option value="overwrite">⚠️ 危险：覆盖本地旧书</option>
   <option value="skip">🚫 标记跳过全库对照</option>
 </select>
@@ -7755,7 +7791,7 @@ $menuBtn.on("click", async () => {
           <button id="lulu-scan-deselall" class="menu_button interactable btn-secondary wb-nowrap-btn" style="margin:0; padding:7px 12px; font-size:12px; flex-shrink:0;">清空</button>
         </div>
         
-        <div id="lulu-scan-list-wrap" style="max-height:50vh; overflow-y:auto; padding-right:4px;">${rowsHtml}</div>
+        <div id="lulu-scan-list-wrap" style="max-height:50vh; overflow-y:auto; -webkit-overflow-scrolling:touch; padding-right:4px;">${rowsHtml}</div>
       </div>`;
 
     const $dlg = $(dialogHtml);
@@ -8236,7 +8272,7 @@ $menuBtn.on("click", async () => {
         );
         $actions.append(
           $(
-            `<div class="wb-icon-btn hover-blue" title="分类管理抽屉"><i class="fa-solid fa-folder-open"></i></div>`,
+            '<div class="wb-icon-btn hover-blue" title="分类管理抽屉" style="display:none!important;"><i class="fa-solid fa-folder-open"></i></div>',
           ).on("click", (e) => {
             e.stopPropagation();
             const renderDrawer = () => {
@@ -8507,7 +8543,7 @@ $menuBtn.on("click", async () => {
           .append(
             // 🚫 全库对照跳过标记
             $(
-              `<div class="wb-icon-btn hover-yellow" title="${isScanSkipped(wb) ? "已标记跳过全库对照，点击取消" : "标记为跳过全库对照（全库对照扫描时自动忽略）"}" style="color:${isScanSkipped(wb) ? "#fcc419" : "inherit"}"><i class="fa-solid ${isScanSkipped(wb) ? "fa-eye-slash" : "fa-eye"}"></i></div>`,
+              `<div class="wb-icon-btn hover-yellow" title="${isScanSkipped(wb) ? "已标记跳过全库对照，点击取消" : "标记为跳过全库对照（全库对照扫描时自动忽略）"}" style="display:none!important; color:${isScanSkipped(wb) ? "#fcc419" : "inherit"}"><i class="fa-solid ${isScanSkipped(wb) ? "fa-eye-slash" : "fa-eye"}"></i></div>`,
             ).on("click", (e) => {
               e.stopPropagation();
               const nowSkipped = toggleScanSkip(wb);
