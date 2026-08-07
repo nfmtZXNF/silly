@@ -738,7 +738,8 @@ ${themeOverrideCSS} </style>`;
 
   // ===== 当前角色快照区（默认隐藏，onOpen 时动态填充）=====
   html += `<div id="lulu-qs-char-section" style="display:none;">
-    <div id="lulu-qs-char-header" style="font-size:13px; color:var(--SmartThemeQuoteColor); font-weight:bold; margin-bottom:10px; padding:8px 10px; background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:6px; display:flex; align-items:center; gap:6px;"></div>
+    <div id="lulu-qs-char-header" style="font-size:13px; color:var(--SmartThemeQuoteColor); font-weight:bold; margin-bottom:6px; padding:8px 10px; background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:6px; display:flex; align-items:center; gap:6px;"></div>
+    <input type="text" id="lulu-qs-char-search" class="text_pole" placeholder="🔍 检索角色快照名称..." style="width:100%; box-sizing:border-box; padding:8px; border-radius:6px; font-size:13px; margin-bottom:8px;">
     <div style="display:flex; gap:6px; margin-bottom:10px;">
       <button id="lulu-qs-char-batch-del" class="menu_button interactable lulu-qs-btn-hover" style="flex:1; margin:0; border:1px solid #ff6b6b; padding:9px; border-radius:6px; background:rgba(255,107,107,0.1); color:#ff6b6b; font-weight:bold; font-size:12.5px; display:flex; justify-content:center; align-items:center; gap:6px;"><i class="fa-solid fa-trash-can"></i> 批量删除</button>
     </div>
@@ -893,7 +894,7 @@ ${themeOverrideCSS} </style>`;
               0,
             );
             const $item = $(
-              `<div class="lulu-qs-item" style="background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:8px; padding:12px; display:flex; justify-content:space-between; align-items:center; gap:10px;">
+              `<div class="lulu-qs-item" data-snapname="${encodeURIComponent(name)}" style="background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:8px; padding:12px; display:flex; justify-content:space-between; align-items:center; gap:10px;">
                 <div style="flex:1; min-width:0;">
                   <div style="font-weight:bold; font-size:14.5px; color:var(--SmartThemeBodyColor); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><i class="fa-solid fa-camera-retro" style="color:var(--SmartThemeQuoteColor);"></i> ${name}</div>
                   <div style="font-size:11px; color:gray; margin-top:6px;">涉及 ${bookCount} 本书 · 共开启 ${totalEntries} 项</div>
@@ -1013,12 +1014,16 @@ ${themeOverrideCSS} </style>`;
                 `<style>${window.buildPopupThemeCSS("dialog:has(#lulu-qscsdel-dialog)")}</style>`,
               );
             // ✨ 补上：全选 / 全不选 按钮的点击事件
-            $ddlg.find("#lulu-qscsdel-all").on("click", () =>
-              $ddlg.find(".lulu-qscsdel-chk").prop("checked", true),
-            );
-            $ddlg.find("#lulu-qscsdel-none").on("click", () =>
-              $ddlg.find(".lulu-qscsdel-chk").prop("checked", false),
-            );
+            $ddlg
+              .find("#lulu-qscsdel-all")
+              .on("click", () =>
+                $ddlg.find(".lulu-qscsdel-chk").prop("checked", true),
+              );
+            $ddlg
+              .find("#lulu-qscsdel-none")
+              .on("click", () =>
+                $ddlg.find(".lulu-qscsdel-chk").prop("checked", false),
+              );
             const r = await SillyTavern.callGenericPopup(
               $ddlg,
               SillyTavern.POPUP_TYPE.CONFIRM,
@@ -1070,11 +1075,21 @@ ${themeOverrideCSS} </style>`;
         // ========== 当前角色快照逻辑结束 ==========
         $dlg.find("#lulu-qs-search").on("input", function () {
           const kw = $(this).val().toLowerCase();
-          $dlg.find(".lulu-qs-item").each(function () {
+          $dlg.find("#lulu-qs-global-section .lulu-qs-item").each(function () {
             const name = decodeURIComponent(
               $(this).find(".lulu-qs-apply-btn").attr("data-rawname"),
             ).toLowerCase();
             $(this).toggle(name.includes(kw));
+          });
+        });
+        // 🆕 角色快照搜索
+        $dlg.find("#lulu-qs-char-search").on("input", function () {
+          const kw = $(this).val().toLowerCase();
+          $dlg.find("#lulu-qs-char-list .lulu-qs-item").each(function () {
+            const snapName = decodeURIComponent(
+              $(this).attr("data-snapname") || "",
+            ).toLowerCase();
+            $(this).toggle(!kw || snapName.includes(kw));
           });
         });
         const checkActiveSnapshot = async () => {
@@ -1172,18 +1187,24 @@ ${themeOverrideCSS} </style>`;
             listHtml += `<label style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:6px; cursor:pointer;"><input type="checkbox" class="lulu-qsdel-chk" data-name="${safeN}" style="accent-color:#ff6b6b;"><span style="flex:1; word-break:break-all;">${name}</span></label>`;
           });
           listHtml += "</div>";
-                    const $ddlg = $(`<div style="padding:6px; min-width:280px; text-align:left;"><h3 style="margin-top:0; color:#ff6b6b;"><i class="fa-solid fa-trash-can"></i> 批量删除快照</h3><div style="display:flex; gap:8px; margin-bottom:10px;"><button id="lulu-qsdel-all" class="menu_button btn-success" style="margin:0; padding:6px 12px; font-size:12px; border:none; flex:1; white-space:nowrap; display:flex; justify-content:center; align-items:center;">全选</button><button id="lulu-qsdel-none" class="menu_button btn-secondary" style="margin:0; padding:6px 12px; font-size:12px; flex:1; white-space:nowrap; display:flex; justify-content:center; align-items:center;">全不选</button></div>${listHtml}</div>`);
+          const $ddlg = $(
+            `<div style="padding:6px; min-width:280px; text-align:left;"><h3 style="margin-top:0; color:#ff6b6b;"><i class="fa-solid fa-trash-can"></i> 批量删除快照</h3><div style="display:flex; gap:8px; margin-bottom:10px;"><button id="lulu-qsdel-all" class="menu_button btn-success" style="margin:0; padding:6px 12px; font-size:12px; border:none; flex:1; white-space:nowrap; display:flex; justify-content:center; align-items:center;">全选</button><button id="lulu-qsdel-none" class="menu_button btn-secondary" style="margin:0; padding:6px 12px; font-size:12px; flex:1; white-space:nowrap; display:flex; justify-content:center; align-items:center;">全不选</button></div>${listHtml}</div>`,
+          );
           $ddlg
             .attr("id", "lulu-qsdel-dialog")
             .prepend(
               `<style>${window.buildPopupThemeCSS("dialog:has(#lulu-qsdel-dialog)")}</style>`,
             );
-          $ddlg.find("#lulu-qsdel-all").on("click", () =>
-            $ddlg.find(".lulu-qsdel-chk").prop("checked", true),
-          );
-          $ddlg.find("#lulu-qsdel-none").on("click", () =>
-            $ddlg.find(".lulu-qsdel-chk").prop("checked", false),
-          );
+          $ddlg
+            .find("#lulu-qsdel-all")
+            .on("click", () =>
+              $ddlg.find(".lulu-qsdel-chk").prop("checked", true),
+            );
+          $ddlg
+            .find("#lulu-qsdel-none")
+            .on("click", () =>
+              $ddlg.find(".lulu-qsdel-chk").prop("checked", false),
+            );
           const r = await SillyTavern.callGenericPopup(
             $ddlg,
             SillyTavern.POPUP_TYPE.CONFIRM,
@@ -1401,13 +1422,111 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
     : luluHexToRgba(appear.borderColor, borderAlpha);
 
   if ($("#lulu-wb-floating-style").length === 0) {
-    const styleHtml = `<style id="lulu-wb-floating-style"> #lulu-wb-floating-btn { position: fixed !important; top: 45vh !important; right: 15px !important; width: ${flConf.size}px !important; height: ${flConf.size}px !important; opacity: ${flConf.opacity} !important; background: ${bgCss} !important; color: ${iconColorCss} !important; border: 2px solid ${borderColorCss} !important; border-radius: 50% !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: ${flConf.size * 0.45}px !important; cursor: pointer !important; box-shadow: none !important; z-index: 2147483647 !important; user-select: none !important; touch-action: none !important; -webkit-tap-highlight-color: transparent !important; transition: transform 0.2s, opacity 0.2s !important; }
- #lulu-wb-floating-btn img.lulu-float-img { width: 90% !important; height: 90% !important; object-fit: cover !important; border-radius: 50% !important; pointer-events: none !important; }
- #lulu-wb-floating-btn span.lulu-float-emoji { font-size: ${flConf.size * 0.5}px !important; line-height: 1 !important; pointer-events: none !important; } #lulu-wb-floating-btn span.lulu-float-svg { width: 65% !important; height: 65% !important; display: flex !important; align-items: center !important; justify-content: center !important; pointer-events: none !important; } #lulu-wb-floating-btn span.lulu-float-svg svg { width: 100% !important; height: 100% !important; }
- #lulu-wb-floating-btn > i { pointer-events: none !important; }
- #lulu-wb-floating-btn:active { transform: scale(0.9) !important; } #lulu-wb-floating-btn:hover { opacity: 1 !important; } .lulu-float-menu-opts { position: absolute; right: calc(100% + 10px); top: 50%; transform: translateY(-50%); display: flex; gap: 8px; background: var(--SmartThemeBlurTintColor); padding: 8px; border-radius: 8px; border: 1px solid var(--SmartThemeBorderColor); box-shadow: 0 4px 8px rgba(0,0,0,0.4); opacity: 0; pointer-events: none; transition: 0.2s; white-space: nowrap; } .lulu-float-menu-opts.show { opacity: 1; pointer-events: auto; } .lulu-float-btn-opt { cursor: pointer; padding: 6px 12px; font-size: 13px; font-weight: bold; color: var(--SmartThemeBodyColor); background: var(--SmartThemeBotMesColor); border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px; } .lulu-float-btn-opt:hover { background: var(--SmartThemeQuoteColor); color: #fff; } </style>`;
+    const styleHtml = `<style id="lulu-wb-floating-style">
+        #lulu-wb-floating-btn {
+            position: fixed !important;
+            top: 45vh !important;
+            right: 15px !important;
+            width: ${flConf.size}px !important;
+            height: ${flConf.size}px !important;
+            opacity: ${flConf.opacity} !important;
+            background: ${bgCss} !important;
+            color: ${iconColorCss} !important;
+            border: 2px solid ${borderColorCss} !important;
+            border-radius: 50% !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            font-size: ${flConf.size * 0.45}px !important;
+            cursor: pointer !important;
+            box-shadow: none !important;
+            z-index: 2147483647 !important;
+            user-select: none !important;
+            touch-action: none !important;
+            -webkit-tap-highlight-color: transparent !important;
+            transition: transform 0.2s, opacity 0.2s !important;
+            /* 新增：防止闪屏和性能优化 */
+            will-change: auto !important;
+            backface-visibility: hidden !important;
+            -webkit-backface-visibility: hidden !important;
+            transform: translateZ(0) !important;
+            -webkit-transform: translateZ(0) !important;
+        }
+        #lulu-wb-floating-btn img.lulu-float-img {
+            width: 90% !important;
+            height: 90% !important;
+            object-fit: cover !important;
+            border-radius: 50% !important;
+            pointer-events: none !important;
+            /* 防止图片导致的闪烁 */
+            image-rendering: -webkit-optimize-contrast !important;
+            backface-visibility: hidden !important;
+        }
+        #lulu-wb-floating-btn span.lulu-float-emoji {
+            font-size: ${flConf.size * 0.5}px !important;
+            line-height: 1 !important;
+            pointer-events: none !important;
+        }
+        #lulu-wb-floating-btn span.lulu-float-svg {
+            width: 65% !important;
+            height: 65% !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            pointer-events: none !important;
+        }
+        #lulu-wb-floating-btn span.lulu-float-svg svg {
+            width: 100% !important;
+            height: 100% !important;
+        }
+        #lulu-wb-floating-btn > i {
+            pointer-events: none !important;
+        }
+        #lulu-wb-floating-btn:active {
+            transform: scale(0.9) !important;
+        }
+        #lulu-wb-floating-btn:hover {
+            opacity: 1 !important;
+        }
+        .lulu-float-menu-opts {
+            position: absolute;
+            right: calc(100% + 10px);
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            gap: 8px;
+            background: var(--SmartThemeBlurTintColor);
+            padding: 8px;
+            border-radius: 8px;
+            border: 1px solid var(--SmartThemeBorderColor);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            white-space: nowrap;
+        }
+        .lulu-float-menu-opts.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .lulu-float-btn-opt {
+            cursor: pointer;
+            padding: 6px 12px;
+            font-size: 13px;
+            font-weight: bold;
+            color: var(--SmartThemeBodyColor);
+            background: var(--SmartThemeBotMesColor);
+            border: 1px solid var(--SmartThemeBorderColor);
+            border-radius: 6px;
+        }
+        .lulu-float-btn-opt:hover {
+            background: var(--SmartThemeQuoteColor);
+            color: #fff;
+        }
+    </style>`;
     $("head").append(styleHtml);
   }
+
   if (forceUpdate && $("#lulu-wb-floating-btn").length > 0) return;
 
   // 根据配置生成球里面的内容（图片链接 / SVG代码 / emoji / 矢量图标）
@@ -1562,10 +1681,13 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
         $floatBtn.find(".lulu-float-menu-opts").removeClass("show");
         lastLeft = initX + dx; // 新增：存起来
         lastTop = initY + dy; // 新增：存起来
-        btnNode.style.setProperty("left", initX + dx + "px", "important");
-        btnNode.style.setProperty("top", initY + dy + "px", "important");
-        btnNode.style.setProperty("right", "auto", "important");
-        btnNode.style.setProperty("transition", "none", "important");
+        // 用 requestAnimationFrame 优化拖拽性能，减少闪屏
+        requestAnimationFrame(() => {
+          btnNode.style.setProperty("left", initX + dx + "px", "important");
+          btnNode.style.setProperty("top", initY + dy + "px", "important");
+          btnNode.style.setProperty("right", "auto", "important");
+          btnNode.style.setProperty("transition", "none", "important");
+        });
       }
     };
     const onPointerUp = (ev) => {
@@ -1717,7 +1839,20 @@ $menuBtn.on("click", async () => {
             #wb-entry-btn-toggle:hover, #wb-main-ctrl-toggle:hover {
                 background: rgba(125,125,125,0.22);
             }
-            dialog.wb-manager-dialog { width: 92vw !important; max-width: 1600px !important; max-height: 92vh !important; transition: zoom 0.2s ease-out; overflow-y: auto !important; overflow-x: hidden !important; font-family: sans-serif; background: var(--SmartThemeBlurTintColor) !important; }
+            dialog.wb-manager-dialog {
+    width: 92vw !important;
+    max-width: 1600px !important;
+    max-height: 92vh !important;
+    transition: zoom 0.2s ease-out;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    font-family: sans-serif;
+    background: var(--SmartThemeBlurTintColor) !important;
+    /* 性能优化：防止面板内的操作导致页面重绘闪屏 */
+    contain: layout style !important;
+    will-change: auto !important;
+}
+
             dialog.wb-manager-dialog::backdrop { background: rgba(0,0,0,0.4) !important; backdrop-filter: blur(4px) !important; }
 
             #wb-manager-panel h3 { font-size: 15px; margin: 10px 0 8px 0; border-bottom: 2px solid var(--SmartThemeBorderColor); padding-bottom: 5px; color: var(--SmartThemeQuoteColor); }
@@ -2320,6 +2455,11 @@ $menuBtn.on("click", async () => {
                     height: 100% !important;
                 }
             }
+            .scrollableInnerFull {
+                -webkit-overflow-scrolling: touch;
+                will-change: scroll-position;
+                contain: layout style;
+            }
         </style>
     `;
 
@@ -2468,9 +2608,14 @@ $menuBtn.on("click", async () => {
                             <option value="za">🔡 名称 Z-A</option>
                         </select>
                         <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px; margin: 0; white-space: nowrap;">
-                            <input type="checkbox" id="wb-filter-unbound" style="accent-color: var(--SmartThemeQuoteColor); transform: scale(1.1);">
-                            <span style="font-weight: bold;">仅显示未绑定</span>
-                        </label>
+    <input type="checkbox" id="wb-filter-unbound" style="accent-color: var(--SmartThemeQuoteColor); transform: scale(1.1);">
+    <span style="font-weight: bold;">仅显示未绑定</span>
+</label>
+<label style="cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px; margin: 0; white-space: nowrap;">
+    <input type="checkbox" id="wb-filter-locked" style="accent-color: #fcc419; transform: scale(1.1);">
+    <span style="font-weight: bold;">🔒 仅显示已锁定</span>
+</label>
+
                     </div>
 
                     <div class="wb-controls-group" id="wb-main-controls-group">
@@ -4064,6 +4209,67 @@ $menuBtn.on("click", async () => {
     }
   };
   // ========== 【锁定世界书】防误删 结束 ==========
+
+  // ========== 【锁定条目】防误删 开始 ==========
+  const getLockedEntriesMap = () => {
+    try {
+      return JSON.parse(localStorage.getItem("lulu_wb_locked_entries") || "{}");
+    } catch (e) {
+      return {};
+    }
+  };
+  const saveLockedEntriesMap = (obj) => {
+    localStorage.setItem("lulu_wb_locked_entries", JSON.stringify(obj));
+  };
+  const getLockedEntryUIDs = (wbName) => {
+    const map = getLockedEntriesMap();
+    return Array.isArray(map[wbName]) ? map[wbName] : [];
+  };
+  const isEntryLocked = (wbName, uid) =>
+    getLockedEntryUIDs(wbName).includes(uid);
+  const toggleEntryLock = (wbName, uid) => {
+    const map = getLockedEntriesMap();
+    if (!Array.isArray(map[wbName])) map[wbName] = [];
+    let nowLocked = false;
+    if (map[wbName].includes(uid)) {
+      map[wbName] = map[wbName].filter((u) => u !== uid);
+    } else {
+      map[wbName].push(uid);
+      nowLocked = true;
+    }
+    saveLockedEntriesMap(map);
+    return nowLocked;
+  };
+  // ========== 【锁定条目】防误删 结束 ==========
+  // ========== 【全库对照跳过标记】 开始 ==========
+  const getScanSkipList = () => {
+    try {
+      return JSON.parse(localStorage.getItem("lulu_wb_scan_skip_list") || "[]");
+    } catch (e) {
+      return [];
+    }
+  };
+
+  const saveScanSkipList = (arr) => {
+    localStorage.setItem("lulu_wb_scan_skip_list", JSON.stringify(arr));
+  };
+
+  const isScanSkipped = (wbName) => getScanSkipList().includes(wbName);
+
+  const toggleScanSkip = (wbName) => {
+    let list = getScanSkipList();
+    let nowSkipped = false;
+    if (list.includes(wbName)) {
+      list = list.filter((n) => n !== wbName);
+    } else {
+      list.push(wbName);
+      nowSkipped = true;
+    }
+    saveScanSkipList(list);
+    return nowSkipped;
+  };
+  // ========== 【全库对照跳过标记】 结束 ==========
+
   const getCategories = () => {
     let vars = getVariables({ type: "global" });
     let cats = vars.wb_categories;
@@ -4443,7 +4649,7 @@ $menuBtn.on("click", async () => {
     setTimeout(bindEvents, 50);
 
     await SillyTavern.callGenericPopup($dlg, SillyTavern.POPUP_TYPE.TEXT, "", {
-      okButton: "关闭"
+      okButton: "关闭",
     });
   });
   // ---- 回收站弹窗结束 ----
@@ -5549,20 +5755,38 @@ $menuBtn.on("click", async () => {
   let batchSelected = new Set();
   let currentVisibleWbs = [];
   let globalSearchDebounce = null;
-  $ui.find("#wb-search-input").on("input", () => {
-    let isDeep = $ui.find("#wb-deep-search-toggle").is(":checked");
-    if (isDeep) {
-      clearTimeout(globalSearchDebounce);
-      globalSearchDebounce = setTimeout(() => renderData(), 450);
-    } else {
-      renderData();
-    }
-  });
+  let renderDataDebounceTimer;
+  const debouncedRenderData = () => {
+    clearTimeout(renderDataDebounceTimer);
+    renderDataDebounceTimer = setTimeout(() => renderData(), 250);
+  };
   $ui
-    .find(
-      "#wb-deep-search-toggle, #wb-filter-unbound, #wb-filter-state, #wb-sort-select, #wb-category-filter",
-    )
-    .on("change", () => renderData());
+    .find("#wb-search-input")
+    .off("input")
+    .on("input", () => {
+      let isDeep = $ui.find("#wb-deep-search-toggle").is(":checked");
+      if (isDeep) {
+        clearTimeout(globalSearchDebounce);
+        globalSearchDebounce = setTimeout(() => renderData(), 600);
+      } else {
+        debouncedRenderData();
+      }
+    });
+  $ui
+    .find("#wb-deep-search-toggle")
+    .off("change")
+    .on("change", debouncedRenderData);
+  $ui
+    .find("#wb-filter-unbound")
+    .off("change")
+    .on("change", debouncedRenderData);
+  $ui.find("#wb-filter-locked").off("change").on("change", debouncedRenderData);
+  $ui.find("#wb-filter-state").off("change").on("change", debouncedRenderData);
+  $ui.find("#wb-sort-select").off("change").on("change", debouncedRenderData);
+  $ui
+    .find("#wb-category-filter")
+    .off("change")
+    .on("change", debouncedRenderData);
   $ui.find("#wb-btn-batch-toggle").on("click", function () {
     isBatchMode = !isBatchMode;
     if (isBatchMode) {
@@ -6459,7 +6683,11 @@ $menuBtn.on("click", async () => {
   };
 
   // ✨ 公用：根据卡内原版和本地条目，生成差异对比的 HTML（返回字符串）
-  const luluBuildDiffHtml = (convertedEntries, localEntriesArr, uniquePrefix) => {
+  const luluBuildDiffHtml = (
+    convertedEntries,
+    localEntriesArr,
+    uniquePrefix,
+  ) => {
     const embMap = new Map();
     convertedEntries.forEach((e) => {
       const key = (e.name || e.comment || "(无名)").trim();
@@ -6562,21 +6790,24 @@ $menuBtn.on("click", async () => {
 
   // ✨ 公用：给差异 HTML 里的展开/折叠按钮绑定事件
   const luluBindDiffToggle = ($scope) => {
-    $scope.find(".lulu-diff-toggle").off("click").on("click", function () {
-      const cidx = $(this).attr("data-cidx");
-      const prefix = $(this).attr("data-prefix");
-      const $body = $scope.find(
-        `.lulu-diff-body[data-prefix="${prefix}"][data-cidx="${cidx}"]`,
-      );
-      const $icon = $(this).find("i.fa-chevron-down, i.fa-chevron-up");
-      if ($body.is(":visible")) {
-        $body.slideUp(120);
-        $icon.removeClass("fa-chevron-up").addClass("fa-chevron-down");
-      } else {
-        $body.slideDown(120);
-        $icon.removeClass("fa-chevron-down").addClass("fa-chevron-up");
-      }
-    });
+    $scope
+      .find(".lulu-diff-toggle")
+      .off("click")
+      .on("click", function () {
+        const cidx = $(this).attr("data-cidx");
+        const prefix = $(this).attr("data-prefix");
+        const $body = $scope.find(
+          `.lulu-diff-body[data-prefix="${prefix}"][data-cidx="${cidx}"]`,
+        );
+        const $icon = $(this).find("i.fa-chevron-down, i.fa-chevron-up");
+        if ($body.is(":visible")) {
+          $body.slideUp(120);
+          $icon.removeClass("fa-chevron-up").addClass("fa-chevron-down");
+        } else {
+          $body.slideDown(120);
+          $icon.removeClass("fa-chevron-down").addClass("fa-chevron-up");
+        }
+      });
   };
   // 主功能：体检当前角色卡的内嵌世界书
   const luluRescueEmbeddedLorebook = async () => {
@@ -6631,7 +6862,8 @@ $menuBtn.on("click", async () => {
     // 生成差异对比 HTML
     const diffHtml = luluBuildDiffHtml(converted, localEntries, "single");
 
-    const $rescueDlg = $(`<div id="lulu-rescue-dialog" style="text-align:left; line-height:1.6; padding:2px; max-width:520px;">
+    const $rescueDlg =
+      $(`<div id="lulu-rescue-dialog" style="text-align:left; line-height:1.6; padding:2px; max-width:520px;">
          <div style="font-size:15px; font-weight:bold; color:var(--SmartThemeQuoteColor); margin-bottom:12px;">
            <i class="fa-solid fa-clock-rotate-left"></i> 卡内原版 · 对照还原
          </div>
@@ -6727,9 +6959,7 @@ $menuBtn.on("click", async () => {
           await withLoadingOverlay(async () => {
             await luluRebindCharBook(bookName, reuseName);
           }, "正在把已提取的原版绑定给当前角色...");
-          toastr.success(
-            `已把 [${reuseName}] 绑给 [${charName}]`,
-          );
+          toastr.success(`已把 [${reuseName}] 绑给 [${charName}]`);
           renderCharView();
         }
       } else {
@@ -6789,8 +7019,7 @@ $menuBtn.on("click", async () => {
       charSnaps = {};
     const mySnaps = charSnaps[charName] || {};
     const names = sortCharSnapshotNames(charName, Object.keys(mySnaps));
-    if (names.length === 0)
-      return toastr.info("这个角色还没有快照可以删除呢~");
+    if (names.length === 0) return toastr.info("这个角色还没有快照可以删除呢~");
 
     let listHtml =
       '<div style="max-height:50vh; overflow-y:auto; display:flex; flex-direction:column; gap:6px;">';
@@ -7181,33 +7410,202 @@ $menuBtn.on("click", async () => {
   };
   $ui.find("#wb-btn-rescue-embedded").on("click", luluRescueEmbeddedLorebook);
   // ========== 【全库污染扫描】自选批量（不含跨角色改绑，安全版）开始 ==========
+  // ===== 新增：自选角色弹窗 =====
+  const luluSelectCharactersDialog = async () => {
+    const ctx =
+      typeof SillyTavern !== "undefined" ? SillyTavern.getContext() : {};
+    const allChars =
+      ctx.characters ||
+      (typeof SillyTavern !== "undefined" ? SillyTavern.characters : []) ||
+      [];
+    if (allChars.length === 0) {
+      await SillyTavern.callGenericPopup(
+        "没有找到任何角色卡数据...",
+        SillyTavern.POPUP_TYPE.TEXT,
+      );
+      return null;
+    }
+
+    const selectedAvatars = new Set();
+    // 解析时间
+    const parseTime = (val) => {
+      if (val === undefined || val === null) return 0;
+      const num = Number(val);
+      if (!isNaN(num)) return num;
+      const parsed = Date.parse(val);
+      return isNaN(parsed) ? 0 : parsed;
+    };
+
+    // 排序+过滤
+    const getSortedFiltered = (kw, sortMode) => {
+      let list = allChars.filter((c) => c && c.avatar);
+      if (kw) {
+        const lowerKw = kw.toLowerCase();
+        list = list.filter(
+          (c) =>
+            (c.name || "").toLowerCase().includes(lowerKw) ||
+            (c.avatar || "").toLowerCase().includes(lowerKw),
+        );
+      }
+      if (sortMode === "name_asc" || sortMode === "name_desc") {
+        list.sort((a, b) => {
+          const na = (a.name || "").toLowerCase();
+          const nb = (b.name || "").toLowerCase();
+          if (sortMode === "name_asc") return na.localeCompare(nb, "zh-CN");
+          return nb.localeCompare(na, "zh-CN");
+        });
+      } else if (sortMode === "import_asc" || sortMode === "import_desc") {
+        list.sort((a, b) => {
+          const ta = parseTime(a.create_date || a.created);
+          const tb = parseTime(b.create_date || b.created);
+          if (sortMode === "import_asc") return ta - tb;
+          return tb - ta;
+        });
+      }
+      return list;
+    };
+
+    const dialogHtml = `
+      <div style="padding:6px; font-family:sans-serif; min-width:320px; max-width:560px; text-align:left;">
+        <h3 style="margin-top:0; color:var(--SmartThemeQuoteColor); border-bottom:2px solid var(--SmartThemeBorderColor); padding-bottom:10px;">
+          <i class="fa-solid fa-user-astronaut"></i> 选择要扫描的角色卡
+          <span style="font-size:12px; font-weight:normal; color:gray;">(全库对照)</span>
+        </h3>
+        <div style="display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap;">
+          <input type="text" id="lulu-scan-char-search" class="text_pole" placeholder="🔍 搜索角色名或文件名..." style="flex:1; min-width:150px; box-sizing:border-box; padding:8px; font-size:13px; border-radius:4px;">
+          <select id="lulu-scan-char-sort" class="wb-input-dt" style="width:auto; padding:8px; font-size:12.5px; border-radius:4px; flex-shrink:0;">
+            <option value="import_asc">📅 导入时间 ↑</option>
+            <option value="import_desc">📅 导入时间 ↓</option>
+            <option value="name_asc">🔤 名称 A-Z</option>
+            <option value="name_desc">🔡 名称 Z-A</option>
+          </select>
+        </div>
+        <div style="display:flex; gap:6px; margin-bottom:10px;">
+          <button id="lulu-scan-char-selall" class="menu_button interactable btn-success wb-nowrap-btn" style="margin:0; padding:6px 12px; font-size:12px; border:none;">全选当前</button>
+          <button id="lulu-scan-char-deselall" class="menu_button interactable btn-secondary wb-nowrap-btn" style="margin:0; padding:6px 12px; font-size:12px;">清空当前</button>
+        </div>
+        <div id="lulu-scan-char-list" style="max-height:50vh; overflow-y:auto; display:flex; flex-direction:column; gap:6px; padding:4px;"></div>
+        <div style="font-size:11px; color:gray; margin-top:8px;">* 勾选后点击"开始扫描"，只检查选中的角色卡</div>
+      </div>`;
+
+    const $dlg = $(dialogHtml);
+    $dlg
+      .attr("id", "lulu-scan-char-select-dialog")
+      .prepend(
+        `<style>${buildPopupThemeCSS("dialog:has(#lulu-scan-char-select-dialog)")}</style>`,
+      );
+
+    const renderList = (kw, sortMode) => {
+      const list = getSortedFiltered(kw, sortMode);
+      const $list = $dlg.find("#lulu-scan-char-list").empty();
+      if (list.length === 0) {
+        $list.html(
+          '<div style="color:gray; text-align:center; padding:20px;">没有匹配的角色卡</div>',
+        );
+        return;
+      }
+      list.forEach((c) => {
+        const avatar = c.avatar;
+        const name = c.name || "未知角色";
+        const isChecked = selectedAvatars.has(avatar);
+        const $label = $(`
+          <label style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:6px; cursor:pointer;">
+            <input type="checkbox" class="lulu-scan-char-chk" data-avatar="${avatar}" ${isChecked ? "checked" : ""} style="accent-color: var(--SmartThemeQuoteColor); flex-shrink:0;">
+            <span style="flex:1; min-width:0; word-break:break-all;"><i class="fa-solid fa-robot" style="color:var(--SmartThemeQuoteColor); margin-right:4px;"></i>${name}</span>
+            <span style="font-size:10px; color:gray; white-space:nowrap; max-width:80px; overflow:hidden; text-overflow:ellipsis;">${avatar}</span>
+          </label>
+        `);
+        const $chk = $label.find(".lulu-scan-char-chk");
+        $chk.on("change", function () {
+          const a = $(this).attr("data-avatar");
+          if ($(this).is(":checked")) selectedAvatars.add(a);
+          else selectedAvatars.delete(a);
+        });
+        $list.append($label);
+      });
+    };
+
+    // 初始化渲染
+    renderList("", $dlg.find("#lulu-scan-char-sort").val());
+
+    // 搜索事件
+    $dlg.find("#lulu-scan-char-search").on("input", function () {
+      renderList($(this).val(), $dlg.find("#lulu-scan-char-sort").val());
+    });
+
+    // 排序事件
+    $dlg.find("#lulu-scan-char-sort").on("change", function () {
+      renderList($dlg.find("#lulu-scan-char-search").val(), $(this).val());
+    });
+
+    // 全选当前（只勾选当前过滤列表中的角色）
+    $dlg.find("#lulu-scan-char-selall").on("click", () => {
+      const kw = $dlg.find("#lulu-scan-char-search").val();
+      const sortMode = $dlg.find("#lulu-scan-char-sort").val();
+      const list = getSortedFiltered(kw, sortMode);
+      list.forEach((c) => selectedAvatars.add(c.avatar));
+      renderList(kw, sortMode);
+    });
+
+    // 清空当前（只取消当前过滤列表中的角色）
+    $dlg.find("#lulu-scan-char-deselall").on("click", () => {
+      const kw = $dlg.find("#lulu-scan-char-search").val();
+      const sortMode = $dlg.find("#lulu-scan-char-sort").val();
+      const list = getSortedFiltered(kw, sortMode);
+      list.forEach((c) => selectedAvatars.delete(c.avatar));
+      renderList(kw, sortMode);
+    });
+
+    const result = await SillyTavern.callGenericPopup(
+      $dlg,
+      SillyTavern.POPUP_TYPE.CONFIRM,
+      "",
+      { okButton: "开始扫描", cancelButton: "取消" },
+    );
+    if (result !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return null;
+
+    // 收集所有选中的角色
+    let selected = allChars.filter(
+      (c) => c && c.avatar && selectedAvatars.has(c.avatar),
+    );
+    if (selected.length === 0) {
+      await SillyTavern.callGenericPopup(
+        "你还没有勾选任何角色卡呢，已取消扫描~",
+        SillyTavern.POPUP_TYPE.TEXT,
+      );
+      return null;
+    }
+    return selected;
+  };
+  // ===== 自选角色弹窗结束 =====
+
   // 全库对照扫描缓存（会话级 + localStorage 持久化指纹）
-      // 强制从底层读取世界书，避免读到未加载/旧缓存
-      const luluReadLocalWbRaw = async (name) => {
-        try {
-          const res = await $.ajax({
-            url: "/api/worldinfo/get",
-            type: "POST",
-            contentType: "application/json",
-            data: JSON.stringify({ name: name }),
-          });
-          let raw = [];
-          if (Array.isArray(res)) raw = res;
-          else if (res && res.entries)
-            raw = Array.isArray(res.entries)
-              ? res.entries
-              : Object.values(res.entries);
-          else raw = Object.values(res || {});
-          // 统一成带 name/content 的数组，供 luluBookSig 用
-          return raw.map((e) => ({
-            name: e.comment || e.name || "",
-            comment: e.comment || e.name || "",
-            content: e.content || "",
-          }));
-        } catch (e) {
-          return null;
-        }
-      };
+  // 强制从底层读取世界书，避免读到未加载/旧缓存
+  const luluReadLocalWbRaw = async (name) => {
+    try {
+      const res = await $.ajax({
+        url: "/api/worldinfo/get",
+        type: "POST",
+        contentType: "application/json",
+        data: JSON.stringify({ name: name }),
+      });
+      let raw = [];
+      if (Array.isArray(res)) raw = res;
+      else if (res && res.entries)
+        raw = Array.isArray(res.entries)
+          ? res.entries
+          : Object.values(res.entries);
+      else raw = Object.values(res || {});
+      // 统一成带 name/content 的数组，供 luluBookSig 用
+      return raw.map((e) => ({
+        name: e.comment || e.name || "",
+        comment: e.comment || e.name || "",
+        content: e.content || "",
+      }));
+    } catch (e) {
+      return null;
+    }
+  };
   $ui.find("#wb-btn-batch-scan-pollution").on("click", async () => {
     let suspects = [];
 
@@ -7234,48 +7632,51 @@ $menuBtn.on("click", async () => {
     if (useCache) {
       suspects = window.luluScanCache;
     } else {
+      // 🆕 自选角色（取消则返回，不扫描）
+      const selectedChars = await luluSelectCharactersDialog();
+      if (selectedChars === null) return;
+
       const scanOk = await withLoadingOverlay(async () => {
-      const ctx =
-        typeof SillyTavern !== "undefined" ? SillyTavern.getContext() : {};
-      const allChars =
-        ctx.characters ||
-        (typeof SillyTavern !== "undefined" ? SillyTavern.characters : []) ||
-        [];
-      const localWbNames = getWorldbookNames();
-      const $sub = $ui.find("#wb-loading-sub").show();
+        const ctx =
+          typeof SillyTavern !== "undefined" ? SillyTavern.getContext() : {};
+        const allChars = selectedChars; // 只扫描用户选中的角色
+        const localWbNames = getWorldbookNames();
+        const $sub = $ui.find("#wb-loading-sub").show();
+        for (let idx = 0; idx < allChars.length; idx++) {
+          const c = allChars[idx];
+          if (!c || !c.avatar) continue;
+          $sub.text(`${idx + 1} / ${allChars.length}`);
 
-      for (let idx = 0; idx < allChars.length; idx++) {
-        const c = allChars[idx];
-        if (!c || !c.avatar) continue;
-        $sub.text(`${idx + 1} / ${allChars.length}`);
+          let embedded = null;
+          try {
+            embedded = await luluReadEmbeddedBook(c.avatar);
+          } catch (e) {
+            embedded = null;
+          }
+          if (!embedded || !embedded.name) continue;
 
-        let embedded = null;
-        try {
-          embedded = await luluReadEmbeddedBook(c.avatar);
-        } catch (e) {
-          embedded = null;
+          const bookName = embedded.name;
+          if (!localWbNames.includes(bookName)) continue;
+
+          // 🚫 已手动标记“跳过全库对照”的世界书，直接跳过
+          if (isScanSkipped(bookName)) continue;
+
+          const converted = luluConvertEmbedded(embedded.entries);
+          let localEntries = await luluReadLocalWbRaw(bookName);
+          if (localEntries === null) continue;
+
+          if (luluBookSig(localEntries) === luluBookSig(converted)) continue;
+          suspects.push({
+            avatar: c.avatar,
+            charName: c.name || "未知角色",
+            bookName: bookName,
+            embeddedCount: converted.length,
+            localCount: localEntries.length,
+            converted: converted,
+            localEntries: localEntries,
+          });
         }
-        if (!embedded || !embedded.name) continue;
-
-        const bookName = embedded.name;
-        if (!localWbNames.includes(bookName)) continue;
-
-        const converted = luluConvertEmbedded(embedded.entries);
-        let localEntries = await luluReadLocalWbRaw(bookName);
-        if (localEntries === null) continue;
-
-        if (luluBookSig(localEntries) === luluBookSig(converted)) continue;
-        suspects.push({
-          avatar: c.avatar,
-          charName: c.name || "未知角色",
-          bookName: bookName,
-          embeddedCount: converted.length,
-          localCount: localEntries.length,
-          converted: converted,
-          localEntries: localEntries,
-        });
-      }
-      }, "正在扫描全部角色卡的内嵌世界书...");
+      }, "正在扫描选中的角色卡的内嵌世界书...");
 
       if (scanOk === false) return;
 
@@ -7283,6 +7684,9 @@ $menuBtn.on("click", async () => {
       window.luluScanCache = suspects;
       window.luluScanCacheTime = Date.now();
     }
+
+    // 🚫 过滤掉手动标记“跳过全库对照”的世界书
+    suspects = suspects.filter((s) => !isScanSkipped(s.bookName));
 
     if (suspects.length === 0) {
       return SillyTavern.callGenericPopup(
@@ -7296,7 +7700,7 @@ $menuBtn.on("click", async () => {
       );
     }
 
-const escHtml = (s) =>
+    const escHtml = (s) =>
       String(s).replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">");
 
     let rowsHtml = "";
@@ -7312,10 +7716,11 @@ const escHtml = (s) =>
               
               <!-- 优化后的操作区 -->
               <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px; padding-top:8px; border-top:1px dashed rgba(125,125,125,0.2);">
-                <select class="lulu-scan-action wb-input-dt" data-idx="${i}" style="width:100%; padding:6px 8px; font-size:12px; border:1px solid var(--SmartThemeQuoteColor); border-radius:4px; background:var(--SmartThemeBlurTintColor); appearance:auto; -webkit-appearance:auto; cursor:pointer;">
-                  <option value="extract">📥 另存卡内原版为新书 (推荐)</option>
-                  <option value="overwrite">⚠️ 危险：覆盖本地旧书</option>
-                </select>
+                <select class="lulu-scan-action wb-input-dt" data-idx="${i}" style="...">
+  <option value="extract">📥 另存卡内原版为新书 (推荐)</option>
+  <option value="overwrite">⚠️ 危险：覆盖本地旧书</option>
+  <option value="skip">🚫 标记跳过全库对照</option>
+</select>
                 <button class="menu_button interactable btn-primary wb-nowrap-btn lulu-scan-diff" data-idx="${i}" style="margin:0; padding:6px 8px; font-size:12px; border:none; width:100%; justify-content:center;"><i class="fa-solid fa-eye"></i> 查看具体差异</button>
               </div>
             </div>
@@ -7410,7 +7815,6 @@ const escHtml = (s) =>
       $panel.slideDown(120);
     });
 
-
     const result = await SillyTavern.callGenericPopup(
       $dlg,
       SillyTavern.POPUP_TYPE.CONFIRM,
@@ -7441,6 +7845,7 @@ const escHtml = (s) =>
 
     let extractCount = 0;
     let overwriteCount = 0;
+    let skipCount = 0;
     const resultLines = [];
     const extractedNames = [];
 
@@ -7470,6 +7875,19 @@ const escHtml = (s) =>
             await replaceWorldbook(s.bookName, s.converted);
             overwriteCount++;
             resultLines.push(`✅ [${s.bookName}] 已用卡内原版覆盖`);
+          } else if (t.action === "skip") {
+            // 🚫 标记跳过全库对照（和主界面眼睛按钮效果一样）
+            if (!isScanSkipped(s.bookName)) {
+              const skipList = getScanSkipList();
+              skipList.push(s.bookName);
+              saveScanSkipList(skipList);
+              skipCount++;
+              resultLines.push(`🚫 [${s.bookName}] 已标记跳过全库对照`);
+            } else {
+              resultLines.push(
+                `🔕 [${s.bookName}] 已在跳过列表中，无需重复标记`,
+              );
+            }
           }
         } catch (e) {
           resultLines.push(`❌ [${s.charName}] 处理失败：${e.message}`);
@@ -7492,7 +7910,7 @@ const escHtml = (s) =>
     await SillyTavern.callGenericPopup(
       `<div style="text-align:left; line-height:1.7; max-height:55vh; overflow-y:auto;">
         <strong style="color:var(--SmartThemeQuoteColor);">🎉 批量处理完成！</strong><br><br>
-        提取新书 ${extractCount} 本，覆盖本地 ${overwriteCount} 本。<br><br>
+        提取新书 ${extractCount} 本，覆盖本地 ${overwriteCount} 本，标记跳过 ${skipCount} 本。<br><br>
         <div style="font-size:12.5px;">${resultLines.map((l) => `<div style="padding:2px 0;">${escHtml(l)}</div>`).join("")}</div>
         ${tipHtml}
       </div>`,
@@ -7566,6 +7984,7 @@ const escHtml = (s) =>
   const renderData = async (highlightName = null) => {
     const keyword = $ui.find("#wb-search-input").val().toLowerCase();
     const showUnboundOnly = $ui.find("#wb-filter-unbound").is(":checked");
+    const showLockedOnly = $ui.find("#wb-filter-locked").is(":checked");
     const stateFilter = $ui.find("#wb-filter-state").val();
     const sortMode = $ui.find("#wb-sort-select").val();
     const isDeepSearch = $ui.find("#wb-deep-search-toggle").is(":checked");
@@ -7659,6 +8078,7 @@ const escHtml = (s) =>
         )
           return false;
         if (showUnboundOnly && bindings.length > 0) return false;
+        if (showLockedOnly && !isWbLocked(wb)) return false;
         if (stateFilter === "enabled" && !activeWbs.includes(wb)) return false;
         if (stateFilter === "disabled" && activeWbs.includes(wb)) return false;
         if (currentSelCat === "unassigned") {
@@ -7735,13 +8155,33 @@ const escHtml = (s) =>
           '<input type="checkbox" style="transform: scale(1.2); margin-top:2px; flex-shrink:0;">',
         ).prop("checked", isActiveWb);
         $chk.on("change", async function () {
+          const $this = $(this);
+          const checked = $this.is(":checked");
           await withLoadingOverlay(async () => {
             let current = getGlobalWorldbookNames();
-            $(this).is(":checked")
-              ? current.push(wb)
-              : (current = current.filter((n) => n !== wb));
+            if (checked) {
+              if (!current.includes(wb)) current.push(wb);
+            } else {
+              current = current.filter((n) => n !== wb);
+            }
             await rebindGlobalWorldbooks(current);
-            renderData();
+            // 不再全量重绘，只更新当前卡片的样式
+            const $wrapper = $this.closest(".wb-item-wrapper");
+            if ($wrapper.length) {
+              if (checked) {
+                $wrapper.addClass("wb-global-active");
+                $wrapper.find(".wb-name-text").css({
+                  "font-weight": "bold",
+                  color: "var(--SmartThemeQuoteColor)",
+                });
+              } else {
+                $wrapper.removeClass("wb-global-active");
+                $wrapper.find(".wb-name-text").css({
+                  "font-weight": "normal",
+                  color: "var(--SmartThemeBodyColor)",
+                });
+              }
+            }
           }, "应用中...");
         });
       }
@@ -8063,6 +8503,21 @@ const escHtml = (s) =>
             ).on("click", () =>
               attemptRenameWb(wb, bindings.length > 0, bindings),
             ),
+          )
+          .append(
+            // 🚫 全库对照跳过标记
+            $(
+              `<div class="wb-icon-btn hover-yellow" title="${isScanSkipped(wb) ? "已标记跳过全库对照，点击取消" : "标记为跳过全库对照（全库对照扫描时自动忽略）"}" style="color:${isScanSkipped(wb) ? "#fcc419" : "inherit"}"><i class="fa-solid ${isScanSkipped(wb) ? "fa-eye-slash" : "fa-eye"}"></i></div>`,
+            ).on("click", (e) => {
+              e.stopPropagation();
+              const nowSkipped = toggleScanSkip(wb);
+              toastr.success(
+                nowSkipped
+                  ? `🔕 [${wb}] 已标记跳过全库对照`
+                  : `🔔 [${wb}] 已取消标记，重新参与全库对照`,
+              );
+              renderData(wb);
+            }),
           )
           .append(
             // 🔒 锁定/解锁按钮
@@ -8867,7 +9322,9 @@ const escHtml = (s) =>
     tuneWbName = wbName;
     $ui.find("#wb-entry-title").text(wbName);
     $ui.find("#wb-entry-search").val("");
-    $ui.find("#wb-entry-sort").val("default");
+    $ui
+      .find("#wb-entry-sort")
+      .val(localStorage.getItem("lulu_wb_entry_sort") || "default");
     await withLoadingOverlay(async () => {
       let fetched;
       try {
@@ -8935,11 +9392,8 @@ const escHtml = (s) =>
           return;
         }
 
-        // 1. 优先读取全局缓存的分组
-        //    ✨ 但如果这本书带有对照表（说明是"完整分组信息的书"），就跳过本地缓存，以对照表/前缀为准
-        //    这样跨设备、覆盖导入同名书时，不会被本地旧缓存干扰
-        const _hasMap = luluPrefixMap && Object.keys(luluPrefixMap).length > 0;
-        let group = _hasMap ? "" : getEntryUiGroup(wbName, e.uid);
+        // 1. 始终优先读取全局缓存的分组（不再因为有对照表而跳过缓存）
+        let group = getEntryUiGroup(wbName, e.uid);
 
         // 2. 如果缓存没有，尝试读取条目自带的隐形扩展元数据 (兼容原生角色卡导入)
         if (!group && e.extensions && e.extensions.lulu_group) {
@@ -9232,13 +9686,32 @@ const escHtml = (s) =>
   $ui.find("#wb-btn-entry-confirm-delete").on("click", async () => {
     if (entryBatchSelected.size === 0)
       return toastr.warning("请先选中要删除的条目哦~");
+
+    // 🔒 把锁定的条目挑出来，只删没锁的
+    const lockedSelected = [];
+    const deletableIndices = [];
+    entryBatchSelected.forEach((idx) => {
+      const entry = tuneEntries[idx];
+      if (entry && isEntryLocked(tuneWbName, entry.uid)) {
+        lockedSelected.push(entry.name || "(未命名条目)");
+      } else {
+        deletableIndices.push(idx);
+      }
+    });
+
+    if (deletableIndices.length === 0) {
+      return toastr.warning(
+        `选中的 ${entryBatchSelected.size} 项全部处于锁定状态，没有可删除的条目哦~ 想删请先解锁。`,
+      );
+    }
+
     if (
       (await SillyTavern.callGenericPopup(
-        `确认要暂时移除这 ${entryBatchSelected.size} 项内容吗？\n(移除后还需要点击最下方绿色保存按钮才会生效哦)`,
+        `确认要暂时移除这 ${deletableIndices.length} 项内容吗？${lockedSelected.length > 0 ? `\n(另有 ${lockedSelected.length} 项已锁定，将自动跳过)` : ""}`,
         SillyTavern.POPUP_TYPE.CONFIRM,
       )) === SillyTavern.POPUP_RESULT.AFFIRMATIVE
     ) {
-      let sortedIndices = Array.from(entryBatchSelected).sort((a, b) => b - a);
+      let sortedIndices = deletableIndices.sort((a, b) => b - a);
       sortedIndices.forEach((idx) => tuneEntries.splice(idx, 1));
       entryBatchSelected.clear();
       renderEntryList();
@@ -10281,10 +10754,21 @@ const escHtml = (s) =>
         );
 
         if (btnRes === 888) {
-          const uidsToRemove = gEntries.map((entry) => entry.uid);
+          // 🔒 锁定的条目不会被清空
+          const lockedInGroup = gEntries.filter((entry) =>
+            isEntryLocked(tuneWbName, entry.uid),
+          );
+          const uidsToRemove = gEntries
+            .filter((entry) => !isEntryLocked(tuneWbName, entry.uid))
+            .map((entry) => entry.uid);
           tuneEntries = tuneEntries.filter(
             (entry) => !uidsToRemove.includes(entry.uid),
           );
+          if (lockedInGroup.length > 0) {
+            toastr.warning(
+              `🔒 组内有 ${lockedInGroup.length} 个条目已锁定，已自动保留~`,
+            );
+          }
           delete wbEntryGroupState[groupName];
           // ✨ 清理该分组的前缀记忆
           const _ps888 = getGroupPrefixStore();
@@ -10314,6 +10798,7 @@ const escHtml = (s) =>
 
       gEntries.forEach((entry) => {
         const index = tuneEntries.indexOf(entry);
+        const isLockedEntry = isEntryLocked(tuneWbName, entry.uid);
         const strategy = entry.strategy || { type: "constant", keys: [] };
         const keysInfo =
           strategy.type !== "selective"
@@ -10384,7 +10869,8 @@ const escHtml = (s) =>
         }
 
         const $info = $(
-          `<div style="flex:1; min-width:0; cursor:${isEntryBatchMode ? "pointer" : "default"};"><div style="font-weight:bold; margin-bottom: 5px; font-size:14px; word-break:break-all; display:flex; align-items:center;">${groupTagHtml}${entry.name || "未定义模块"}</div><div style="font-size:11px;color:gray;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${strategy.type !== "selective" ? '<span class="badge-blue">常驻</span>' : '<span class="badge-green">匹配</span>'}${posBadgeHtml} <span style="margin-left:5px;">${keysInfo}</span></div>${previewHtml}</div>`,
+          `<div style="flex:1; min-width:0; cursor:${isEntryBatchMode ? "pointer" : "default"};"><div style="font-weight:bold; margin-bottom: 5px; font-size:14px; word-break:break-all; display:flex; align-items:center;">${groupTagHtml}${isLockedEntry ? '<i class="fa-solid fa-lock" style="color:#fcc419; margin-right:4px; font-size:12px;" title="已锁定"></i>' : ""}${entry.name || "未定义模块"}</div>
+<div style="font-size:11px;color:gray;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${strategy.type !== "selective" ? '<span class="badge-blue">常驻</span>' : '<span class="badge-green">匹配</span>'}${posBadgeHtml} <span style="margin-left:5px;">${keysInfo}</span></div>${previewHtml}</div>`,
         );
 
         if (isEntryBatchMode)
@@ -10394,6 +10880,21 @@ const escHtml = (s) =>
 
         const $right = $(
           '<div style="display:flex; gap:6px; margin-left:auto; flex-shrink:0;"></div>',
+        );
+        // 🔒 条目锁定按钮
+        $right.append(
+          $(
+            `<button class="menu_button interactable wb-nowrap-btn" style="margin:0; color:${isLockedEntry ? "#fcc419" : "gray"}; border:1px solid ${isLockedEntry ? "#fcc419" : "var(--SmartThemeBorderColor)"};" title="${isLockedEntry ? "已锁定，点击解锁（锁定的条目不会被批量删除）" : "锁定此条目，防止误删"}"><i class="fa-solid ${isLockedEntry ? "fa-lock" : "fa-lock-open"}"></i></button>`,
+          ).on("click", (e) => {
+            e.stopPropagation();
+            const nowLocked = toggleEntryLock(tuneWbName, entry.uid);
+            toastr.success(
+              nowLocked
+                ? `🔒 条目已锁定，批量删除时会自动跳过~`
+                : `🔓 条目已解锁~`,
+            );
+            renderEntryList();
+          }),
         );
         $right.append(
           $(
@@ -10836,8 +11337,21 @@ const escHtml = (s) =>
     $dlg.closest("dialog").find(".popup-button-ok").trigger("click");
   };
   // ---- 功能6 Part2 结束 ----
-  $ui.find("#wb-entry-search").off("input").on("input", renderEntryList);
-  $ui.find("#wb-entry-sort").off("change").on("change", renderEntryList);
+  let entrySearchDebounce;
+  $ui
+    .find("#wb-entry-search")
+    .off("input")
+    .on("input", () => {
+      clearTimeout(entrySearchDebounce);
+      entrySearchDebounce = setTimeout(() => renderEntryList(), 250);
+    });
+  $ui
+    .find("#wb-entry-sort")
+    .off("change")
+    .on("change", function () {
+      localStorage.setItem("lulu_wb_entry_sort", $(this).val());
+      renderEntryList();
+    });
   $ui
     .find("#wb-btn-entry-all")
     .off("click")
@@ -10867,9 +11381,7 @@ const escHtml = (s) =>
             ? SillyTavern.getContext().name2
             : null;
       if (!charName)
-        return toastr.warning(
-          "角色快照需要在打开某个角色的聊天时才能保存哦~",
-        );
+        return toastr.warning("角色快照需要在打开某个角色的聊天时才能保存哦~");
 
       // 收集当前这本书里所有"已启用"的条目UID（对照表条目自动排除）
       const enabledUIDs = tuneEntries
@@ -10969,10 +11481,7 @@ const escHtml = (s) =>
       }
 
       // 重名检查（排除"给旧的改名"这种情况）
-      if (
-        mySnaps[snapName] &&
-        !(renameOldTo && snapName === renameOldTo)
-      ) {
+      if (mySnaps[snapName] && !(renameOldTo && snapName === renameOldTo)) {
         const overRes = await SillyTavern.callGenericPopup(
           `角色 [${charName}] 下已有名为【${snapName}】的快照，要覆盖它吗？`,
           SillyTavern.POPUP_TYPE.CONFIRM,
@@ -11010,9 +11519,7 @@ const escHtml = (s) =>
         { type: "global" },
       );
 
-      toastr.success(
-        `✨ 角色快照 [${snapName}] 已保存到 [${charName}] 名下！`,
-      );
+      toastr.success(`✨ 角色快照 [${snapName}] 已保存到 [${charName}] 名下！`);
     });
 
   // ✨ 新增：在条目编辑页直接应用/切换快照
@@ -11063,7 +11570,11 @@ const escHtml = (s) =>
           charSnaps = {};
         }
       }
-      if (!charSnaps || typeof charSnaps !== "object" || Array.isArray(charSnaps))
+      if (
+        !charSnaps ||
+        typeof charSnaps !== "object" ||
+        Array.isArray(charSnaps)
+      )
         charSnaps = {};
 
       // 记录哪些是角色快照，应用时要用不同逻辑
@@ -11262,7 +11773,9 @@ const escHtml = (s) =>
           // 从列表移除对应卡片
           checkedNames.forEach((n) => {
             const safe = encodeURIComponent(n);
-            $dlg.find(`.lulu-entry-snap-item[data-snapname="${safe}"]`).remove();
+            $dlg
+              .find(`.lulu-entry-snap-item[data-snapname="${safe}"]`)
+              .remove();
           });
           toastr.success(`已删除 ${checkedNames.length} 个快照~`);
         });
@@ -11412,11 +11925,17 @@ const escHtml = (s) =>
         if (grp && !seenGroups.has(grp)) {
           seenGroups.add(grp);
           const prefix = getGroupPrefix(tuneWbName, grp);
+          // 修复：无论前缀是否等于分组名，都要记录进对照表
+          // 这样即使没设自定义前缀，分组信息也不会丢失
           if (prefix) {
             prefixMapUsed[prefix] = grp;
+          } else {
+            // 如果没取到前缀（理论上不会），用分组名自身作为前缀
+            prefixMapUsed[grp] = grp;
           }
         }
       });
+
       // 根据映射，生成/更新/清理对照表条目
       syncMapEntryIntoEntries(pureEntries, prefixMapUsed);
       await replaceWorldbook(tuneWbName, pureEntries);
@@ -12532,6 +13051,19 @@ const escHtml = (s) =>
       const bookName = embedded.name;
       if (!bookName) return;
 
+      // 🚫 如果这本书被标记了“跳过全库对照”，自动检测也不再打扰
+      try {
+        const luluAutoScanSkipList = JSON.parse(
+          localStorage.getItem("lulu_wb_scan_skip_list") || "[]",
+        );
+        if (
+          Array.isArray(luluAutoScanSkipList) &&
+          luluAutoScanSkipList.includes(bookName)
+        ) {
+          return;
+        }
+      } catch (e) {}
+
       // 本地没有同名书 → 不算污染，跳过（但不永久标记，万一以后创建了同名书还能提醒）
       if (
         typeof getWorldbookNames !== "function" ||
@@ -12559,49 +13091,201 @@ const escHtml = (s) =>
       // 关键修复：不管用户选什么（包括忽略），都先永久标记这张卡为“已处理”，绝不再打扰
       markCharHandled(avatar);
 
+      // ========== 自包含差异面板（与主动“体检/救援”同款） ==========
+      const luluAutoEscHtml = (s) =>
+        String(s).replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">");
+
+      const luluAutoDiffText = (oldStr, newStr) => {
+        const oldLines = String(oldStr || "").split("\n");
+        const newLines = String(newStr || "").split("\n");
+        const oldSet = new Set(oldLines.map((l) => l.trim()));
+        const newSet = new Set(newLines.map((l) => l.trim()));
+        let oldHtml = "";
+        let newHtml = "";
+        oldLines.forEach((l) => {
+          const removed = !newSet.has(l.trim()) && l.trim() !== "";
+          oldHtml += `<div style="padding:1px 4px; ${removed ? "background:rgba(255,107,107,0.25); border-radius:2px;" : ""}">${luluAutoEscHtml(l) || " "}</div>`;
+        });
+        newLines.forEach((l) => {
+          const added = !oldSet.has(l.trim()) && l.trim() !== "";
+          newHtml += `<div style="padding:1px 4px; ${added ? "background:rgba(81,207,102,0.25); border-radius:2px;" : ""}">${luluAutoEscHtml(l) || " "}</div>`;
+        });
+        return { oldHtml, newHtml };
+      };
+
+      const luluAutoBuildDiffHtml = (
+        convertedEntries,
+        localEntriesArr,
+        uniquePrefix,
+      ) => {
+        const embMap = new Map();
+        convertedEntries.forEach((e) => {
+          embMap.set((e.name || e.comment || "(无名)").trim(), e);
+        });
+        const locMap = new Map();
+        localEntriesArr.forEach((e) => {
+          locMap.set((e.name || e.comment || "(无名)").trim(), e);
+        });
+        const onlyInLocal = [],
+          onlyInEmb = [],
+          changed = [],
+          same = [];
+        locMap.forEach((locE, name) => {
+          if (embMap.has(name)) {
+            const embE = embMap.get(name);
+            if ((locE.content || "").trim() !== (embE.content || "").trim())
+              changed.push({ name, locE, embE });
+            else same.push(name);
+          } else onlyInLocal.push({ name, locE });
+        });
+        embMap.forEach((embE, name) => {
+          if (!locMap.has(name)) onlyInEmb.push({ name, embE });
+        });
+
+        let html = `<div style="font-size:12px;">`;
+        html += `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; padding-bottom:8px; border-bottom:1px dashed var(--SmartThemeBorderColor);">`;
+        html += `<span style="background:rgba(81,207,102,0.15); color:#51cf66; border:1px solid #51cf66; padding:2px 8px; border-radius:4px;">本地新增 ${onlyInLocal.length}</span>`;
+        html += `<span style="background:rgba(255,107,107,0.15); color:#ff6b6b; border:1px solid #ff6b6b; padding:2px 8px; border-radius:4px;">本地缺失 ${onlyInEmb.length}</span>`;
+        html += `<span style="background:rgba(252,196,25,0.15); color:#fcc419; border:1px solid #fcc419; padding:2px 8px; border-radius:4px;">内容改动 ${changed.length}</span>`;
+        html += `<span style="background:rgba(150,150,150,0.15); color:gray; border:1px solid gray; padding:2px 8px; border-radius:4px;">未变 ${same.length}</span>`;
+        html += `</div>`;
+
+        if (changed.length > 0) {
+          html += `<div style="font-weight:bold; color:#fcc419; margin-bottom:6px;"><i class="fa-solid fa-pen"></i> 内容被改动的条目：</div>`;
+          changed.forEach((c, idx) => {
+            const diff = luluAutoDiffText(c.embE.content, c.locE.content);
+            html += `
+              <div style="margin-bottom:8px; border:1px solid var(--SmartThemeBorderColor); border-radius:6px; overflow:hidden;">
+                <div class="lulu-diff-toggle" data-prefix="${uniquePrefix}" data-cidx="${idx}" style="padding:6px 10px; background:rgba(252,196,25,0.1); cursor:pointer; font-weight:bold; display:flex; justify-content:space-between; align-items:center;">
+                  <span style="word-break:break-all;">📝 ${luluAutoEscHtml(c.name)}</span>
+                  <i class="fa-solid fa-chevron-down" style="font-size:11px;"></i>
+                </div>
+                <div class="lulu-diff-body" data-prefix="${uniquePrefix}" data-cidx="${idx}" style="display:none; padding:8px;">
+                  <div style="display:flex; gap:8px; font-size:11px; line-height:1.5;">
+                    <div style="flex:1; min-width:0;">
+                      <div style="font-weight:bold; color:#51cf66; margin-bottom:4px;">📗 卡内原版</div>
+                      <div style="max-height:200px; overflow:auto; background:rgba(0,0,0,0.15); border-radius:4px; padding:4px; white-space:pre-wrap; word-break:break-word;">${diff.oldHtml || "(空)"}</div>
+                    </div>
+                    <div style="flex:1; min-width:0;">
+                      <div style="font-weight:bold; color:#ff6b6b; margin-bottom:4px;">📕 本地当前</div>
+                      <div style="max-height:200px; overflow:auto; background:rgba(0,0,0,0.15); border-radius:4px; padding:4px; white-space:pre-wrap; word-break:break-word;">${diff.newHtml || "(空)"}</div>
+                    </div>
+                  </div>
+                  <div style="font-size:10px; color:gray; margin-top:4px;"><span style="background:rgba(255,107,107,0.25); padding:0 4px;">红底</span>=卡内有本地删了　<span style="background:rgba(81,207,102,0.25); padding:0 4px;">绿底</span>=本地新加的</div>
+                </div>
+              </div>`;
+          });
+        }
+
+        if (onlyInLocal.length > 0) {
+          html += `<div style="font-weight:bold; color:#51cf66; margin:8px 0 4px 0;"><i class="fa-solid fa-plus"></i> 本地多出来的条目（原本没有）：</div>`;
+          html += `<div style="background:rgba(81,207,102,0.06); border:1px solid rgba(81,207,102,0.3); border-radius:4px; padding:6px; max-height:120px; overflow-y:auto;">`;
+          onlyInLocal.forEach((o) => {
+            html += `<div style="padding:1px 0;">• ${luluAutoEscHtml(o.name)}</div>`;
+          });
+          html += `</div>`;
+        }
+
+        if (onlyInEmb.length > 0) {
+          html += `<div style="font-weight:bold; color:#ff6b6b; margin:8px 0 4px 0;"><i class="fa-solid fa-minus"></i> 本地缺失的条目（原本有）：</div>`;
+          html += `<div style="background:rgba(255,107,107,0.06); border:1px solid rgba(255,107,107,0.3); border-radius:4px; padding:6px; max-height:120px; overflow-y:auto;">`;
+          onlyInEmb.forEach((o) => {
+            html += `<div style="padding:1px 0;">• ${luluAutoEscHtml(o.name)}</div>`;
+          });
+          html += `</div>`;
+        }
+
+        if (
+          changed.length === 0 &&
+          onlyInLocal.length === 0 &&
+          onlyInEmb.length === 0
+        ) {
+          html += `<div style="text-align:center; color:gray; padding:10px;">条目名和正文都一致，差异可能在触发关键字/参数上~</div>`;
+        }
+        html += `</div>`;
+        return html;
+      };
+
+      const luluAutoBindDiffToggle = ($scope) => {
+        $scope
+          .find(".lulu-diff-toggle")
+          .off("click")
+          .on("click", function () {
+            const cidx = $(this).attr("data-cidx");
+            const prefix = $(this).attr("data-prefix");
+            const $body = $scope.find(
+              `.lulu-diff-body[data-prefix="${prefix}"][data-cidx="${cidx}"]`,
+            );
+            const $icon = $(this).find("i.fa-chevron-down, i.fa-chevron-up");
+            if ($body.is(":visible")) {
+              $body.slideUp(120);
+              $icon.removeClass("fa-chevron-up").addClass("fa-chevron-down");
+            } else {
+              $body.slideDown(120);
+              $icon.removeClass("fa-chevron-down").addClass("fa-chevron-up");
+            }
+          });
+      };
+
+      const diffHtml = luluAutoBuildDiffHtml(converted, localEntries, "auto");
+
+      const $rescueDlg =
+        $(`<div id="lulu-rescue-dialog" style="text-align:left; line-height:1.6; padding:2px; max-width:520px;">
+         <div style="font-size:15px; font-weight:bold; color:var(--SmartThemeQuoteColor); margin-bottom:12px;">
+           <i class="fa-solid fa-clock-rotate-left"></i> 卡内原版 · 对照还原
+         </div>
+         <div style="background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:8px; padding:12px; margin-bottom:12px;">
+           <div style="font-size:13px; margin-bottom:8px;"><i class="fa-solid fa-robot" style="color:var(--SmartThemeQuoteColor); width:18px;"></i> 角色：<strong>${charName || "当前角色"}</strong></div>
+           <div style="font-size:13px;"><i class="fa-solid fa-book" style="color:var(--SmartThemeQuoteColor); width:18px;"></i> 世界书：<strong>${bookName}</strong></div>
+         </div>
+         <div style="font-size:12.5px; color:var(--SmartThemeBodyColor); line-height:1.7; margin-bottom:12px;">
+           这张卡自带的世界书原版，和本地同名的这本<strong style="color:var(--SmartThemeQuoteColor);">内容不一样</strong>了。<br>
+           <span style="color:gray;">可能是导入时被本地旧书接管，也可能是你改过本地这本、现在想还原成卡里的原版~</span>
+         </div>
+         <div id="lulu-single-diff-toggle" style="cursor:pointer; padding:8px 12px; background:rgba(125,125,125,0.12); border:1px solid var(--SmartThemeBorderColor); border-radius:6px; font-weight:bold; color:var(--SmartThemeQuoteColor); display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-size:13px;">
+           <span><i class="fa-solid fa-magnifying-glass-chart"></i> 查看详细差异</span>
+           <i class="fa-solid fa-chevron-down" style="font-size:11px;"></i>
+         </div>
+         <div id="lulu-single-diff-panel" style="display:none; max-height:45vh; overflow-y:auto; padding:4px;">${diffHtml}</div>
+       </div>`);
+
+      $rescueDlg.prepend(
+        `<style>
+          ${buildPopupThemeCSS("dialog:has(#lulu-rescue-dialog)")}
+          @media (max-width: 768px) {
+            dialog:has(#lulu-rescue-dialog) #lulu-rescue-dialog { font-size: 12px !important; }
+            dialog:has(#lulu-rescue-dialog) #lulu-single-diff-toggle { font-size: 12px !important; padding: 7px 10px !important; }
+          }
+        </style>`,
+      );
+
+      $rescueDlg.find("#lulu-single-diff-toggle").on("click", function () {
+        const $panel = $rescueDlg.find("#lulu-single-diff-panel");
+        const $icon = $(this).find("i.fa-chevron-down, i.fa-chevron-up");
+        if ($panel.is(":visible")) {
+          $panel.slideUp(150);
+          $icon.removeClass("fa-chevron-up").addClass("fa-chevron-down");
+        } else {
+          $panel.slideDown(150);
+          $icon.removeClass("fa-chevron-down").addClass("fa-chevron-up");
+        }
+      });
+
+      luluAutoBindDiffToggle($rescueDlg);
+
       const btnRes = await SillyTavern.callGenericPopup(
-        `<div style="text-align:left; line-height:1.6; padding:2px;">
-           <div style="font-size:15px; font-weight:bold; color:var(--SmartThemeQuoteColor); margin-bottom:12px;">
-             <i class="fa-solid fa-clock-rotate-left"></i> 发现可还原的卡内原版
-           </div>
-           <div style="background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:8px; padding:12px; margin-bottom:12px;">
-             <div style="font-size:13.5px; margin-bottom:8px;"><i class="fa-solid fa-robot" style="color:var(--SmartThemeQuoteColor); width:18px;"></i> 角色：<strong>${charName || "当前角色"}</strong></div>
-             <div style="font-size:13.5px; margin-bottom:10px;"><i class="fa-solid fa-book" style="color:var(--SmartThemeQuoteColor); width:18px;"></i> 世界书：<strong>${bookName}</strong></div>
-             <div style="display:flex; gap:8px;">
-               <div style="flex:1; text-align:center; background:rgba(81,207,102,0.1); border:1px solid rgba(81,207,102,0.4); border-radius:6px; padding:8px;">
-                 <div style="font-size:11px; color:#51cf66;">📗 卡内原版</div>
-                 <div style="font-size:16px; font-weight:bold; color:#51cf66;">${converted.length} 条</div>
-               </div>
-               <div style="flex:1; text-align:center; background:rgba(255,107,107,0.1); border:1px solid rgba(255,107,107,0.4); border-radius:6px; padding:8px;">
-                 <div style="font-size:11px; color:#ff6b6b;">📕 本地当前</div>
-                 <div style="font-size:16px; font-weight:bold; color:#ff6b6b;">${localEntries.length} 条</div>
-               </div>
-             </div>
-           </div>
-           <div style="font-size:12.5px; color:var(--SmartThemeBodyColor); line-height:1.7;">
-             这张卡自带的世界书原版，和本地同名的这本<strong style="color:var(--SmartThemeQuoteColor);">内容不一样</strong>了。<br>
-             <span style="color:gray;">可能是导入新卡时被本地旧书接管，也可能是你自己改动过本地这本书。</span>
-           </div>
-           <div style="font-size:11.5px; color:gray; margin-top:10px; text-align:center;">（无论选哪个，这张卡都不会再自动弹此提示）</div>
-         </div>`,
+        $rescueDlg,
         SillyTavern.POPUP_TYPE.TEXT,
         "",
         {
           okButton: "暂不处理",
           customButtons: [
-            {
-              text: "另存卡内原版并绑给本卡（推荐）",
-              result: 888,
-              classes: ["btn-success"],
-            },
-            {
-              text: "用卡内原版覆盖本地这本书",
-              result: 999,
-              classes: ["btn-danger"],
-            },
+            { text: "另建原版并绑定", result: 888, classes: ["btn-success"] },
+            { text: "覆盖本地此书", result: 999, classes: ["btn-danger"] },
           ],
         },
       );
+      // ========== 自包含差异面板结束 ==========
       // ✨ 严格判断：只有明确等于 888 或 999 才动手，其它一律什么都不做
       if (btnRes === 888) {
         let newName = `${bookName}_卡内原版`;
