@@ -76,6 +76,20 @@ const getEntryUiGroup = (wbName, uid) => {
   const map = getWbUiGroups();
   return map[wbName] && map[wbName][uid] ? map[wbName][uid] : "";
 };
+
+// ========== 【通用】分配新条目 UID（模仿酒馆原生 getFreeWorldEntryUid） ==========
+const luluGetFreeEntryUid = (entries) => {
+  const used = new Set();
+  (Array.isArray(entries) ? entries : []).forEach((e) => {
+    if (e && (typeof e.uid === "number" || typeof e.uid === "string")) {
+      const uidNum = Number(e.uid);
+      if (Number.isInteger(uidNum) && uidNum >= 0) used.add(uidNum);
+    }
+  });
+  let uid = 0;
+  while (used.has(uid)) uid++;
+  return uid;
+};
 // ========== 【通用】给弹窗生成跟随主题的 CSS（全局版）==========
 window.buildPopupThemeCSS = (selector) => {
   const mode = localStorage.getItem("lulu_wb_panel_theme") || "default";
@@ -339,7 +353,7 @@ const syncMapEntryIntoEntries = (entries, prefixMapUsed) => {
   } else {
     // 没有 → 新建一个关闭状态的条目
     entries.push({
-      uid: Date.now() + Math.floor(Math.random() * 100000),
+      uid: luluGetFreeEntryUid(entries),
       name: mapName,
       comment: mapName,
       title: mapName,
@@ -1691,7 +1705,6 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
       }
     };
     const onPointerUp = (ev) => {
-      console.log("松手，isDragging =", isDragging);
       btnNode.removeEventListener("pointermove", onPointerMove);
       btnNode.removeEventListener("pointerup", onPointerUp);
       btnNode.removeEventListener("pointercancel", onPointerUp);
@@ -2107,11 +2120,11 @@ $menuBtn.on("click", async () => {
                 #wb-search-input { margin-bottom: 6px !important; padding: 7px !important; font-size: 12px !important; }
 
                 .wb-toolbar { flex-direction: column; align-items: stretch; gap: 6px; margin-bottom: 6px; }
-                .wb-toolbar > div:first-child { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-                .wb-toolbar > div:first-child > div:first-child { grid-column: 1 / -1; display: grid !important; grid-template-columns: 1fr auto; gap: 6px; margin-right: 0 !important; width: 100%; }
-                .wb-toolbar > div:first-child > #wb-filter-state { grid-column: 1 / -1; }
-                .wb-toolbar > div:first-child > #wb-sort-select { grid-column: 1 / -1; }
-                .wb-toolbar > div:first-child > label { grid-column: auto !important; justify-content: center !important; padding: 6px 2px !important; font-size: 11.5px !important; white-space: nowrap; }
+                .wb-toolbar > div:first-child { width: 100% !important; display: flex !important; flex-wrap: wrap; gap: 6px; align-items: center; }
+                .wb-toolbar > div:first-child > div:first-child { flex: 1 1 100%; display: flex !important; gap: 6px; margin-right: 0 !important; width: auto; }
+.wb-toolbar > div:first-child > #wb-filter-state,
+.wb-toolbar > div:first-child > #wb-sort-select { flex: 1 1 100%; }
+                .wb-toolbar > div:first-child > label { flex: 1 1 0 !important; min-width: 130px; max-width: 50%; box-sizing: border-box; justify-content: center !important; margin: 0 !important; padding: 6px 2px !important; font-size: 11.5px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
                 .wb-controls-group {
                     width: 100%;
                     display: grid !important;
@@ -2713,11 +2726,9 @@ $menuBtn.on("click", async () => {
                     <div style="background: rgba(0,0,0,0.1); border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px; padding: 12px;">
                         <h3 style="margin-top:0; font-size:14px;"><i class="fa-solid fa-robot" style="color:var(--SmartThemeQuoteColor);"></i> 🤖 当前聊天角色卡已绑定的世界书</h3>
                         <div id="wb-assoc-char-add-area" style="margin-bottom: 15px; display:flex; flex-direction:column; gap:8px;">
-                            <input type="text" id="wb-assoc-char-add-search" class="text_pole" placeholder="🔍 检索想绑定的一本世界书..." style="max-width:320px; box-sizing: border-box; padding: 8px;">
-                            <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                                <select id="wb-assoc-char-add-sel" class="wb-input-dt" style="max-width:280px; padding: 8px;"></select>
-                                <button id="wb-assoc-char-add-btn" class="menu_button interactable btn-primary wb-nowrap-btn" style="margin:0; padding:8px 12px; border:none; font-size:13px;"><i class="fa-solid fa-plus"></i> 给角色绑定此书</button>
-                            </div>
+                            <input type="text" id="wb-assoc-char-add-search" class="text_pole" placeholder="🔍 检索想绑定的世界书，可多选..." style="max-width:320px; box-sizing: border-box; padding: 8px;">
+<div id="wb-assoc-char-add-list" style="max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; margin: 8px 0; padding: 6px; background: var(--SmartThemeBotMesColor); border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px;"></div>
+<button id="wb-assoc-char-add-btn" class="menu_button interactable btn-primary wb-nowrap-btn" style="margin:0; padding:8px 12px; border:none; font-size:13px;"><i class="fa-solid fa-plus"></i> 批量绑定给当前角色</button>
                         </div>
 
                         <div id="wb-assoc-char-list" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
@@ -3656,14 +3667,45 @@ $menuBtn.on("click", async () => {
   $ui.find("#wb-toggle-floating").prop("checked", isFloatingEnabledNow);
 
   const updateFloatConfig = () => {
-    const sz = $ui.find("#wb-float-size").val(),
-      op = $ui.find("#wb-float-opacity").val();
+    const sz = Number($ui.find("#wb-float-size").val()) || 48;
+    const op = Number($ui.find("#wb-float-opacity").val()) || 0.8;
     localStorage.setItem(
       "lulu_wb_floating_config",
       JSON.stringify({ size: sz, opacity: op }),
     );
-    if ($ui.find("#wb-toggle-floating").is(":checked"))
-      toggleFloatingButton(true, true);
+    const $btn = $("#lulu-wb-floating-btn");
+    if (!$btn.length) return;
+    const btnEl = $btn[0];
+    btnEl.style.setProperty("width", sz + "px", "important");
+    btnEl.style.setProperty("height", sz + "px", "important");
+    btnEl.style.setProperty("opacity", String(op), "important");
+    const $i = $btn.find("i");
+    if ($i.length)
+      $i[0].style.setProperty(
+        "font-size",
+        Math.round(sz * 0.45) + "px",
+        "important",
+      );
+    const $emoji = $btn.find(".lulu-float-emoji");
+    if ($emoji.length)
+      $emoji[0].style.setProperty(
+        "font-size",
+        Math.round(sz * 0.5) + "px",
+        "important",
+      );
+    const $svg = $btn.find(".lulu-float-svg");
+    if ($svg.length) {
+      $svg[0].style.setProperty(
+        "width",
+        Math.round(sz * 0.65) + "px",
+        "important",
+      );
+      $svg[0].style.setProperty(
+        "height",
+        Math.round(sz * 0.65) + "px",
+        "important",
+      );
+    }
   };
   // 构建内置图标下拉选项
   let iconOptionsHtml = "";
@@ -4962,9 +5004,9 @@ $menuBtn.on("click", async () => {
         let currentEntries = await getWorldbook(from.wbName);
 
         // 给复制的条目分配新uid并加"副本"后缀
-        let baseUid = Date.now();
+        let nextUid = luluGetFreeEntryUid(currentEntries);
         toCopy.forEach((e, i) => {
-          e.uid = baseUid + i;
+          e.uid = nextUid++;
           if (e.id !== undefined) e.id = e.uid;
 
           // 计算副本编号：看看同名的副本已经有几个了
@@ -5039,9 +5081,9 @@ $menuBtn.on("click", async () => {
 
         let targetEntries = await getWorldbook(to.wbName);
 
-        let baseUid = Date.now();
+        let nextUid = luluGetFreeEntryUid(targetEntries);
         toCopy.forEach((e, i) => {
-          e.uid = baseUid + i;
+          e.uid = nextUid++;
           if (e.id !== undefined) e.id = e.uid;
           delete e._lulu_ui_group;
         });
@@ -5137,7 +5179,9 @@ $menuBtn.on("click", async () => {
       $ui.find("#wb-config-panel-section").show();
 
       showTab(window.luluWbInitTabType || "global");
-      await initiateDeepScan();
+      setTimeout(async () => {
+        await initiateDeepScan();
+      }, 600);
     },
   });
   setTimeout(() => $(popup.dlg).addClass("wb-manager-dialog"), 50);
@@ -7273,6 +7317,169 @@ $menuBtn.on("click", async () => {
   });
 
   const renderAssocView = () => {
+    // ===== LULU 新增：当前聊天世界书绑定逻辑 开始 =====
+    const luluRenderChatBindSection = () => {
+      // 构建/获取聊天世界书区块
+      let chatSec = $ui.find("#lulu-assoc-chat-section");
+      const assocScroll = $ui
+        .find("#wb-assoc-view > .scrollableInnerFull")
+        .first();
+      if (!assocScroll.length) return;
+
+      if (chatSec.length === 0) {
+        chatSec =
+          $(`<div id="lulu-assoc-chat-section" style="background: rgba(0,0,0,0.1); border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px; padding: 12px;">
+        <h3 style="margin-top:0; font-size:14px;"><i class="fa-solid fa-comment-dots" style="color:#4dabf7;"></i> 💬 当前聊天已绑定的世界书</h3>
+        <div style="font-size:12px; color:gray; margin-bottom:10px;"><span id="wb-assoc-chat-name">正在检测当前聊天...</span> * 聊天世界书只会影响当前这个聊天，不会动到其它聊天哦。</div>
+        <div id="wb-assoc-chat-list" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--SmartThemeBorderColor);">
+          <div style="font-size:12px; font-weight:bold; color:var(--SmartThemeQuoteColor); margin-bottom:6px;">🔍 搜索并绑定一本世界书：</div>
+          <input type="text" id="wb-assoc-chat-add-search" class="text_pole" placeholder="🔍 搜索想绑定给当前聊天的世界书..." style="width:100%; box-sizing:border-box; padding: 8px; margin-bottom:6px;">
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <select id="wb-assoc-chat-add-sel" class="wb-input-dt" style="flex:1; min-width:200px; padding: 8px;"></select>
+            <button id="wb-assoc-chat-add-btn" class="menu_button interactable btn-primary wb-nowrap-btn" style="margin:0; padding:8px 12px; border:none; font-size:13px; flex-shrink:0;"><i class="fa-solid fa-plus"></i> 绑定给当前聊天</button>
+          </div>
+        </div>
+      </div>`);
+        assocScroll.append(chatSec);
+      }
+
+      const ctx2 =
+        typeof SillyTavern !== "undefined"
+          ? SillyTavern.getContext()
+          : typeof getContext === "function"
+            ? getContext()
+            : {};
+      const meta2 =
+        ctx2.chatMetadata ||
+        (typeof chat_metadata !== "undefined" ? chat_metadata : null);
+
+      if (!meta2) {
+        $ui.find("#wb-assoc-chat-name").text("未打开聊天");
+        $ui
+          .find("#wb-assoc-chat-list")
+          .html(
+            '<div style="color:gray; font-size:13px; padding:4px;">当前没有打开任何聊天~</div>',
+          );
+        return;
+      }
+
+      const chatId =
+        (typeof getCurrentChatId === "function"
+          ? getCurrentChatId()
+          : ctx2.currentChatId) || "当前会话";
+      const allWbs =
+        typeof getWorldbookNames === "function" ? getWorldbookNames() : [];
+      const currentChatWb = meta2["world_info"] || "";
+      $ui
+        .find("#wb-assoc-chat-name")
+        .text(`当前聊天：${chatId}（${currentChatWb || "未绑定"}）`);
+
+      const $chatList = $ui.find("#wb-assoc-chat-list").empty();
+
+      if (currentChatWb) {
+        const $bindItem =
+          $(`<div style="display:inline-flex; align-items:center; gap:8px; background:var(--SmartThemeBotMesColor); border:1px solid #4dabf7; padding:6px 12px; border-radius:4px; transition:0.2s;">
+        <span style="font-weight:bold; font-size:14px; color:#4dabf7; cursor:pointer; display:flex; align-items:center;" class="wb-assoc-entry-edit" title="点击编辑内容"><i class="fa-solid fa-comment-dots" style="margin-right:5px;"></i> ${currentChatWb}</span>
+        <div class="hover-red" style="cursor:pointer; color:gray; margin-left:4px;" title="解绑当前聊天的世界书"><i class="fa-solid fa-xmark"></i></div>
+      </div>`);
+        $bindItem
+          .find(".wb-assoc-entry-edit")
+          .on("click", () =>
+            openEntryTuneView(currentChatWb, "#wb-assoc-view"),
+          );
+        $bindItem.find(".hover-red").hover(
+          function () {
+            $(this).css("color", "#ff6b6b");
+          },
+          function () {
+            $(this).css("color", "gray");
+          },
+        );
+        $bindItem.find(".hover-red").on("click", async () => {
+          const confirm = await SillyTavern.callGenericPopup(
+            `确认解除当前聊天的世界书 [${currentChatWb}] 绑定吗？`,
+            SillyTavern.POPUP_TYPE.CONFIRM,
+          );
+          if (confirm !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+          try {
+            delete meta2["world_info"];
+            if (typeof ctx2.saveMetadata === "function")
+              await ctx2.saveMetadata();
+            else if (typeof saveMetadata === "function") await saveMetadata();
+            $(".chat_lorebook_button").removeClass("world_set");
+            toastr.success("已解除当前聊天的世界书绑定~");
+            renderAssocView();
+          } catch (e) {
+            toastr.error("解绑失败：" + e.message);
+          }
+        });
+        $chatList.append($bindItem);
+      } else {
+        $chatList.html(
+          '<div style="color:gray; font-size:13px; padding:4px;">当前聊天还没有绑定世界书呢~</div>',
+        );
+      }
+
+      // 更新可绑定下拉列表
+      const chatUnbounds = allWbs.filter((w) => w !== currentChatWb);
+      const updateChatSelectOptions = () => {
+        const kw = $ui
+          .find("#wb-assoc-chat-add-search")
+          .val()
+          .trim()
+          .toLowerCase();
+        const $sel = $ui.find("#wb-assoc-chat-add-sel").empty();
+        const filtered = kw
+          ? chatUnbounds.filter((w) => w.toLowerCase().includes(kw))
+          : chatUnbounds;
+        if (filtered.length > 0) {
+          filtered.forEach((w) =>
+            $sel.append(`<option value="${w}">${w}</option>`),
+          );
+          $sel.prop("disabled", false);
+          $ui.find("#wb-assoc-chat-add-btn").prop("disabled", false);
+        } else {
+          $sel.append('<option value="">没有符合条件的可绑定项...</option>');
+          $sel.prop("disabled", true);
+          $ui.find("#wb-assoc-chat-add-btn").prop("disabled", true);
+        }
+      };
+      $ui
+        .find("#wb-assoc-chat-add-search")
+        .off("input")
+        .on("input", updateChatSelectOptions);
+      updateChatSelectOptions();
+
+      // 绑定按钮
+      $ui
+        .find("#wb-assoc-chat-add-btn")
+        .off("click")
+        .on("click", async () => {
+          const wb = $ui.find("#wb-assoc-chat-add-sel").val();
+          if (!wb) return;
+          if (currentChatWb) {
+            const overRes = await SillyTavern.callGenericPopup(
+              `当前聊天已经绑定了 [${currentChatWb}]。要把它替换成 [${wb}] 吗？`,
+              SillyTavern.POPUP_TYPE.CONFIRM,
+            );
+            if (overRes !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+          }
+          try {
+            meta2["world_info"] = wb;
+            if (typeof ctx2.saveMetadata === "function")
+              await ctx2.saveMetadata();
+            else if (typeof saveMetadata === "function") await saveMetadata();
+            $(".chat_lorebook_button").addClass("world_set");
+            toastr.success(`✨ 当前聊天已绑定 [${wb}]！`);
+            renderAssocView();
+          } catch (e) {
+            toastr.error("绑定失败：" + e.message);
+          }
+        });
+    };
+    luluRenderChatBindSection();
+    // ===== LULU 新增：当前聊天世界书绑定逻辑 结束 =====
     const userBooks = getPersonaWbs();
     const $uCont = $ui.find("#wb-assoc-user-list").empty();
     if (userBooks.length === 0) {
@@ -7415,34 +7622,62 @@ $menuBtn.on("click", async () => {
         });
       }
       const unbounds = allAllWbs.filter((w) => !cBooks.includes(w));
-      const updateSelectOptions = () => {
+      const renderCharAddList = () => {
         const kw = $ui
           .find("#wb-assoc-char-add-search")
           .val()
           .trim()
           .toLowerCase();
-        const $sel = $ui.find("#wb-assoc-char-add-sel").empty();
+        const $list = $ui.find("#wb-assoc-char-add-list").empty();
         const filteredWbs = kw
           ? unbounds.filter((w) => w.toLowerCase().includes(kw))
           : unbounds;
-        if (filteredWbs.length > 0) {
-          filteredWbs.forEach((w) =>
-            $sel.append(`<option value="${w}">${w}</option>`),
+        if (filteredWbs.length === 0) {
+          $list.html(
+            '<div style="color:gray; font-size:12px; padding:8px; text-align:center;">没有符合条件的可绑定项...</div>',
           );
-          $sel.prop("disabled", false);
-          $ui.find("#wb-assoc-char-add-btn").prop("disabled", false);
-        } else {
-          $sel.append('<option value="">没有符合条件的可绑定项...</option>');
-          $sel.prop("disabled", true);
           $ui.find("#wb-assoc-char-add-btn").prop("disabled", true);
+          return;
         }
+        filteredWbs.forEach((w) => {
+          const $label = $(
+            `<label style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:4px; cursor:pointer; font-size:13px; word-break:break-all;">
+              <input type="checkbox" class="wb-assoc-char-check" value="${w}" style="accent-color:var(--SmartThemeQuoteColor); flex-shrink:0; transform:scale(1.1);">
+              <span style="flex:1; min-width:0;">${w}</span>
+            </label>`,
+          );
+          $list.append($label);
+        });
+        $ui.find("#wb-assoc-char-add-btn").prop("disabled", false);
       };
       $ui
         .find("#wb-assoc-char-add-search")
         .off("input")
-        .on("input", updateSelectOptions);
-      updateSelectOptions();
+        .on("input", renderCharAddList);
+      renderCharAddList();
     }
+    // ===== LULU 新增：调整关联视图区块顺序 开始 =====
+    try {
+      const assocScroll = $ui
+        .find("#wb-assoc-view > .scrollableInnerFull")
+        .first();
+      if (assocScroll.length) {
+        const charSection = assocScroll.children().has("#wb-assoc-char-list");
+        const personaSection = assocScroll
+          .children()
+          .has("#wb-assoc-user-list");
+        const chatSection = assocScroll.children("#lulu-assoc-chat-section");
+        if (charSection.length && personaSection.length && chatSection.length) {
+          assocScroll
+            .append(charSection)
+            .append(chatSection)
+            .append(personaSection);
+        }
+      }
+    } catch (e) {
+      console.error("Lulu 关联视图排序失败", e);
+    }
+    // ===== LULU 新增：调整关联视图区块顺序 结束 =====
   };
   $ui.find("#wb-btn-rescue-embedded").on("click", luluRescueEmbeddedLorebook);
   // ========== 【全库污染扫描】自选批量（不含跨角色改绑，安全版）开始 ==========
@@ -7985,8 +8220,12 @@ $menuBtn.on("click", async () => {
     renderAssocView();
   });
   $ui.find("#wb-assoc-char-add-btn").on("click", async () => {
-    const wb = $ui.find("#wb-assoc-char-add-sel").val();
-    if (!wb) return;
+    const selectedWbs = [];
+    $ui.find(".wb-assoc-char-check:checked").each(function () {
+      selectedWbs.push($(this).val());
+    });
+    if (selectedWbs.length === 0)
+      return toastr.warning("请先勾选要绑定的世界书哦~");
     let charBooksObj = { primary: null, additional: [] };
     try {
       if (typeof getCharWorldbookNames === "function")
@@ -7995,7 +8234,7 @@ $menuBtn.on("click", async () => {
     const cBooks = [];
     if (charBooksObj.primary) cBooks.push(charBooksObj.primary);
     if (charBooksObj.additional) cBooks.push(...charBooksObj.additional);
-    cBooks.push(wb);
+    cBooks.push(...selectedWbs);
     const newPrimary = cBooks.shift();
     const newAdd = cBooks;
     await withLoadingOverlay(async () => {
@@ -8007,7 +8246,7 @@ $menuBtn.on("click", async () => {
         await initiateDeepScan(true, false);
       }
     }, "正在努力为你当前的角色卡绑定世界书...");
-    toastr.success(`成功把[${wb}] 绑定给角色卡啦！`);
+    toastr.success(`成功把 [${selectedWbs.join(", ")}] 绑定给角色卡啦！`);
     $ui.find("#wb-assoc-char-add-search").val("");
     renderAssocView();
   });
@@ -8193,7 +8432,7 @@ $menuBtn.on("click", async () => {
         $chk.on("change", async function () {
           const $this = $(this);
           const checked = $this.is(":checked");
-          await withLoadingOverlay(async () => {
+          try {
             let current = getGlobalWorldbookNames();
             if (checked) {
               if (!current.includes(wb)) current.push(wb);
@@ -8218,7 +8457,11 @@ $menuBtn.on("click", async () => {
                 });
               }
             }
-          }, "应用中...");
+          } catch (e) {
+            $this.prop("checked", !checked);
+            if (typeof toastr !== "undefined")
+              toastr.error("切换失败：" + e.message);
+          }
         });
       }
       $titleArea.append($chk);
@@ -11902,7 +12145,7 @@ $menuBtn.on("click", async () => {
     .off("click")
     .on("click", () => {
       tuneEntries.unshift({
-        uid: Date.now() + Math.random(),
+        uid: luluGetFreeEntryUid(tuneEntries),
         name: "新增编辑条目",
         enabled: true,
         content: "",
@@ -12543,12 +12786,19 @@ $menuBtn.on("click", async () => {
     let luluLastSyncFingerprint = "";
     window.lulu_native_sync_interval = setInterval(async () => {
       if (isRendering) return;
+      if (document.hidden) return;
       const isNativeMagicEnabled =
         localStorage.getItem("lulu_wb_native_magic_enabled") !== "false";
+
+      // 【性能优化】原生分类已关闭且已清理完时，直接休息，连选择器都不跑
+      //    这样在聊天消息很多的大DOM页面上，可以减少后台空转开销
+      if (!isNativeMagicEnabled && window.lulu_native_cleaned) return;
+
       const $entries = $(".world_entry");
       if ($entries.length === 0) return;
       const $container = $entries.first().parent();
       if (!$container.length) return;
+      if (!$container.is(":visible")) return;
       // ✨ 内容指纹：状态没变就直接跳过（注意：指纹要等画完了才记录，不能在这里就记）
       let luluCurrentFp = null;
       if (isNativeMagicEnabled) {
@@ -12563,13 +12813,18 @@ $menuBtn.on("click", async () => {
         if (luluCurrentFp === luluLastSyncFingerprint) return;
       }
       if (!isNativeMagicEnabled) {
+        // ✨【性能优化】只清理一次，不再每轮反复检查样式
         if ($container.css("display") === "flex") {
           $container.css({ display: "", "flex-direction": "" });
           $(".lulu-native-group-header").remove();
           $entries.css({ order: "", display: "", margin: "" });
         }
+        window.lulu_native_cleaned = true;
         return;
       }
+
+      // ✨ 原生分组开启时，重置清理标记（这样以后关闭时还能再清理一次）
+      window.lulu_native_cleaned = false;
       if (isFetching) return;
       if (
         $container.css("display") !== "flex" ||
@@ -12596,6 +12851,14 @@ $menuBtn.on("click", async () => {
         return;
       }
       if (!cachedWbEntries || cachedWbEntries.length === 0) return;
+      const entryByName = new Map();
+      const entryByUid = new Map();
+      for (const e of cachedWbEntries) {
+        const title = e.name || e.comment || "";
+        if (title && !entryByName.has(title)) entryByName.set(title, e);
+        const uid = e.uid !== undefined && e.uid !== null ? e.uid : e.id;
+        if (uid !== undefined && uid !== null) entryByUid.set(String(uid), e);
+      }
       const groupCounts = {};
       $entries.each(function (index) {
         const $entry = $(this);
@@ -12608,24 +12871,10 @@ $menuBtn.on("click", async () => {
           return true; // 相当于 continue，跳过这一条
         }
         let myGroup = "📁 未分类条目";
-        let foundEntry = cachedWbEntries.find(
-          (e) => e.name === entryTitle || e.comment === entryTitle,
-        );
+        let foundEntry = entryByName.get(entryTitle);
         if (!foundEntry) {
           const domUid = parseInt($entry.attr("uid") || $entry.data("id"), 10);
-          if (!isNaN(domUid)) {
-            foundEntry = cachedWbEntries.find(
-              (e) => e.uid === domUid || e.id === domUid,
-            );
-          }
-        }
-        if (!foundEntry) {
-          const domUid = parseInt($entry.attr("uid") || $entry.data("id"), 10);
-          if (!isNaN(domUid)) {
-            foundEntry = cachedWbEntries.find(
-              (e) => e.uid === domUid || e.id === domUid,
-            );
-          }
+          if (!isNaN(domUid)) foundEntry = entryByUid.get(String(domUid));
         }
 
         if (foundEntry) {
@@ -12870,14 +13119,20 @@ $menuBtn.on("click", async () => {
             const nativeIdx = parseInt(
               $(this).attr("data-lulu-native-index") || 0,
             );
-            $(this).css("order", baseOrder + 1 + nativeIdx);
+            const targetOrder = baseOrder + 1 + nativeIdx;
+            const $this = $(this);
+            // ✨【性能优化】用 data 属性缓存 order，避免每次读取样式强制重排
+            if (parseInt($this.attr("data-lulu-order") || "") !== targetOrder) {
+              $this.attr("data-lulu-order", targetOrder);
+              $this.css("order", targetOrder);
+            }
             if (isFoldedNow) {
-              if (!$(this).hasClass("lulu-folded-hide"))
-                $(this).addClass("lulu-folded-hide");
+              if (!$this.hasClass("lulu-folded-hide"))
+                $this.addClass("lulu-folded-hide");
             } else {
-              if ($(this).hasClass("lulu-folded-hide")) {
-                $(this).removeClass("lulu-folded-hide");
-                $(this).css({ display: "", margin: "" });
+              if ($this.hasClass("lulu-folded-hide")) {
+                $this.removeClass("lulu-folded-hide");
+                $this.css({ display: "", margin: "" });
               }
             }
           });
@@ -12893,7 +13148,7 @@ $menuBtn.on("click", async () => {
       setTimeout(() => {
         isRendering = false;
       }, 150);
-    }, 500);
+    }, 2000);
   })();
 });
 // ========== 【自动拦截】导入/点进角色卡时，检测内嵌世界书污染 开始 ==========
@@ -13379,4 +13634,39 @@ $menuBtn.on("click", async () => {
   };
 
   luluBindAutoDetectEvents();
+  $("head").append(`
+<style>
+    /* 修复手机端弹窗内容被右侧边框遮挡的问题 */
+    dialog.wb-manager-dialog *,
+    dialog:has(#lulu-quick-snap-modal) *,
+    dialog:has(#lulu-scan-dialog) *,
+    dialog:has(#lulu-rescue-dialog) *,
+    dialog:has(#lulu-scan-char-select-dialog) * {
+        box-sizing: border-box !important;
+        max-width: 100% !important;
+    }
+
+    /* 极速快照控制台：加一点右侧安全间距 */
+    #lulu-quick-snap-modal {
+        overflow-x: hidden !important;
+        padding-right: 6px !important;
+    }
+    #lulu-quick-snap-modal .lulu-qs-item {
+        overflow: hidden !important;
+    }
+
+    /* 全库对照面板：同样防止右侧溢出 */
+    #lulu-scan-dialog-inner {
+        overflow-x: hidden !important;
+        padding-right: 6px !important;
+    }
+
+    /* 所有弹窗里的下拉框和按钮，增大点击区域，同时避免被裁切 */
+    dialog select,
+    dialog button {
+        min-height: 44px;
+        touch-action: manipulation;
+    }
+</style>
+`);
 })();
