@@ -2306,13 +2306,18 @@ $menuBtn.on("click", async () => {
                     border-bottom: 2px solid var(--SmartThemeBorderColor);
                     padding-bottom: 3px;
                 }
-                #wb-entry-container { min-height: 240px !important; max-height: none !important; }
+                #wb-entry-container { min-height: 150px !important; max-height: none !important; }
                 #wb-entry-batch-actions {
-                    max-height: 108px;
-                    overflow-y: auto;
-                    padding: 6px !important;
-                    gap: 6px !important;
-                    margin-bottom: 6px !important;
+                    max-height: 88px !important;
+                    overflow-y: auto !important;
+                    padding: 5px !important;
+                    gap: 4px !important;
+                    margin-bottom: 5px !important;
+                }
+                #wb-entry-batch-actions .lulu-batch-grid button {
+                    min-height: 30px !important;
+                    padding: 4px 4px !important;
+                    font-size: 10.5px !important;
                 }
                 #wb-entry-batch-actions > div:first-child {
                     display: grid !important;
@@ -2472,6 +2477,75 @@ $menuBtn.on("click", async () => {
                 -webkit-overflow-scrolling: touch;
                 will-change: scroll-position;
                 contain: layout style;
+            }
+
+            /* 🔧 修复（电脑端）：分组表头/顶部按钮被纵向拉长、批量面板挤压列表 */
+            @media (min-width: 769px) {
+                .lulu-ui-group-header {
+                    padding: 5px 10px !important;
+                    align-items: center !important;
+                }
+                .lulu-ui-group-header .lulu-group-ctrls {
+                    align-items: center !important;
+                    flex-wrap: wrap !important;
+                }
+                .lulu-ui-group-header .lulu-group-ctrls .menu_button {
+                    height: 26px !important;
+                    min-height: 26px !important;
+                    max-height: 26px !important;
+                    line-height: 1 !important;
+                    align-self: center !important;
+                    box-sizing: border-box !important;
+                    display: inline-flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                }
+                .lulu-ui-group-header .lulu-group-ctrls i.lulu-btn-up,
+                .lulu-ui-group-header .lulu-group-ctrls i.lulu-btn-down {
+                    align-self: center !important;
+                    line-height: 1 !important;
+                }
+                #wb-top-control-bar .menu_button {
+                    height: 30px !important;
+                    min-height: 30px !important;
+                    line-height: 1 !important;
+                    align-self: center !important;
+                    box-sizing: border-box !important;
+                    display: inline-flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                }
+                #wb-entry-batch-actions {
+                    max-height: none !important;
+                    overflow-y: visible !important;
+                    padding: 6px 8px !important;
+                    gap: 5px !important;
+                    flex-shrink: 0 !important;
+                }
+                #wb-entry-batch-actions > div:first-child {
+                    padding-bottom: 5px !important;
+                }
+                #wb-entry-batch-actions > div:first-child span {
+                    font-size: 13px !important;
+                }
+                #wb-entry-batch-actions > div:first-child .menu_button {
+                    height: 28px !important;
+                    min-height: 28px !important;
+                    padding: 3px 10px !important;
+                    font-size: 11.5px !important;
+                }
+                /* 8个批量按钮改为固定4列2行，整齐又不占高度 */
+                #wb-entry-batch-actions .lulu-batch-grid {
+                    grid-template-columns: repeat(4, 1fr) !important;
+                    gap: 5px !important;
+                }
+                #wb-entry-batch-actions .lulu-batch-grid button {
+                    height: 30px !important;
+                    min-height: 30px !important;
+                    padding: 4px 4px !important;
+                    font-size: 11.5px !important;
+                    line-height: 1 !important;
+                }
             }
         </style>
     `;
@@ -2913,7 +2987,7 @@ $menuBtn.on("click", async () => {
                         <div class="scrollableInnerFull" style="display: flex; flex-direction: column; flex: 1; min-height: 0; padding-right: 5px;">
                             <div id="wb-det-ui-compress" style="display: flex; flex-wrap: wrap; gap: 8px; background: rgba(0,0,0,0.1); border-radius: 6px; padding: 10px; border: 1px solid var(--SmartThemeBorderColor); margin-bottom: 10px; flex-shrink: 0; align-items: flex-end;">
                                 <div class="wb-form-group" style="flex: 1; min-width: 120px; margin-bottom: 0;">
-                                    <label style="font-size: 12px; font-weight: bold; margin-bottom: 4px; color: var(--SmartThemeQuoteColor);">📖 标签名称</label>
+                                    <label style="font-size: 12px; font-weight: bold; margin-bottom: 4px; color: var(--SmartThemeQuoteColor);">📖 条目名称</label>
                                     <input type="text" id="wb-det-name" class="wb-input-dt">
                                 </div>
                                 <div class="wb-form-group" style="flex: 1; min-width: 100px; margin-bottom: 0;">
@@ -9735,9 +9809,14 @@ $menuBtn.on("click", async () => {
           : "";
       if (grp) wbEntryGroupState[grp] = true;
     });
-    // ✨ 新增：独占全屏编辑的初始化与记忆功能
+    // ✨ 独占全屏编辑：手机端默认开启，电脑端默认关闭（各自独立记忆）
+    const luluIsMobileNow = window.innerWidth <= 768;
+    const luluFsKey = luluIsMobileNow
+      ? "lulu_wb_entry_fullscreen_mobile"
+      : "lulu_wb_entry_fullscreen_pc";
+    const luluSavedFs = localStorage.getItem(luluFsKey);
     const isFullscreen =
-      localStorage.getItem("lulu_wb_entry_fullscreen") === "true";
+      luluSavedFs === null ? luluIsMobileNow : luluSavedFs === "true";
     $ui.find("#wb-toggle-entry-fullscreen").prop("checked", isFullscreen);
     if (isFullscreen) {
       $ui.find("#wb-entry-split-wrapper").addClass("lulu-fullscreen-mode");
@@ -9746,13 +9825,13 @@ $menuBtn.on("click", async () => {
     }
     $ui.find("#wb-entry-split-wrapper").removeClass("is-editing-entry"); // 刚打开书时确保在列表页
 
-    // 绑定全屏开关的点击事件
+    // 绑定全屏开关的点击事件（按设备分别记忆）
     $ui
       .find("#wb-toggle-entry-fullscreen")
       .off("change")
       .on("change", function () {
         const isFS = $(this).is(":checked");
-        localStorage.setItem("lulu_wb_entry_fullscreen", isFS);
+        localStorage.setItem(luluFsKey, isFS);
         if (isFS) {
           $ui.find("#wb-entry-split-wrapper").addClass("lulu-fullscreen-mode");
         } else {
@@ -10777,8 +10856,8 @@ $menuBtn.on("click", async () => {
       // 瘦身计划：批量模式只留【选全组/撤全组】，普通模式什么都不留
       const groupBtnsHtml = isEntryBatchMode
         ? `
-             <button class="menu_button interactable wb-nowrap-btn btn-info wb-group-select-all" style="margin:0; padding:4px 8px; font-size:11px;" title="勾选本组"><i class="fa-solid fa-check-double"></i> 选全组</button>
-             <button class="menu_button interactable wb-nowrap-btn btn-secondary wb-group-deselect-all" style="margin:0; padding:4px 8px; font-size:11px;" title="撤销本组"><i class="fa-regular fa-square"></i> 撤全组</button>
+             <button class="menu_button interactable wb-nowrap-btn btn-info wb-group-select-all" style="margin:0; padding:4px 10px; font-size:12px;" title="勾选本组"><i class="fa-solid fa-check-double"></i></button>
+             <button class="menu_button interactable wb-nowrap-btn btn-secondary wb-group-deselect-all" style="margin:0; padding:4px 10px; font-size:12px;" title="撤销本组"><i class="fa-regular fa-square"></i></button>
           `
         : ``;
 
@@ -10935,6 +11014,15 @@ $menuBtn.on("click", async () => {
             ? `已开启分组「${groupName}」内全部 ${total} 个条目~`
             : `已关闭分组「${groupName}」内全部 ${total} 个条目~`,
         );
+      });
+      $gHeader.find(".wb-group-select-all").on("click", (e) => {
+        e.stopPropagation();
+        gEntries.forEach((entry) => {
+          const index = tuneEntries.indexOf(entry);
+          if (index !== -1) entryBatchSelected.add(index);
+        });
+        $ui.find("#wb-entry-batch-count").text(entryBatchSelected.size);
+        renderEntryList();
       });
       $gHeader.find(".wb-group-deselect-all").on("click", (e) => {
         e.stopPropagation();
@@ -13661,10 +13749,9 @@ $menuBtn.on("click", async () => {
         padding-right: 6px !important;
     }
 
-    /* 所有弹窗里的下拉框和按钮，增大点击区域，同时避免被裁切 */
+    /* 弹窗里的下拉框和按钮：只保留触摸优化，不再强制统一高度（避免按钮被拉得很长） */
     dialog select,
     dialog button {
-        min-height: 44px;
         touch-action: manipulation;
     }
 </style>
