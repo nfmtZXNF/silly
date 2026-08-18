@@ -72,9 +72,12 @@ const saveWbUiGroups = (obj) => {
     { type: "global" },
   );
 };
-const getEntryUiGroup = (wbName, uid) => {
+const getEntryUiGroup = (wbName, uid, entry = null) => {
   const map = getWbUiGroups();
-  return map[wbName] && map[wbName][uid] ? map[wbName][uid] : "";
+  if (map[wbName] && map[wbName][uid]) return map[wbName][uid];
+  if (entry && entry.extensions && entry.extensions.lulu_group)
+    return entry.extensions.lulu_group;
+  return "";
 };
 
 // ========== 【通用】分配新条目 UID（模仿酒馆原生 getFreeWorldEntryUid） ==========
@@ -10894,7 +10897,7 @@ $menuBtn.on("click", async () => {
       const $gHeader =
         $(`<div class="lulu-ui-group-header" data-groupname="${groupName}" draggable="${isDraggable ? "true" : "false"}" style="background: rgba(0,0,0,0.15); padding:8px 12px; margin-top:8px; border-radius:6px; cursor:pointer; font-weight:bold; color:var(--SmartThemeBodyColor); border:1px solid var(--SmartThemeBorderColor); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
                 <span style="display:flex; align-items:center;">${dragIcon}<i class="fa-solid ${isCollapsed ? "fa-chevron-right" : "fa-chevron-down"}" style="margin-right:6px; color:var(--SmartThemeQuoteColor);"></i>${groupName}<span style="font-size:12px; color:gray; font-weight:normal; margin-left:4px;">( ${gEntries.length} )</span></span>
-                <div style="display:flex; gap:4px;" class="lulu-group-ctrls">${isDraggable ? `<i class="fa-solid fa-arrow-up lulu-btn-up" title="上移" style="padding:6px; font-size:12px; color:gray; cursor:pointer; background:rgba(125,125,125,0.15); border-radius:4px; transition:0.2s;"></i><i class="fa-solid fa-arrow-down lulu-btn-down" title="下移" style="padding:6px; font-size:12px; color:gray; cursor:pointer; background:rgba(125,125,125,0.15); border-radius:4px; margin-right:6px; transition:0.2s;"></i>` : ""}
+                <div style="display:flex; gap:4px;" class="lulu-group-ctrls">${isDraggable ? `<i class="fa-solid fa-arrow-up lulu-btn-up" title="上移" draggable="false" style="padding:6px; font-size:12px; color:gray; cursor:pointer; background:rgba(125,125,125,0.15); border-radius:4px; transition:0.2s;"></i><i class="fa-solid fa-arrow-down lulu-btn-down" title="下移" draggable="false" style="padding:6px; font-size:12px; color:gray; cursor:pointer; background:rgba(125,125,125,0.15); border-radius:4px; margin-right:6px; transition:0.2s;"></i>` : ""}
                     ${groupToggleBtn}
                     ${groupBtnsHtml}
                     ${editBtnsHtml}
@@ -10977,7 +10980,16 @@ $menuBtn.on("click", async () => {
             }
           }
         });
-        $gHeader.find(".lulu-btn-up").on("click", () => {
+        $gHeader
+          .find(".lulu-btn-up, .lulu-btn-down")
+          .on("dragstart", function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+          });
+        $gHeader.find(".lulu-btn-up").on("pointerdown", function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.pointerType === "mouse" && e.button !== 0) return;
           let order = getSharedGroupOrder();
           const idx = order.indexOf(groupName);
           if (idx > 0) {
@@ -10986,7 +10998,10 @@ $menuBtn.on("click", async () => {
             renderEntryList();
           }
         });
-        $gHeader.find(".lulu-btn-down").on("click", () => {
+        $gHeader.find(".lulu-btn-down").on("pointerdown", function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.pointerType === "mouse" && e.button !== 0) return;
           let order = getSharedGroupOrder();
           const idx = order.indexOf(groupName);
           if (idx !== -1 && idx < order.length - 1) {
@@ -12920,60 +12935,155 @@ $menuBtn.on("click", async () => {
       ) {
         $container.css({ display: "flex", "flex-direction": "column" });
       }
-      const visibleWbName = $(".move_entry_button")
-        .first()
-        .attr("data-current-world");
+      const $moveBtn = $(".move_entry_button").first();
+      let visibleWbName = $moveBtn.attr("data-current-world");
+      if (!visibleWbName) {
+        visibleWbName =
+          $("#world_info_select").val() ||
+          $(".world_info_select").first().val() ||
+          "";
+      }
       if (!visibleWbName) return;
+
       if (currentActiveWbName !== visibleWbName) {
         isFetching = true;
         try {
           const rawData = await getWorldbook(visibleWbName);
-          if (rawData && Array.isArray(rawData)) {
+          if (Array.isArray(rawData)) {
             cachedWbEntries = rawData;
             currentActiveWbName = visibleWbName;
+          } else if (rawData && typeof rawData === "object") {
+            // 兼容某些版本返回 { entries: [...] } 或 { entries: { ... } }
+            const maybeEntries = rawData.entries || rawData.data?.entries;
+            const arr = Array.isArray(maybeEntries)
+              ? maybeEntries
+              : maybeEntries
+                ? Object.values(maybeEntries)
+                : [];
+            if (arr.length > 0) {
+              cachedWbEntries = arr;
+              currentActiveWbName = visibleWbName;
+            }
           }
         } catch (err) {
+          console.warn("Lulu 原生同步：读取世界书失败", err);
         } finally {
           isFetching = false;
         }
-        return;
       }
       if (!cachedWbEntries || cachedWbEntries.length === 0) return;
+      if (currentActiveWbName !== visibleWbName) return;
+
       const entryByName = new Map();
       const entryByUid = new Map();
       for (const e of cachedWbEntries) {
         const title = e.name || e.comment || "";
         if (title && !entryByName.has(title)) entryByName.set(title, e);
         const uid = e.uid !== undefined && e.uid !== null ? e.uid : e.id;
-        if (uid !== undefined && uid !== null) entryByUid.set(String(uid), e);
+        if (uid !== undefined && uid !== null) {
+          entryByUid.set(String(uid), e);
+          const uidNum = Number(uid);
+          if (!Number.isNaN(uidNum)) entryByUid.set(String(uidNum), e);
+        }
       }
+
+      const luluPrefixMap = readGroupMapFromEntries(cachedWbEntries);
+
       const groupCounts = {};
       $entries.each(function (index) {
         const $entry = $(this);
-        const entryTitle =
+
+        let entryTitle =
           $entry.find('textarea[name="comment"]').val()?.trim() || "";
-        // ✨ 如果是对照表条目，直接隐藏它，不参与分组显示
+        if (!entryTitle) {
+          entryTitle = $entry.find('input[name="comment"]').val()?.trim() || "";
+        }
+        if (!entryTitle) {
+          entryTitle =
+            $entry.find('textarea, input[type="text"]').first().val()?.trim() ||
+            "";
+        }
+        if (!entryTitle) {
+          entryTitle = (
+            $entry.attr("data-comment") ||
+            $entry.attr("title") ||
+            ""
+          ).trim();
+        }
+
+        // 对照表条目直接隐藏
         if (entryTitle.indexOf(LULU_MAP_ENTRY_TAG) === 0) {
           $entry.css("display", "none");
           $entry.attr("data-lulu-grp", "__LULU_MAP__");
-          return true; // 相当于 continue，跳过这一条
+          return true;
         }
+
         let myGroup = "📁 未分类条目";
-        let foundEntry = entryByName.get(entryTitle);
-        if (!foundEntry) {
-          const domUid = parseInt($entry.attr("uid") || $entry.data("id"), 10);
-          if (!isNaN(domUid)) foundEntry = entryByUid.get(String(domUid));
+
+        let domUid = null;
+        const rawUidAttr =
+          $entry.attr("uid") ||
+          $entry.attr("data-uid") ||
+          $entry.attr("data-entry-uid") ||
+          $entry.data("uid") ||
+          $entry.data("id");
+        if (
+          rawUidAttr !== undefined &&
+          rawUidAttr !== null &&
+          rawUidAttr !== ""
+        ) {
+          const parsed = parseInt(rawUidAttr, 10);
+          if (!isNaN(parsed)) domUid = parsed;
+        }
+        if (domUid === null) {
+          const attrs = $entry[0].attributes;
+          for (const attr of attrs) {
+            if (/uid/i.test(attr.name)) {
+              const parsed = parseInt(attr.value, 10);
+              if (!isNaN(parsed)) {
+                domUid = parsed;
+                break;
+              }
+            }
+          }
+        }
+
+        let foundEntry = null;
+        if (domUid !== null) {
+          foundEntry = entryByUid.get(String(domUid)) || entryByUid.get(domUid);
+        }
+        if (!foundEntry && entryTitle) {
+          foundEntry = entryByName.get(entryTitle);
         }
 
         if (foundEntry) {
-          let uiGrpName = getEntryUiGroup(currentActiveWbName, foundEntry.uid);
+          // 1) 先读全局分组缓存 / extensions.lulu_group
+          let uiGrpName = getEntryUiGroup(
+            currentActiveWbName,
+            foundEntry.uid,
+            foundEntry,
+          );
+
+          // 2) 如果没有，再像脚本面板一样，用【前缀】+ 世界书对照表解析
+          if ((!uiGrpName || uiGrpName.trim() === "") && foundEntry.name) {
+            const prefixMatch = (foundEntry.name || "").match(/^【(.*?)】/);
+            if (prefixMatch && prefixMatch[1]) {
+              const rawPrefix = prefixMatch[1].trim();
+              if (luluPrefixMap && luluPrefixMap[rawPrefix]) {
+                uiGrpName = luluPrefixMap[rawPrefix];
+              }
+            }
+          }
+
           if (uiGrpName && uiGrpName.trim() !== "") myGroup = uiGrpName.trim();
         }
+
         if (!groupCounts[myGroup]) groupCounts[myGroup] = 0;
         groupCounts[myGroup]++;
         $entry.attr("data-lulu-grp", myGroup);
         $entry.attr("data-lulu-native-index", index);
       });
+
       let luluGroupOrder = JSON.parse(
         localStorage.getItem("lulu_wb_native_group_order") || "[]",
       );
