@@ -4611,6 +4611,8 @@ $menuBtn.on("click", async () => {
             }),
           );
           $sub.text(`${Math.min(i + batchSize, totalChars)} / ${totalChars}`);
+          // ✨ 每一批扫完，让出主线程，避免面板卡成PPT
+          await new Promise((resolve) => setTimeout(resolve, 0));
         }
         try {
           let charLoreArray = [];
@@ -8456,6 +8458,7 @@ $menuBtn.on("click", async () => {
     });
 
     const $wbContainer = $ui.find("#wb-container").empty();
+    const wbFragment = document.createDocumentFragment();
 
     $ui.find("#wb-batch-count").text(batchSelected.size);
     const $batchList = $ui.find("#wb-batch-selected-list").empty();
@@ -8943,9 +8946,9 @@ $menuBtn.on("click", async () => {
         $bottomBar.append($tagRow);
       }
       $wrapper.append($header).append($bottomBar).append($catDrawer);
-      $wbContainer.append($wrapper);
+      wbFragment.appendChild($wrapper[0]);
     });
-
+    $wbContainer.append(wbFragment);
     if (highlightName) {
       setTimeout(() => {
         const $highlightItem = $wbContainer.find(
@@ -8963,6 +8966,7 @@ $menuBtn.on("click", async () => {
     }
 
     const $snapContainer = $ui.find("#wb-snapshot-container").empty();
+    const snapFragment = document.createDocumentFragment();
     const sortedSnapNames = sortSnapshotNames(Object.keys(snapshots));
     sortedSnapNames.forEach((name) => {
       const snapData = snapshots[name];
@@ -9096,8 +9100,9 @@ $menuBtn.on("click", async () => {
         }),
       );
       $item.append($act);
-      $snapContainer.append($item);
+      snapFragment.appendChild($item[0]);
     });
+    $snapContainer.append(snapFragment);
   };
 
   let activeBindWb = "";
@@ -10755,6 +10760,7 @@ $menuBtn.on("click", async () => {
     const keyword = $ui.find("#wb-entry-search").val().toLowerCase();
     const sortMode = $ui.find("#wb-entry-sort").val() || "default";
     const $container = $ui.find("#wb-entry-container").empty();
+    const entryFragment = document.createDocumentFragment();
     $ui.find("#wb-entry-batch-count").text(entryBatchSelected.size);
     const showPreview = $ui.find("#wb-toggle-entry-preview").is(":checked");
 
@@ -11286,8 +11292,10 @@ $menuBtn.on("click", async () => {
         $item.append($chk, $info, $right);
         $gContainer.append($item);
       });
-      $container.append($gHeader).append($gContainer);
+      entryFragment.appendChild($gHeader[0]);
+      entryFragment.appendChild($gContainer[0]);
     }
+    $container.append(entryFragment);
     if (sortedEntries.length === 0)
       $container.html(
         `<div style="color: gray; padding: 10px; text-align: center;">${tuneEntries.length > 0 ? "搜查不到匹配内容呢。" : "完全是一本空壳书呀。"}</div>`,
