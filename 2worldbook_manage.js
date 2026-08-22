@@ -1812,7 +1812,7 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
     }
   });
 };
-if (localStorage.getItem("lulu_wb_floating_enabled") === "true")
+if (localStorage.getItem("lulu_wb_floating_enabled") !== "false")
   toggleFloatingButton(true);
 
 const loadBindingCache = () => {
@@ -3372,7 +3372,7 @@ $menuBtn.on("click", async () => {
       .find("#wb-toggle-floating")
       .prop(
         "checked",
-        localStorage.getItem("lulu_wb_floating_enabled") === "true",
+        localStorage.getItem("lulu_wb_floating_enabled") !== "false",
       );
     $ui
       .find("#wb-toggle-native-magic")
@@ -3740,7 +3740,7 @@ $menuBtn.on("click", async () => {
   loadThemeSettings();
 
   const isFloatingEnabledNow =
-    localStorage.getItem("lulu_wb_floating_enabled") === "true";
+    localStorage.getItem("lulu_wb_floating_enabled") !== "false";
   $ui.find("#wb-toggle-floating").prop("checked", isFloatingEnabledNow);
 
   const updateFloatConfig = () => {
