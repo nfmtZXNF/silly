@@ -671,7 +671,50 @@ window.luluOpenQuickSnapshotView = async () => {
 .lulu-qs-tab:hover { color: var(--SmartThemeBodyColor); background: rgba(125,125,125,0.2); }
 .lulu-qs-tab.lulu-qs-tab-active { background: var(--SmartThemeBotMesColor); color: var(--SmartThemeQuoteColor); border-color: var(--SmartThemeQuoteColor); }
 .lulu-qs-btn-hover:hover { filter: brightness(1.2); }
- .lulu-qs-item { transition: 0.2s; } .lulu-qs-item:hover { border-color: var(--SmartThemeQuoteColor) !important; transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,0.1); } .lulu-qs-active { border-color: #51cf66 !important; background: rgba(81, 207, 102, 0.05) !important; } dialog.lulu-qs-dialog { background: var(--SmartThemeBlurTintColor) !important; border: 1px solid var(--SmartThemeBorderColor) !important; border-radius: 12px; } dialog.lulu-qs-dialog::backdrop { background: rgba(0,0,0,0.4) !important; backdrop-filter: blur(4px) !important; } @media (max-width: 768px) { #lulu-quick-snap-modal { min-width: unset !important; width: 85vw !important; padding: 5px !important; } .lulu-qs-item { padding: 10px !important; gap: 8px !important; } } #lulu-quick-snap-modal input[type="text"] { background: var(--SmartThemeBotMesColor) !important; color: var(--SmartThemeBodyColor) !important; border: 1px solid var(--SmartThemeBorderColor) !important; } dialog.lulu-qs-dialog .popup-controls .menu_button, dialog.lulu-qs-dialog .popup-button-ok { background: var(--SmartThemeBotMesColor) !important; color: var(--SmartThemeBodyColor) !important; border: 1px solid var(--SmartThemeQuoteColor) !important; } dialog.lulu-qs-dialog .popup-controls .menu_button:hover, dialog.lulu-qs-dialog .popup-button-ok:hover { background: var(--SmartThemeQuoteColor) !important; color: #fff !important; }
+ .lulu-qs-item { transition: 0.2s; } .lulu-qs-item:hover { border-color: var(--SmartThemeQuoteColor) !important; transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,0.1); } .lulu-qs-active { border-color: #51cf66 !important; background: rgba(81, 207, 102, 0.05) !important; } dialog.lulu-qs-dialog { background: var(--SmartThemeBlurTintColor) !important; border: 1px solid var(--SmartThemeBorderColor) !important; border-radius: 12px; } dialog.lulu-qs-dialog::backdrop { background: rgba(0,0,0,0.4) !important; backdrop-filter: blur(4px) !important; } @media (max-width: 768px) {
+  #lulu-quick-snap-modal { min-width: unset !important; width: 90vw !important; padding: 5px !important; max-width: 500px !important; }
+  .lulu-qs-item {
+    padding: 12px !important;
+    gap: 10px !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .lulu-qs-item > div:first-child {
+    width: 100% !important;
+    flex: auto !important;
+    min-width: 0 !important;
+  }
+  .lulu-qs-item > div:first-child > div:first-child {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: initial !important;
+    line-height: 1.4 !important;
+  }
+  .lulu-qs-item > div:last-child {
+    width: 100% !important;
+    justify-content: flex-end !important;
+    flex-wrap: nowrap !important;
+  }
+  .lulu-qs-item > div:last-child > button.lulu-qs-apply-btn {
+    flex: 1 !important;
+    white-space: nowrap !important;
+    justify-content: center !important;
+  }
+  .lulu-qs-item > button.lulu-qs-char-apply {
+    width: 100% !important;
+    justify-content: center !important;
+    white-space: nowrap !important;
+    flex: 1 !important;
+  }
+  .lulu-qs-item .lulu-qs-move-up,
+  .lulu-qs-item .lulu-qs-move-down {
+    min-width: 34px !important;
+    min-height: 34px !important;
+    padding: 6px !important;
+    font-size: 13px !important;
+  }
+}
+ #lulu-quick-snap-modal input[type="text"] { background: var(--SmartThemeBotMesColor) !important; color: var(--SmartThemeBodyColor) !important; border: 1px solid var(--SmartThemeBorderColor) !important; } dialog.lulu-qs-dialog .popup-controls .menu_button, dialog.lulu-qs-dialog .popup-button-ok { background: var(--SmartThemeBotMesColor) !important; color: var(--SmartThemeBodyColor) !important; border: 1px solid var(--SmartThemeQuoteColor) !important; } dialog.lulu-qs-dialog .popup-controls .menu_button:hover, dialog.lulu-qs-dialog .popup-button-ok:hover { background: var(--SmartThemeQuoteColor) !important; color: #fff !important; }
 /* 极速快照面板内部：上下排序等普通按钮统一跟随主题 */
 #lulu-quick-snap-modal .menu_button:not(.btn-success):not(.btn-primary):not(.btn-danger) {
   background: var(--SmartThemeBotMesColor) !important;
@@ -702,7 +745,122 @@ window.luluOpenQuickSnapshotView = async () => {
   border: 1px solid rgba(150,150,150,0.5) !important;
   cursor: default !important;
 }
-${themeOverrideCSS} </style>`;
+/* ========== 手机端极速面板修复（最终版） ========== */
+@media (max-width: 768px) {
+  #lulu-quick-snap-modal {
+    width: 92vw !important;
+    max-width: 520px !important;
+    padding: 6px !important;
+    min-width: unset !important;
+    overflow-x: visible !important;
+    overflow-y: auto !important;
+  }
+
+  #lulu-quick-snap-modal .lulu-qs-item {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+    padding: 10px 8px !important;
+    overflow: visible !important;
+  }
+
+  #lulu-quick-snap-modal .lulu-qs-item > div:first-child {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    width: auto !important;
+  }
+
+  #lulu-quick-snap-modal .lulu-qs-item > div:first-child > div:first-child {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: initial !important;
+    line-height: 1.35 !important;
+    word-break: break-word !important;
+  }
+
+  #lulu-quick-snap-modal .lulu-qs-item > div:last-child {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 4px !important;
+    justify-content: flex-end !important;
+  }
+
+  #lulu-quick-snap-modal .lulu-qs-item > div:last-child > div {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 2px !important;
+  }
+
+  #lulu-quick-snap-modal .lulu-qs-move-up,
+  #lulu-quick-snap-modal .lulu-qs-move-down,
+  #lulu-quick-snap-modal .lulu-qs-char-move-up,
+  #lulu-quick-snap-modal .lulu-qs-char-move-down {
+    width: 34px !important;
+    min-width: 34px !important;
+    height: 34px !important;
+    min-height: 34px !important;
+    padding: 0 !important;
+    font-size: 13px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  #lulu-quick-snap-modal .lulu-qs-item > div:last-child > button.lulu-qs-apply-btn,
+  #lulu-quick-snap-modal .lulu-qs-item > button.lulu-qs-char-apply {
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    padding: 0 !important;
+    font-size: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex: 0 0 auto !important;
+    border-radius: 6px !important;
+  }
+
+  #lulu-quick-snap-modal .lulu-qs-item > div:last-child > button.lulu-qs-apply-btn i,
+  #lulu-quick-snap-modal .lulu-qs-item > button.lulu-qs-char-apply i {
+    font-size: 16px !important;
+    margin: 0 !important;
+  }
+
+  #lulu-quick-snap-modal .lulu-qs-item button {
+    max-width: none !important;
+  }
+}
+${themeOverrideCSS} </style>
+<style>
+/* ========== 极速面板：运行按钮统一只显示图标（桌面+手机） ========== */
+#lulu-quick-snap-modal .lulu-qs-item > div:last-child > button.lulu-qs-apply-btn,
+#lulu-quick-snap-modal .lulu-qs-item > div:last-child > button.lulu-qs-char-apply {
+    font-size: 0 !important;
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0 !important;
+    flex: 0 0 auto !important;
+    border-radius: 6px !important;
+    white-space: nowrap !important;
+}
+
+#lulu-quick-snap-modal .lulu-qs-item > div:last-child > button.lulu-qs-apply-btn i,
+#lulu-quick-snap-modal .lulu-qs-item > div:last-child > button.lulu-qs-char-apply i {
+    font-size: 16px !important;
+    margin: 0 !important;
+}
+</style>`;
 
   let html = `${customCss}<div id="lulu-quick-snap-modal" style="padding:10px; font-family:sans-serif; min-width:320px; max-width:550px;"><h3 style="margin-top:0; color:var(--SmartThemeQuoteColor); border-bottom:2px solid var(--SmartThemeBorderColor); padding-bottom:10px; font-size: 16px; display:flex; align-items:center; justify-content:space-between; gap:8px;"><span><i class="fa-solid fa-bolt" style="color:#fcc419;"></i> 极速快照控制台</span><span id="lulu-qs-status-text" style="color:var(--SmartThemeQuoteColor); font-size: 12px; font-weight:normal;">正在检测状态...</span></h3>`;
 
@@ -903,6 +1061,24 @@ ${themeOverrideCSS} </style>`;
             return;
           }
 
+          const moveCharSnap = (dir, snapName) => {
+            const currentChar = qsGetCharName();
+            if (!currentChar) return;
+            const allSnaps2 = qsGetCharSnaps();
+            const mySnaps2 = allSnaps2[currentChar] || {};
+            let order =
+              typeof sortCharSnapshotNames === "function"
+                ? sortCharSnapshotNames(currentChar, Object.keys(mySnaps2))
+                : Object.keys(mySnaps2);
+            const idx = order.indexOf(snapName);
+            const swapWith = idx + dir;
+            if (swapWith < 0 || swapWith >= order.length) return;
+            [order[idx], order[swapWith]] = [order[swapWith], order[idx]];
+            if (typeof setCharSnapshotOrder === "function")
+              setCharSnapshotOrder(currentChar, order);
+            renderCharSnapList();
+          };
+
           for (const name of snapNames) {
             const snapData = mySnaps[name];
             const bookCount = Object.keys(snapData).length;
@@ -917,7 +1093,13 @@ ${themeOverrideCSS} </style>`;
                   <div style="font-size:11px; color:gray; margin-top:6px;">涉及 ${bookCount} 本书 · 共开启 ${totalEntries} 项</div>
                   <div class="lulu-qs-char-badge" style="display:none; margin-top:6px; font-size:11px; color:#51cf66; font-weight:bold;"><i class="fa-solid fa-circle-check"></i> 当前生效中</div>
                 </div>
-                <button class="menu_button interactable btn-primary lulu-qs-btn-hover lulu-qs-char-apply" style="margin:0; border:none; border-radius:6px; font-size:13px; font-weight:bold; padding:8px 14px; flex-shrink:0; display:inline-flex; align-items:center; gap:6px; white-space:nowrap;">运行 <i class="fa-solid fa-play"></i></button>
+                <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+                  <div style="display:flex; flex-direction:column; gap:2px;">
+                    <button class="menu_button interactable lulu-qs-char-move-up" data-rawname="${encodeURIComponent(name)}" style="margin:0; padding:2px 8px; min-width:unset; font-size:11px; line-height:1;" title="上移"><i class="fa-solid fa-chevron-up"></i></button>
+                    <button class="menu_button interactable lulu-qs-char-move-down" data-rawname="${encodeURIComponent(name)}" style="margin:0; padding:2px 8px; min-width:unset; font-size:11px; line-height:1;" title="下移"><i class="fa-solid fa-chevron-down"></i></button>
+                  </div>
+                  <button class="menu_button interactable btn-primary lulu-qs-btn-hover lulu-qs-char-apply" style="margin:0; border:none; border-radius:6px; font-size:13px; font-weight:bold; padding:8px 14px; flex-shrink:0; display:inline-flex; align-items:center; gap:6px; white-space:nowrap;">运行 <i class="fa-solid fa-play"></i></button>
+                </div>
               </div>`,
             );
 
@@ -953,6 +1135,14 @@ ${themeOverrideCSS} </style>`;
               } finally {
                 $dlg.find(".lulu-qs-char-apply").css("pointer-events", "auto");
               }
+            });
+            $item.find(".lulu-qs-char-move-up").on("click", function (e) {
+              e.stopPropagation();
+              moveCharSnap(-1, name);
+            });
+            $item.find(".lulu-qs-char-move-down").on("click", function (e) {
+              e.stopPropagation();
+              moveCharSnap(1, name);
             });
 
             $list.append($item);
@@ -1310,8 +1500,20 @@ ${themeOverrideCSS} </style>`;
           reorderQuickSnapshot($(this).attr("data-rawname"), 1);
         });
         $dlg.find(".lulu-qs-apply-btn").on("click", async function () {
-          if ($(this).hasClass("btn-secondary"))
-            return toastr.info("目前已经应用了，不需要重复应用哦！(๑>؂<๑)");
+          if ($(this).hasClass("btn-secondary")) {
+            toastr.info("正在卸载当前全局世界书...");
+            $dlg.find(".lulu-qs-apply-btn").css("pointer-events", "none");
+            try {
+              await rebindGlobalWorldbooks([]);
+              toastr.success("✨ 已卸载当前全局世界书~");
+              await checkActiveSnapshot();
+            } catch (e) {
+              toastr.error(`出现了小意外：${e.message}`);
+            } finally {
+              $dlg.find(".lulu-qs-apply-btn").css("pointer-events", "auto");
+            }
+            return;
+          }
           const sName = decodeURIComponent($(this).attr("data-rawname"));
           const sData = snapshots[sName];
           const isDetailed = !Array.isArray(sData) && sData.type === "detailed";
