@@ -2426,12 +2426,33 @@ $menuBtn.on("click", async () => {
                     max-width: 100% !important;
                     display: block !important;
                 }
-                /* 四个按钮（启用分组/按前缀分组/内容预览/全屏编辑）2×2整齐排列 */
+                /* 四个格子（启用分组/内容预览/全屏编辑/前缀+便签组合）2×2整齐排列 */
                 #wb-entry-view > div:first-child > div {
                     display: grid !important;
                     grid-template-columns: 1fr 1fr !important;
                     gap: 4px !important;
                     width: 100% !important;
+                }
+                /* 按前缀分组 + 便签模式：两个按钮缩小挤在同一个格子里 */
+                #lulu-prefix-sticky-pair {
+                    display: flex !important;
+                    gap: 4px !important;
+                    width: 100% !important;
+                    min-width: 0 !important;
+                    box-sizing: border-box !important;
+                }
+                #lulu-prefix-sticky-pair > button {
+                    flex: 1 1 0 !important;
+                    width: 100% !important;
+                    min-width: 0 !important;
+                    box-sizing: border-box !important;
+                    justify-content: center !important;
+                    padding: 5px 2px !important;
+                    font-size: 10.5px !important;
+                    margin: 0 !important;
+                    white-space: nowrap !important;
+                    overflow: hidden !important;
+                    text-overflow: ellipsis !important;
                 }
                 #wb-entry-view > div:first-child > div label {
                     width: 100% !important;
@@ -3117,8 +3138,6 @@ $menuBtn.on("click", async () => {
                             <input type="checkbox" id="wb-toggle-entry-group" style="accent-color: #51cf66; transform:scale(1.1);">
                             <span style="color:var(--SmartThemeBodyColor); font-weight:bold;">🗂️ 启用分组</span>
                         </label>
-                        <!-- ✨ 按前缀分组（把带【】前缀的条目一键归入分组） -->
-                        <button id="wb-btn-prefix-group" class="menu_button interactable wb-nowrap-btn btn-primary" style="margin: 0; padding: 6px 10px; font-size: 12px; border-radius: 6px; flex-shrink: 0; font-weight: bold;" title="扫描带【】前缀的条目，一键按前缀归入分组（会参考对照表，不会乱分）"><i class="fa-solid fa-wand-magic-sparkles"></i> 🗂️ 按前缀分组</button>
                         <!-- 📖 预览开关就在这里哦 -->
                         <label style="cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 12px; margin: 0; font-weight: normal; background: rgba(125,125,125,0.1); padding: 6px 10px; border-radius: 6px; border: 1px solid var(--SmartThemeBorderColor); flex-shrink: 0;">
                             <input type="checkbox" id="wb-toggle-entry-preview" style="accent-color: var(--SmartThemeQuoteColor); transform:scale(1.1);">
@@ -3129,8 +3148,11 @@ $menuBtn.on("click", async () => {
                             <input type="checkbox" id="wb-toggle-entry-fullscreen" style="accent-color: #339af0; transform:scale(1.1);">
                             <span style="color:var(--SmartThemeBodyColor); font-weight:bold;">📱 全屏编辑</span>
                         </label>
-                        <!-- 📌 便签模式按钮 -->
-                        <button id="wb-btn-sticky-mode" class="menu_button interactable wb-nowrap-btn btn-warning" style="margin: 0; padding: 6px 10px; font-size: 12px; border-radius: 6px; flex-shrink: 0; font-weight: bold;" title="把面板变成可拖动、可折叠的浮动小窗，方便一边翻酒馆页面复制资料，一边随手粘贴编辑条目"><i class="fa-solid fa-note-sticky"></i> 📌 便签模式</button>
+                        <!-- ✨📌 按前缀分组 + 便签模式（手机端两个按钮合并占一格） -->
+                        <div id="lulu-prefix-sticky-pair" style="display:flex; gap:8px; align-items:center;">
+                            <button id="wb-btn-prefix-group" class="menu_button interactable wb-nowrap-btn btn-primary" style="margin: 0; padding: 6px 10px; font-size: 12px; border-radius: 6px; flex-shrink: 0; font-weight: bold;" title="扫描带【】前缀的条目，一键按前缀归入分组（会参考对照表，不会乱分）"><i class="fa-solid fa-wand-magic-sparkles"></i> 🗂️ 按前缀分组</button>
+                            <button id="wb-btn-sticky-mode" class="menu_button interactable wb-nowrap-btn btn-warning" style="margin: 0; padding: 6px 10px; font-size: 12px; border-radius: 6px; flex-shrink: 0; font-weight: bold;" title="把面板变成可拖动、可折叠的浮动小窗，方便一边翻酒馆页面复制资料，一边随手粘贴编辑条目"><i class="fa-solid fa-note-sticky"></i> 📌 便签模式</button>
+                        </div>
                     </div>
                 </div>
 
@@ -5650,6 +5672,40 @@ $menuBtn.on("click", async () => {
         #lulu-sticky-note-window.lulu-sticky-folded #lulu-sticky-content {
           display: none;
         }
+        /* ✨ 自定义缩放手柄（手机浏览器不支持 CSS resize，用它来代替） */
+        #lulu-sticky-resize-grip {
+          position: absolute;
+          right: 0;
+          bottom: 0;
+          width: 36px;
+          height: 36px;
+          cursor: nwse-resize;
+          touch-action: none;
+          z-index: 20;
+          display: flex;
+          align-items: flex-end;
+          justify-content: flex-end;
+          opacity: 0.8;
+          user-select: none;
+          -webkit-user-select: none;
+          -webkit-tap-highlight-color: transparent;
+        }
+        #lulu-sticky-resize-grip::after {
+          content: "";
+          display: block;
+          width: 16px;
+          height: 16px;
+          margin: 0 4px 4px 0;
+          border-right: 3px solid var(--SmartThemeQuoteColor, #70a1ff);
+          border-bottom: 3px solid var(--SmartThemeQuoteColor, #70a1ff);
+          border-bottom-right-radius: 6px;
+          box-sizing: border-box;
+        }
+        #lulu-sticky-resize-grip:hover, #lulu-sticky-resize-grip:active { opacity: 1; }
+        /* 折叠成小条时隐藏手柄 */
+        #lulu-sticky-note-window.lulu-sticky-folded #lulu-sticky-resize-grip {
+          display: none !important;
+        }
         #lulu-sticky-content #wb-manager-panel { min-height: 0 !important; }
         #lulu-sticky-note-window input[type="checkbox"] {
           appearance: none !important;
@@ -5700,6 +5756,7 @@ $menuBtn.on("click", async () => {
           <span class="lulu-sticky-tbtn" id="lulu-sticky-close-btn" title="关闭便签（面板随之关闭）"><i class="fa-solid fa-xmark"></i></span>
         </div>
         <div id="lulu-sticky-content"></div>
+        <div id="lulu-sticky-resize-grip" title="按住拖动调整窗口大小"></div>
       </div>`);
     const wEl = $win[0];
     // 全部用 setProperty + important 强制设定，任何外部样式都改不动窗口位置
@@ -5900,11 +5957,76 @@ $menuBtn.on("click", async () => {
       { passive: false },
     );
 
+    // ---- 右下角缩放手柄（手机浏览器不支持 CSS resize，必须手动实现） ----
+    const gripEl = $win.find("#lulu-sticky-resize-grip")[0];
+    if (gripEl) {
+      const gripDoc = wEl.ownerDocument || document;
+      let gripLastTouch = 0;
+      const beginStickyResize = (startX, startY) => {
+        if ($win.hasClass("lulu-sticky-folded")) return; // 折叠状态不允许缩放
+        const rect = wEl.getBoundingClientRect();
+        const startW = rect.width;
+        const startH = rect.height;
+        const doResizeMove = (mx, my) => {
+          let nw = startW + (mx - startX);
+          let nh = startH + (my - startY);
+          const cw = getStickyWinW(),
+            ch = getStickyWinH();
+          // 夹紧范围，和 CSS 里的 min/max 保持一致
+          nw = Math.max(300, Math.min(nw, cw * 0.96));
+          nh = Math.max(120, Math.min(nh, ch * 0.96));
+          wEl.style.setProperty("width", nw + "px", "important");
+          wEl.style.setProperty("height", nh + "px", "important");
+        };
+        const onResizeMouseMove = (ev) => doResizeMove(ev.clientX, ev.clientY);
+        const onResizeTouchMove = (ev) => {
+          if (ev.touches && ev.touches[0]) {
+            ev.preventDefault();
+            doResizeMove(ev.touches[0].clientX, ev.touches[0].clientY);
+          }
+        };
+        const onResizeEnd = () => {
+          gripDoc.removeEventListener("mousemove", onResizeMouseMove, true);
+          gripDoc.removeEventListener("mouseup", onResizeEnd, true);
+          gripDoc.removeEventListener("touchmove", onResizeTouchMove, true);
+          gripDoc.removeEventListener("touchend", onResizeEnd, true);
+          gripDoc.removeEventListener("touchcancel", onResizeEnd, true);
+          saveStickyPos(); // 松手后记住新尺寸
+        };
+        gripDoc.addEventListener("mousemove", onResizeMouseMove, true);
+        gripDoc.addEventListener("mouseup", onResizeEnd, true);
+        gripDoc.addEventListener("touchmove", onResizeTouchMove, {
+          capture: true,
+          passive: false,
+        });
+        gripDoc.addEventListener("touchend", onResizeEnd, true);
+        gripDoc.addEventListener("touchcancel", onResizeEnd, true);
+      };
+      gripEl.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        if (Date.now() - gripLastTouch < 600) return; // 忽略触屏后的模拟鼠标事件
+        e.preventDefault();
+        e.stopPropagation();
+        beginStickyResize(e.clientX, e.clientY);
+      });
+      gripEl.addEventListener(
+        "touchstart",
+        (e) => {
+          gripLastTouch = Date.now();
+          e.stopPropagation();
+          if (e.touches && e.touches[0]) {
+            e.preventDefault();
+            beginStickyResize(e.touches[0].clientX, e.touches[0].clientY);
+          }
+        },
+        { passive: false },
+      );
+    }
+
     toastr.success(
-      "📌 便签模式已开启！按住标题栏拖动，点 ▲ 折叠，窗口跑偏就点标题栏上的准星按钮复位~",
+      "📌 便签模式已开启！按住标题栏拖动，右下角小角标拖动改大小，点 ▲ 折叠，跑偏就点准星按钮复位~",
     );
   };
-
   // 条目页「便签模式」按钮点击事件
   $ui
     .find("#wb-btn-sticky-mode")
