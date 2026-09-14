@@ -2033,6 +2033,14 @@ const saveBindingCache = (cacheObj) => {
 
 $menuBtn.on("click", async () => {
   $("#options").hide();
+  // 📌 便签小窗还开着时，不重复开面板，改为闪烁提醒小窗位置
+  if ($("#lulu-sticky-note-window").length) {
+    const $sn = $("#lulu-sticky-note-window");
+    $sn.stop(true).fadeOut(100).fadeIn(100).fadeOut(100).fadeIn(100);
+    if (typeof toastr !== "undefined")
+      toastr.info("📌 便签小窗还开着呢~ 在屏幕边上找找它，或者先把它关掉。");
+    return;
+  }
 
   const customCSS = `
         <style>
@@ -3121,6 +3129,8 @@ $menuBtn.on("click", async () => {
                             <input type="checkbox" id="wb-toggle-entry-fullscreen" style="accent-color: #339af0; transform:scale(1.1);">
                             <span style="color:var(--SmartThemeBodyColor); font-weight:bold;">📱 全屏编辑</span>
                         </label>
+                        <!-- 📌 便签模式按钮 -->
+                        <button id="wb-btn-sticky-mode" class="menu_button interactable wb-nowrap-btn btn-warning" style="margin: 0; padding: 6px 10px; font-size: 12px; border-radius: 6px; flex-shrink: 0; font-weight: bold;" title="把面板变成可拖动、可折叠的浮动小窗，方便一边翻酒馆页面复制资料，一边随手粘贴编辑条目"><i class="fa-solid fa-note-sticky"></i> 📌 便签模式</button>
                     </div>
                 </div>
 
@@ -3159,6 +3169,7 @@ $menuBtn.on("click", async () => {
                                 <div style="display:flex; gap: 6px;">
                                      <button class="menu_button interactable wb-nowrap-btn btn-primary" id="wb-btn-entry-batch-select-all" style="margin: 0; padding: 4px 10px; font-size: 12px;"><i class="fa-solid fa-check-double"></i> 全页勾选</button>
                                      <button class="menu_button interactable wb-nowrap-btn btn-secondary" id="wb-btn-entry-batch-deselect-all" style="margin: 0; padding: 4px 10px; font-size: 12px;"><i class="fa-regular fa-square"></i> 全页撤销</button>
+                                     <button class="menu_button interactable wb-nowrap-btn btn-info" id="wb-btn-entry-batch-invert" style="margin: 0; padding: 4px 10px; font-size: 12px;"><i class="fa-solid fa-retweet"></i> 反选</button>
                                 </div>
                             </div>
                             <!-- 第二排：强迫症专享网格按钮区 -->
@@ -3524,7 +3535,12 @@ $menuBtn.on("click", async () => {
             color: var(--SmartThemeBotMesColor) !important;
         }
     `;
-
+    // 📌 便签窗口开着时，同步刷新它的主题样式
+    if ($("#lulu-sticky-theme-style").length) {
+      $("#lulu-sticky-theme-style").html(
+        window.buildPopupThemeCSS("#lulu-sticky-note-window"),
+      );
+    }
     if (overrideCSS)
       $ui.append(
         `<style id="lulu-theme-override-style">${overrideCSS}</style>`,
@@ -5436,7 +5452,55 @@ $menuBtn.on("click", async () => {
     okButton: "关闭面板",
     onOpen: async () => {
       $(popup.dlg).addClass("wb-manager-dialog");
+      // ✨【新增】全局返回按钮（常显版）：插在底部"关闭面板"左边，任何子页面一键返回；顶层页面点返回=关闭面板
+      const luluInsertBackBtn = () => {
+        // 已经插过了就不再重复插
+        if (document.getElementById("lulu-wb-global-back")) return true;
+        const dlg = popup.dlg;
+        if (!dlg) return false;
+        // 优先找按钮容器；找不到就从"关闭面板"按钮本身反推父容器（兼容不同酒馆版本）
+        let $controls = $(dlg).find(".popup-controls").first();
+        if (!$controls.length) {
+          const $okBtn = $(dlg).find(".popup-button-ok").first();
+          if ($okBtn.length) $controls = $okBtn.parent();
+        }
+        if (!$controls || !$controls.length) return false;
 
+        const $luluBackBtn = $(
+          '<button id="lulu-wb-global-back" class="menu_button interactable" style="flex:1; margin-right:8px;"><i class="fa-solid fa-arrow-left"></i> 返回</button>',
+        );
+        $luluBackBtn.on("click", () => {
+          // 按当前可见的子页面，复用各自原有的返回逻辑
+          if ($ui.find("#wb-entry-view").is(":visible")) {
+            $ui.find("#wb-btn-entry-cancel").trigger("click"); // 条目编辑（带未保存提醒）
+          } else if ($ui.find("#wb-assoc-view").is(":visible")) {
+            $ui.find("#wb-btn-assoc-cancel").trigger("click"); // 绑定管理
+          } else if ($ui.find("#wb-edit-snap-view").is(":visible")) {
+            $ui.find("#wb-btn-edit-cancel").trigger("click"); // 编辑组合快照
+          } else if ($ui.find("#wb-detailed-snap-view").is(":visible")) {
+            $ui.find("#dsnap-cancel").trigger("click"); // 编辑复合快照
+          } else if ($ui.find("#wb-bind-view").is(":visible")) {
+            $ui.find("#wb-btn-bind-cancel").trigger("click"); // 绑定名单
+          } else if ($ui.find("#wb-transfer-view").is(":visible")) {
+            $ui.find("#wb-transfer-back").trigger("click"); // 搬运台
+          } else {
+            // 顶层页面（全局大厅/当前角色）：返回 = 关闭面板
+            $(dlg).find(".popup-button-ok").first().trigger("click");
+          }
+        });
+        $controls.prepend($luluBackBtn);
+        return true;
+      };
+      // 立即尝试插入；若此刻按钮栏还没渲染好，就每 100 毫秒重试一次，最多重试 3 秒
+      if (!luluInsertBackBtn()) {
+        let luluBackRetry = 0;
+        const luluBackRetryTimer = setInterval(() => {
+          luluBackRetry++;
+          if (luluInsertBackBtn() || luluBackRetry >= 30) {
+            clearInterval(luluBackRetryTimer);
+          }
+        }, 100);
+      }
       // 🔧 确保悬浮球外观面板被搬进「外观设置」的下拉容器里
       const $floatPanel = $ui.find("#wb-float-appearance-panel");
       const $target = $ui.find("#wb-float-appearance-inner");
@@ -5466,6 +5530,400 @@ $menuBtn.on("click", async () => {
     },
   });
   setTimeout(() => $(popup.dlg).addClass("wb-manager-dialog"), 50);
+
+  // ========== 【便签模式】模块 V3 开始 ==========
+  // 把面板从模态弹窗搬进可拖动/可折叠的浮动小窗，挂在屏幕旁边随时编辑
+  // V3 关键修复：脚本可能运行在隐藏的 iframe 沙箱里（那里 window 尺寸全是 0），
+  // 必须向父窗口取真实视口尺寸；事件也必须挂在元素【真正所在】的 document 上
+  const openStickyNoteMode = () => {
+    if ($("#lulu-sticky-note-window").length) return;
+
+    // ---- 真实视口获取（参照悬浮球的做法：iframe 沙箱里要向父窗口要尺寸） ----
+    const realWin =
+      window.parent && window.parent !== window ? window.parent : window;
+    const getStickyWinW = () =>
+      realWin.innerWidth ||
+      (realWin.document && realWin.document.documentElement
+        ? realWin.document.documentElement.clientWidth
+        : 0) ||
+      document.documentElement.clientWidth ||
+      1280;
+    const getStickyWinH = () =>
+      realWin.innerHeight ||
+      (realWin.document && realWin.document.documentElement
+        ? realWin.document.documentElement.clientHeight
+        : 0) ||
+      document.documentElement.clientHeight ||
+      800;
+
+    const winW = getStickyWinW(),
+      winH = getStickyWinH();
+    console.log(
+      "[Lulu便签] V3 模块启动 | 真实视口:",
+      winW,
+      "x",
+      winH,
+      "| iframe环境:",
+      window.parent !== window,
+    ); // ★自检标记
+
+    // ---- 初始位置/尺寸（坏数据自动回退默认，永远落在屏幕内） ----
+    const defW = Math.min(620, Math.max(320, winW - 40));
+    const defH = Math.min(winH - 40, Math.round(winH * 0.78));
+    const pos = {
+      left: Math.max(8, winW - defW - 16),
+      top: 56,
+      width: defW,
+      height: defH,
+      folded: false,
+    };
+    try {
+      const sp = JSON.parse(localStorage.getItem("lulu_wb_sticky_pos") || "{}");
+      if (Number.isFinite(sp.left) && sp.left >= 0 && sp.left <= winW - 80)
+        pos.left = sp.left;
+      if (Number.isFinite(sp.top) && sp.top >= 0 && sp.top <= winH - 60)
+        pos.top = sp.top;
+      if (Number.isFinite(sp.width) && sp.width >= 300 && sp.width <= winW)
+        pos.width = sp.width;
+      if (Number.isFinite(sp.height) && sp.height >= 120 && sp.height <= winH)
+        pos.height = sp.height;
+      pos.folded = sp.folded === true;
+    } catch (e) {}
+
+    // ---- 结构样式（只注入一次） ----
+    if ($("#lulu-sticky-structure-style").length === 0) {
+      $("head").append(`<style id="lulu-sticky-structure-style">
+        #lulu-sticky-note-window {
+          position: fixed;
+          z-index: 99999;
+          display: flex;
+          flex-direction: column;
+          border-radius: 10px;
+          border: 1px solid var(--SmartThemeQuoteColor, #70a1ff);
+          background: var(--SmartThemeBlurTintColor, rgba(30,30,35,0.98));
+          box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+          overflow: hidden;
+          resize: both;
+          min-width: 300px;
+          min-height: 120px;
+          max-width: 96vw;
+          max-height: 96vh;
+          font-family: sans-serif;
+        }
+        #lulu-sticky-note-window.lulu-sticky-folded {
+          resize: none !important;
+          height: auto !important;
+          min-height: 0 !important;
+        }
+        #lulu-sticky-titlebar {
+          display: flex; align-items: center; gap: 8px;
+          padding: 6px 10px;
+          cursor: move; user-select: none; -webkit-user-select: none;
+          touch-action: none;
+          background: rgba(0,0,0,0.22);
+          border-bottom: 1px solid var(--SmartThemeBorderColor, #444);
+          color: var(--SmartThemeQuoteColor, #70a1ff);
+          font-weight: bold; font-size: 13px; flex-shrink: 0;
+        }
+        #lulu-sticky-titlebar .lulu-sticky-title-text {
+          flex: 1; min-width: 0; white-space: nowrap;
+          overflow: hidden; text-overflow: ellipsis;
+        }
+        #lulu-sticky-titlebar .lulu-sticky-tbtn {
+          flex-shrink: 0; width: 24px; height: 24px;
+          display: inline-flex; align-items: center; justify-content: center;
+          border-radius: 5px; cursor: pointer;
+          color: var(--SmartThemeBodyColor, #ccc);
+          border: 1px solid var(--SmartThemeBorderColor, #555);
+          background: rgba(125,125,125,0.15);
+          font-size: 12px; transition: 0.15s;
+        }
+        #lulu-sticky-titlebar .lulu-sticky-tbtn:hover {
+          background: var(--SmartThemeQuoteColor, #70a1ff);
+          color: #fff; border-color: var(--SmartThemeQuoteColor, #70a1ff);
+        }
+        #lulu-sticky-content {
+          flex: 1; overflow: auto;
+          -webkit-overflow-scrolling: touch;
+          display: flex; flex-direction: column;
+        }
+        #lulu-sticky-note-window.lulu-sticky-folded #lulu-sticky-content {
+          display: none;
+        }
+        #lulu-sticky-content #wb-manager-panel { min-height: 0 !important; }
+        #lulu-sticky-note-window input[type="checkbox"] {
+          appearance: none !important;
+          -webkit-appearance: none !important;
+          width: 17px !important; height: 17px !important;
+          border: 2px solid var(--SmartThemeQuoteColor, #70a1ff) !important;
+          border-radius: 4px !important;
+          background: transparent !important;
+          cursor: pointer !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          vertical-align: middle !important;
+          transition: all 0.15s ease-in-out !important;
+          flex-shrink: 0 !important; margin: 0 !important;
+        }
+        #lulu-sticky-note-window input[type="checkbox"]:checked {
+          background: var(--SmartThemeQuoteColor, #70a1ff) !important;
+          border-color: var(--SmartThemeQuoteColor, #70a1ff) !important;
+        }
+        #lulu-sticky-note-window input[type="checkbox"]:checked::after {
+          content: "✓" !important;
+          color: var(--SmartThemeBotMesColor, #fff) !important;
+          font-size: 13px !important; font-weight: 900 !important; line-height: 1 !important;
+        }
+        #lulu-sticky-note-window input[type="checkbox"].wb-batch-chk:checked {
+          background: #ff6b6b !important; border-color: #ff6b6b !important;
+        }
+        #lulu-sticky-note-window input[type="checkbox"].wb-batch-chk:checked::after {
+          color: #ffffff !important;
+        }
+      </style>`);
+    }
+    // ---- 主题样式（每次开启重建，跟随皮肤设置） ----
+    $("#lulu-sticky-theme-style").remove();
+    $("head").append(
+      `<style id="lulu-sticky-theme-style">${window.buildPopupThemeCSS("#lulu-sticky-note-window")}</style>`,
+    );
+
+    // ---- 构建小窗 ----
+    const $win = $(`
+      <div id="lulu-sticky-note-window">
+        <div id="lulu-sticky-titlebar">
+          <i class="fa-solid fa-note-sticky"></i>
+          <span class="lulu-sticky-title-text">世界书便签 · 按住此栏拖动</span>
+          <span class="lulu-sticky-tbtn" id="lulu-sticky-reset-btn" title="窗口位置复位（窗口跑偏/找不到时点我）"><i class="fa-solid fa-location-crosshairs"></i></span>
+          <span class="lulu-sticky-tbtn" id="lulu-sticky-fold-btn" title="折叠/展开"><i class="fa-solid ${pos.folded ? "fa-chevron-down" : "fa-chevron-up"}"></i></span>
+          <span class="lulu-sticky-tbtn" id="lulu-sticky-close-btn" title="关闭便签（面板随之关闭）"><i class="fa-solid fa-xmark"></i></span>
+        </div>
+        <div id="lulu-sticky-content"></div>
+      </div>`);
+    const wEl = $win[0];
+    // 全部用 setProperty + important 强制设定，任何外部样式都改不动窗口位置
+    wEl.style.setProperty("position", "fixed", "important");
+    wEl.style.setProperty("left", pos.left + "px", "important");
+    wEl.style.setProperty("top", pos.top + "px", "important");
+    wEl.style.setProperty("width", pos.width + "px", "important");
+    wEl.style.setProperty(
+      "height",
+      pos.folded ? "auto" : pos.height + "px",
+      "important",
+    );
+    if (pos.folded) $win.addClass("lulu-sticky-folded");
+
+    // 【关键】先把面板搬进小窗，再关闭原弹窗（顺序不能反）
+    $ui.appendTo($win.find("#lulu-sticky-content"));
+    $("body").append($win);
+    try {
+      if (typeof popup.complete === "function") {
+        popup.complete(
+          SillyTavern.POPUP_RESULT ? SillyTavern.POPUP_RESULT.AFFIRMATIVE : 1,
+        );
+      } else if (typeof popup.close === "function") {
+        popup.close();
+      } else {
+        popup.dlg.close();
+      }
+    } catch (e) {
+      try {
+        popup.dlg.close();
+      } catch (e2) {}
+    }
+    console.log(
+      "[Lulu便签] 窗口创建完成 → left:",
+      pos.left,
+      "top:",
+      pos.top,
+      "| w:",
+      pos.width,
+      "h:",
+      pos.height,
+    );
+
+    // ---- 记忆位置的工具 ----
+    const saveStickyPos = () => {
+      const r = wEl.getBoundingClientRect();
+      if (r.width < 50) return; // 异常情况不存，防止写入坏数据
+      let sp = {};
+      try {
+        sp = JSON.parse(localStorage.getItem("lulu_wb_sticky_pos") || "{}");
+      } catch (e) {}
+      sp.left = r.left;
+      sp.top = r.top;
+      sp.width = r.width;
+      if (!$win.hasClass("lulu-sticky-folded")) sp.height = r.height;
+      sp.folded = $win.hasClass("lulu-sticky-folded");
+      localStorage.setItem("lulu_wb_sticky_pos", JSON.stringify(sp));
+    };
+
+    // ---- 关闭便签（含未保存修改提醒） ----
+    const closeSticky = async () => {
+      try {
+        if (
+          $ui.find("#wb-entry-view").is(":visible") &&
+          JSON.stringify(tuneEntries) !== JSON.stringify(originalTuneEntries)
+        ) {
+          const c = await SillyTavern.callGenericPopup(
+            `便签里还有没点<strong style="color:var(--SmartThemeQuoteColor);">绿色保存按钮</strong>的修改哦！<br>直接关闭会丢失这些修改，确定吗？`,
+            SillyTavern.POPUP_TYPE.CONFIRM,
+          );
+          if (c !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+        }
+      } catch (e) {}
+      saveStickyPos();
+      $win.remove();
+      toastr.info("📌 便签模式已关闭~ 需要面板时从菜单重新打开即可。");
+    };
+    $win.find("#lulu-sticky-close-btn").on("click", closeSticky);
+
+    // ---- 复位位置按钮 ----
+    $win.find("#lulu-sticky-reset-btn").on("click", () => {
+      localStorage.removeItem("lulu_wb_sticky_pos");
+      const cw = getStickyWinW();
+      const w = Math.min(620, Math.max(320, cw - 40));
+      wEl.style.setProperty("width", w + "px", "important");
+      wEl.style.setProperty(
+        "left",
+        Math.max(8, cw - w - 16) + "px",
+        "important",
+      );
+      wEl.style.setProperty("top", "56px", "important");
+      if ($win.hasClass("lulu-sticky-folded")) {
+        $win.removeClass("lulu-sticky-folded");
+        wEl.style.setProperty(
+          "height",
+          Math.min(getStickyWinH() - 40, 600) + "px",
+          "important",
+        );
+        $win
+          .find("#lulu-sticky-fold-btn")
+          .html('<i class="fa-solid fa-chevron-up"></i>');
+      }
+      toastr.info("📌 窗口位置已复位~");
+    });
+
+    // ---- 折叠 / 展开 ----
+    $win.find("#lulu-sticky-fold-btn").on("click", function () {
+      const nowFolded = !$win.hasClass("lulu-sticky-folded");
+      if (nowFolded) {
+        $win.attr("data-lulu-prev-h", wEl.getBoundingClientRect().height);
+        $win.addClass("lulu-sticky-folded");
+        wEl.style.setProperty("height", "auto", "important");
+        $(this).html('<i class="fa-solid fa-chevron-down"></i>');
+      } else {
+        $win.removeClass("lulu-sticky-folded");
+        const prevH = parseInt($win.attr("data-lulu-prev-h")) || pos.height;
+        wEl.style.setProperty(
+          "height",
+          Math.min(prevH, getStickyWinH() - 40) + "px",
+          "important",
+        );
+        $(this).html('<i class="fa-solid fa-chevron-up"></i>');
+      }
+      saveStickyPos();
+    });
+
+    // ---- 标题栏拖动 ----
+    // PC 用 mousedown，手机用 touchstart
+    // 【V3 核心修复】移动/松手事件挂在元素【真正所在】的 document 上：
+    // 脚本若跑在隐藏 iframe 里，裸 document 是 iframe 的，永远收不到主页面的鼠标事件！
+    const barEl = $win.find("#lulu-sticky-titlebar")[0];
+    const dragDoc = wEl.ownerDocument || document;
+    let luluStickyLastTouch = 0;
+
+    const luluStickyBeginDrag = (startX, startY) => {
+      barEl.style.setProperty(
+        "background",
+        "rgba(112,161,255,0.35)",
+        "important",
+      );
+      const rect = wEl.getBoundingClientRect();
+      const grabX = startX - rect.left;
+      const grabY = startY - rect.top;
+
+      const doMove = (mx, my) => {
+        let nl = mx - grabX;
+        let nt = my - grabY;
+        const cw = getStickyWinW(),
+          ch = getStickyWinH();
+        // 至少露出 60px，防止拖丢找不回
+        nl = Math.max(-rect.width + 60, Math.min(nl, cw - 60));
+        nt = Math.max(0, Math.min(nt, ch - 40));
+        wEl.style.setProperty("left", nl + "px", "important");
+        wEl.style.setProperty("top", nt + "px", "important");
+      };
+      const onMouseMove = (ev) => doMove(ev.clientX, ev.clientY);
+      const onTouchMove = (ev) => {
+        if (ev.touches && ev.touches[0]) {
+          ev.preventDefault();
+          doMove(ev.touches[0].clientX, ev.touches[0].clientY);
+        }
+      };
+      const onEnd = () => {
+        dragDoc.removeEventListener("mousemove", onMouseMove, true);
+        dragDoc.removeEventListener("mouseup", onEnd, true);
+        dragDoc.removeEventListener("touchmove", onTouchMove, true);
+        dragDoc.removeEventListener("touchend", onEnd, true);
+        dragDoc.removeEventListener("touchcancel", onEnd, true);
+        barEl.style.removeProperty("background");
+        saveStickyPos();
+      };
+      dragDoc.addEventListener("mousemove", onMouseMove, true);
+      dragDoc.addEventListener("mouseup", onEnd, true);
+      dragDoc.addEventListener("touchmove", onTouchMove, {
+        capture: true,
+        passive: false,
+      });
+      dragDoc.addEventListener("touchend", onEnd, true);
+      dragDoc.addEventListener("touchcancel", onEnd, true);
+    };
+
+    barEl.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return; // 只响应左键
+      if (Date.now() - luluStickyLastTouch < 600) return; // 忽略触屏后的模拟鼠标事件
+      if ($(e.target).closest(".lulu-sticky-tbtn").length) return; // 点在按钮上不拖
+      e.preventDefault();
+      luluStickyBeginDrag(e.clientX, e.clientY);
+    });
+    barEl.addEventListener(
+      "touchstart",
+      (e) => {
+        if ($(e.target).closest(".lulu-sticky-tbtn").length) return;
+        luluStickyLastTouch = Date.now();
+        if (e.touches && e.touches[0]) {
+          luluStickyBeginDrag(e.touches[0].clientX, e.touches[0].clientY);
+        }
+      },
+      { passive: false },
+    );
+
+    toastr.success(
+      "📌 便签模式已开启！按住标题栏拖动，点 ▲ 折叠，窗口跑偏就点标题栏上的准星按钮复位~",
+    );
+  };
+
+  // 条目页「便签模式」按钮点击事件
+  $ui
+    .find("#wb-btn-sticky-mode")
+    .off("click")
+    .on("click", async () => {
+      if ($("#lulu-sticky-note-window").length)
+        return toastr.info("便签模式已经开启啦~");
+      // 首次开启给个说明，之后记住不再打扰
+      if (localStorage.getItem("lulu_wb_sticky_tip_done") !== "true") {
+        const tip = await SillyTavern.callGenericPopup(
+          `开启后，面板会脱离弹窗形态，变成一个<strong style="color:var(--SmartThemeQuoteColor);">可拖动、可折叠的小窗</strong>挂在屏幕旁边。<br><br>这样你就可以一边翻酒馆页面复制资料，一边随手粘贴进条目里编辑啦~<br><br><span style="font-size:12px;color:gray;">· 小窗右下可以拖拽改大小<br>· 关闭小窗 = 关闭面板（有未保存修改会提醒你）<br>· 之后想用回原来的弹窗形态，重新打开「全局世界书管理」即可</span>`,
+          SillyTavern.POPUP_TYPE.CONFIRM,
+        );
+        if (tip !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+        localStorage.setItem("lulu_wb_sticky_tip_done", "true");
+      }
+      openStickyNoteMode();
+    });
+  // ========== 【便签模式】模块 V3 结束 ==========
 
   const attemptCreateWb = async (defaultName = "") => {
     let name = await SillyTavern.callGenericPopup(
@@ -11020,6 +11478,19 @@ $menuBtn.on("click", async () => {
         sortedEntries.forEach((entry) =>
           entryBatchSelected.delete(tuneEntries.indexOf(entry)),
         );
+        renderEntryList();
+      });
+    $ui
+      .find("#wb-btn-entry-batch-invert")
+      .off("click")
+      .on("click", () => {
+        sortedEntries.forEach((entry) => {
+          const idx = tuneEntries.indexOf(entry);
+          if (idx === -1) return;
+          entryBatchSelected.has(idx)
+            ? entryBatchSelected.delete(idx)
+            : entryBatchSelected.add(idx);
+        });
         renderEntryList();
       });
 
