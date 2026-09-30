@@ -2016,6 +2016,582 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
 };
 if (localStorage.getItem("lulu_wb_floating_enabled") !== "false")
   toggleFloatingButton(true);
+// ============================================================
+// 【新增】原生世界书分组同步：不打开管理面板也自动运行
+// 粘贴这段后，原来的代码一行都不用删！
+// 原理：面板里原来那份和这份会互相顶替，永远不会双开
+// ============================================================
+window.luluStartNativeWbSync = function () {
+  if (window.lulu_native_sync_interval)
+    clearInterval(window.lulu_native_sync_interval);
+
+  // ✨ 判断某个分组当前是"全开""全关"还是"混合"状态
+  const luluGetGroupState = (grpName) => {
+    const $switches = $(`.world_entry[data-lulu-grp="${grpName}"]`).find(
+      ".killSwitch",
+    );
+    if ($switches.length === 0) return "empty";
+    let onCount = 0;
+    $switches.each(function () {
+      if ($(this).hasClass("fa-toggle-on")) onCount++;
+    });
+    if (onCount === 0) return "off"; // 全关
+    if (onCount === $switches.length) return "on"; // 全开
+    return "mixed"; // 混合
+  };
+
+  // ✨ 一键开关某个原生分组内所有条目
+  const luluToggleGroupEntries = (grpName, enable) => {
+    const $switches = $(`.world_entry[data-lulu-grp="${grpName}"]`).find(
+      ".killSwitch",
+    );
+    if ($switches.length === 0) {
+      if (typeof toastr !== "undefined")
+        toastr.info("这个分组里好像没有可操作的条目呢~");
+      return;
+    }
+    let count = 0;
+    $switches.each(function () {
+      const isOn = $(this).hasClass("fa-toggle-on");
+      // 只有当前状态和目标状态不一致时，才点击切换
+      if (isOn !== enable) {
+        this.click();
+        count++;
+      }
+    });
+    if (typeof toastr !== "undefined") {
+      toastr.success(
+        enable
+          ? `已开启分组「${grpName}」内 ${count} 个条目！`
+          : `已关闭分组「${grpName}」内 ${count} 个条目！`,
+      );
+    }
+    // 点完后刷新一下按钮图标显示
+    luluUpdateGroupSwitchIcon(grpName);
+  };
+
+  // ✨ 根据分组状态，更新表头那个一键开关图标的样子
+  const luluUpdateGroupSwitchIcon = (grpName) => {
+    const $btn = $(
+      `.lulu-native-group-header[data-groupname="${grpName}"] .lulu-grp-toggle`,
+    );
+    if (!$btn.length) return;
+    const state = luluGetGroupState(grpName);
+    if (state === "on") {
+      // 全开 → 显示"开"图标，绿色，点击会全关
+      $btn
+        .removeClass("fa-toggle-off")
+        .addClass("fa-toggle-on")
+        .css("color", "#51cf66")
+        .attr("data-next", "off")
+        .attr("title", "本组已全开，点击一键全关");
+    } else {
+      // 全关或混合 → 显示"关"图标，灰色，点击会全开
+      $btn
+        .removeClass("fa-toggle-on")
+        .addClass("fa-toggle-off")
+        .css("color", "gray")
+        .attr("data-next", "on")
+        .attr(
+          "title",
+          state === "mixed"
+            ? "本组部分开启，点击一键全开"
+            : "本组已全关，点击一键全开",
+        );
+    }
+  };
+  let groupFoldState = JSON.parse(
+    localStorage.getItem("lulu_wb_native_fold_state") || "{}",
+  );
+  const saveFoldState = () =>
+    localStorage.setItem(
+      "lulu_wb_native_fold_state",
+      JSON.stringify(groupFoldState),
+    );
+  let currentActiveWbName = null;
+  let cachedWbEntries = [];
+  let isFetching = false;
+  let isRendering = false;
+  let luluLastSyncFingerprint = "";
+  window.lulu_native_sync_interval = setInterval(async () => {
+    if (isRendering) return;
+    if (document.hidden) return;
+    const isNativeMagicEnabled =
+      localStorage.getItem("lulu_wb_native_magic_enabled") !== "false";
+
+    // 【性能优化】原生分类已关闭且已清理完时，直接休息，连选择器都不跑
+    if (!isNativeMagicEnabled && window.lulu_native_cleaned) return;
+
+    const $entries = $(".world_entry");
+    if ($entries.length === 0) return;
+    const $container = $entries.first().parent();
+    if (!$container.length) return;
+    if (!$container.is(":visible")) return;
+    // ✨ 内容指纹：状态没变就直接跳过（注意：指纹要等画完了才记录，不能在这里就记）
+    let luluCurrentFp = null;
+    if (isNativeMagicEnabled) {
+      const _wbName =
+        $(".move_entry_button").first().attr("data-current-world") || "";
+      const _order = localStorage.getItem("lulu_wb_native_group_order") || "";
+      const _fold = localStorage.getItem("lulu_wb_native_fold_state") || "";
+      const _headerCount = $container.children(
+        ".lulu-native-group-header",
+      ).length;
+      luluCurrentFp = `${_wbName}|${$entries.length}|${_order}|${_fold}|${_headerCount}`;
+      if (luluCurrentFp === luluLastSyncFingerprint) return;
+    }
+    if (!isNativeMagicEnabled) {
+      // ✨【性能优化】只清理一次，不再每轮反复检查样式
+      if ($container.css("display") === "flex") {
+        $container.css({ display: "", "flex-direction": "" });
+        $(".lulu-native-group-header").remove();
+        $entries.css({ order: "", display: "", margin: "" });
+      }
+      window.lulu_native_cleaned = true;
+      return;
+    }
+
+    // ✨ 原生分组开启时，重置清理标记（这样以后关闭时还能再清理一次）
+    window.lulu_native_cleaned = false;
+    if (isFetching) return;
+    if (
+      $container.css("display") !== "flex" ||
+      $container.css("flex-direction") !== "column"
+    ) {
+      $container.css({ display: "flex", "flex-direction": "column" });
+    }
+    const $moveBtn = $(".move_entry_button").first();
+    let visibleWbName = $moveBtn.attr("data-current-world");
+    if (!visibleWbName) {
+      visibleWbName =
+        $("#world_info_select").val() ||
+        $(".world_info_select").first().val() ||
+        "";
+    }
+    if (!visibleWbName) return;
+
+    if (currentActiveWbName !== visibleWbName) {
+      isFetching = true;
+      try {
+        const rawData = await getWorldbook(visibleWbName);
+        if (Array.isArray(rawData)) {
+          cachedWbEntries = rawData;
+          currentActiveWbName = visibleWbName;
+        } else if (rawData && typeof rawData === "object") {
+          // 兼容某些版本返回 { entries: [...] } 或 { entries: { ... } }
+          const maybeEntries = rawData.entries || rawData.data?.entries;
+          const arr = Array.isArray(maybeEntries)
+            ? maybeEntries
+            : maybeEntries
+              ? Object.values(maybeEntries)
+              : [];
+          if (arr.length > 0) {
+            cachedWbEntries = arr;
+            currentActiveWbName = visibleWbName;
+          }
+        }
+      } catch (err) {
+        console.warn("Lulu 原生同步：读取世界书失败", err);
+      } finally {
+        isFetching = false;
+      }
+    }
+    if (!cachedWbEntries || cachedWbEntries.length === 0) return;
+    if (currentActiveWbName !== visibleWbName) return;
+
+    const entryByName = new Map();
+    const entryByUid = new Map();
+    for (const e of cachedWbEntries) {
+      const title = e.name || e.comment || "";
+      if (title && !entryByName.has(title)) entryByName.set(title, e);
+      const uid = e.uid !== undefined && e.uid !== null ? e.uid : e.id;
+      if (uid !== undefined && uid !== null) {
+        entryByUid.set(String(uid), e);
+        const uidNum = Number(uid);
+        if (!Number.isNaN(uidNum)) entryByUid.set(String(uidNum), e);
+      }
+    }
+
+    const luluPrefixMap = readGroupMapFromEntries(cachedWbEntries);
+
+    const groupCounts = {};
+    $entries.each(function (index) {
+      const $entry = $(this);
+
+      let entryTitle =
+        $entry.find('textarea[name="comment"]').val()?.trim() || "";
+      if (!entryTitle) {
+        entryTitle = $entry.find('input[name="comment"]').val()?.trim() || "";
+      }
+      if (!entryTitle) {
+        entryTitle =
+          $entry.find('textarea, input[type="text"]').first().val()?.trim() ||
+          "";
+      }
+      if (!entryTitle) {
+        entryTitle = (
+          $entry.attr("data-comment") ||
+          $entry.attr("title") ||
+          ""
+        ).trim();
+      }
+
+      // 对照表条目直接隐藏
+      if (entryTitle.indexOf(LULU_MAP_ENTRY_TAG) === 0) {
+        $entry.css("display", "none");
+        $entry.attr("data-lulu-grp", "__LULU_MAP__");
+        return true;
+      }
+
+      let myGroup = "📁 未分类条目";
+
+      let domUid = null;
+      const rawUidAttr =
+        $entry.attr("uid") ||
+        $entry.attr("data-uid") ||
+        $entry.attr("data-entry-uid") ||
+        $entry.data("uid") ||
+        $entry.data("id");
+      if (
+        rawUidAttr !== undefined &&
+        rawUidAttr !== null &&
+        rawUidAttr !== ""
+      ) {
+        const parsed = parseInt(rawUidAttr, 10);
+        if (!isNaN(parsed)) domUid = parsed;
+      }
+      if (domUid === null) {
+        const attrs = $entry[0].attributes;
+        for (const attr of attrs) {
+          if (/uid/i.test(attr.name)) {
+            const parsed = parseInt(attr.value, 10);
+            if (!isNaN(parsed)) {
+              domUid = parsed;
+              break;
+            }
+          }
+        }
+      }
+
+      let foundEntry = null;
+      if (domUid !== null) {
+        foundEntry = entryByUid.get(String(domUid)) || entryByUid.get(domUid);
+      }
+      if (!foundEntry && entryTitle) {
+        foundEntry = entryByName.get(entryTitle);
+      }
+
+      if (foundEntry) {
+        // 1) 先读全局分组缓存 / extensions.lulu_group
+        let uiGrpName = getEntryUiGroup(
+          currentActiveWbName,
+          foundEntry.uid,
+          foundEntry,
+        );
+
+        // 2) 如果没有，再像脚本面板一样，用【前缀】+ 世界书对照表解析
+        if ((!uiGrpName || uiGrpName.trim() === "") && foundEntry.name) {
+          const prefixMatch = (foundEntry.name || "").match(/^【(.*?)】/);
+          if (prefixMatch && prefixMatch[1]) {
+            const rawPrefix = prefixMatch[1].trim();
+            if (luluPrefixMap && luluPrefixMap[rawPrefix]) {
+              uiGrpName = luluPrefixMap[rawPrefix];
+            }
+          }
+        }
+
+        if (uiGrpName && uiGrpName.trim() !== "") myGroup = uiGrpName.trim();
+      }
+
+      if (!groupCounts[myGroup]) groupCounts[myGroup] = 0;
+      groupCounts[myGroup]++;
+      $entry.attr("data-lulu-grp", myGroup);
+      $entry.attr("data-lulu-native-index", index);
+    });
+
+    let luluGroupOrder = JSON.parse(
+      localStorage.getItem("lulu_wb_native_group_order") || "[]",
+    );
+    let currentGroups = Object.keys(groupCounts).filter(
+      (g) => g !== "📁 未分类条目",
+    );
+    let orderChanged = false;
+    currentGroups.forEach((g) => {
+      if (!luluGroupOrder.includes(g)) {
+        luluGroupOrder.push(g);
+        orderChanged = true;
+      }
+    });
+    if (orderChanged)
+      localStorage.setItem(
+        "lulu_wb_native_group_order",
+        JSON.stringify(luluGroupOrder),
+      );
+    const sortedGroupNames = Object.keys(groupCounts).sort((a, b) => {
+      if (a === "📁 未分类条目") return 1;
+      if (b === "📁 未分类条目") return -1;
+      let idxA = luluGroupOrder.indexOf(a);
+      let idxB = luluGroupOrder.indexOf(b);
+      if (idxA === -1) idxA = 9999;
+      if (idxB === -1) idxB = 9999;
+      return idxA - idxB;
+    });
+    sortedGroupNames.forEach((gName, gIndex) => {
+      const baseOrder = (gIndex + 1) * 10000;
+      let $header = $container.children(
+        `.lulu-native-group-header[data-groupname="${gName}"]`,
+      );
+      const isFolded = groupFoldState[gName] === true;
+      const isDraggable = gName !== "📁 未分类条目";
+      if ($header.length === 0) {
+        const dragIconHtml = isDraggable
+          ? `<i class="fa-solid fa-hand-paper lulu-drag-handle" style="cursor:grab; font-size:14px; color:gray; padding-right:8px; display:inline-flex; align-items:center;" title="按住拖拽排序分类"></i>`
+          : "";
+        const sortButtonsHtml = !isDraggable
+          ? ""
+          : `<div style="display:flex; gap: 6px; margin-right: 15px;" class="lulu-sort-btns"><i class="fa-solid fa-arrow-up lulu-move-up" title="将此分类上移" style="padding:4px; font-size:14px; color:gray; transition:0.2s; cursor:pointer;"></i><i class="fa-solid fa-arrow-down lulu-move-down" title="将此分类下移" style="padding:4px; font-size:14px; color:gray; transition:0.2s; cursor:pointer;"></i></div>`;
+        $header = $(
+          `<div class="lulu-native-group-header" data-groupname="${gName}" draggable="${isDraggable ? "true" : "false"}" style="background: var(--SmartThemeBlurTintColor, rgba(0,0,0,0.15)); padding:10px 14px; margin: 10px 0 6px 0; border-radius:6px; font-weight:bold; color:var(--SmartThemeQuoteColor, #70a1ff); border:1px solid var(--SmartThemeBorderColor, gray); display:flex; justify-content:space-between; align-items:center; user-select:none; transition: 0.2s; flex-shrink: 0; align-content: center; gap: 6px; flex-wrap: wrap;"><span style="display:flex; align-items:center; min-width:0;">${dragIconHtml}<span class="lulu-click-fold" style="display:flex; align-items:center; cursor:pointer; min-width:0;"><i class="fa-solid ${isFolded ? "fa-chevron-right" : "fa-chevron-down"} lulu-fold-icon" style="margin-right:8px; width: 16px; text-align:center; flex-shrink:0;"></i><span style="font-size: 14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" class="lulu-g-title">${gName}</span><span style="font-size: 11px; font-weight: normal; color: gray; margin-left: 6px; flex-shrink:0;" class="lulu-g-count">(${groupCounts[gName]}项)</span></span></span><span style="display:flex; align-items:center; gap:6px; flex-shrink:0;">${sortButtonsHtml}<i class="fa-solid fa-toggle-off lulu-grp-toggle" title="一键开关本组所有条目" data-next="on" style="padding:5px; font-size:15px; color:gray; cursor:pointer; transition:0.2s;"></i></span></div>`,
+        );
+        $header.hover(
+          function () {
+            $(this).css(
+              "background",
+              "var(--SmartThemeBotMesColor, rgba(125,125,125,0.3))",
+            );
+          },
+          function () {
+            $(this).css(
+              "background",
+              "var(--SmartThemeBlurTintColor, rgba(0,0,0,0.15))",
+            );
+          },
+        );
+        $header.find(".lulu-move-up, .lulu-move-down").hover(
+          function () {
+            $(this).css("color", "var(--SmartThemeQuoteColor)");
+            $(this).css("transform", "scale(1.2)");
+          },
+          function () {
+            $(this).css("color", "gray");
+            $(this).css("transform", "scale(1)");
+          },
+        );
+        $header
+          .find(".lulu-click-fold")
+          .off("click.luluFold")
+          .on("click.luluFold", function (e) {
+            e.stopPropagation();
+            if ($(this).data("lulu-click-locked")) return;
+            $(this).data("lulu-click-locked", true);
+            setTimeout(() => $(this).data("lulu-click-locked", false), 250);
+            const grp = $header.attr("data-groupname");
+            const isNowFolded = !groupFoldState[grp];
+            groupFoldState[grp] = isNowFolded;
+            saveFoldState();
+            const $icon = $(this).find(".lulu-fold-icon");
+            if (isNowFolded)
+              $icon.removeClass("fa-chevron-down").addClass("fa-chevron-right");
+            else
+              $icon.removeClass("fa-chevron-right").addClass("fa-chevron-down");
+            $container
+              .children(`.world_entry[data-lulu-grp="${grp}"]`)
+              .each(function () {
+                if (isNowFolded) {
+                  $(this).addClass("lulu-folded-hide");
+                } else {
+                  $(this).removeClass("lulu-folded-hide");
+                  $(this).css({ display: "", margin: "" });
+                }
+              });
+          });
+        if (isDraggable) {
+          $header.off("dragstart").on("dragstart", function (e) {
+            e.originalEvent.dataTransfer.setData("text/plain", gName);
+            $(this).addClass("lulu-drag-ghost");
+          });
+          $header.on("dragend", function () {
+            $(this).removeClass("lulu-drag-ghost");
+            $(".lulu-drag-over-top, .lulu-drag-over-bottom").removeClass(
+              "lulu-drag-over-top lulu-drag-over-bottom",
+            );
+          });
+          $header.on("dragover", function (e) {
+            e.preventDefault();
+            const rect = this.getBoundingClientRect();
+            const isBottomHalf =
+              e.originalEvent.clientY > rect.top + rect.height / 2;
+            if (isBottomHalf) {
+              $(this)
+                .removeClass("lulu-drag-over-top")
+                .addClass("lulu-drag-over-bottom");
+            } else {
+              $(this)
+                .removeClass("lulu-drag-over-bottom")
+                .addClass("lulu-drag-over-top");
+            }
+          });
+          $header.on("dragleave", function () {
+            $(this).removeClass("lulu-drag-over-top lulu-drag-over-bottom");
+          });
+          $header.on("drop", function (e) {
+            e.preventDefault();
+            $(this).removeClass("lulu-drag-over-top lulu-drag-over-bottom");
+            const draggedGrp =
+              e.originalEvent.dataTransfer.getData("text/plain");
+            const targetGrp = $(this).attr("data-groupname");
+            if (
+              draggedGrp &&
+              draggedGrp !== targetGrp &&
+              draggedGrp !== "📁 未分类条目" &&
+              targetGrp !== "📁 未分类条目"
+            ) {
+              let order = JSON.parse(
+                localStorage.getItem("lulu_wb_native_group_order") || "[]",
+              );
+              const fromIdx = order.indexOf(draggedGrp);
+              if (fromIdx > -1) {
+                const rect = this.getBoundingClientRect();
+                const isBottomHalf =
+                  e.originalEvent.clientY > rect.top + rect.height / 2;
+                order.splice(fromIdx, 1);
+                let newToIdx = order.indexOf(targetGrp);
+                if (isBottomHalf) newToIdx++;
+                order.splice(newToIdx, 0, draggedGrp);
+                localStorage.setItem(
+                  "lulu_wb_native_group_order",
+                  JSON.stringify(order),
+                );
+              }
+            }
+          });
+        }
+        $header
+          .find(".lulu-move-up")
+          .off("click")
+          .on("click", function (e) {
+            e.stopPropagation();
+            const idx = luluGroupOrder.indexOf(gName);
+            if (idx > 0) {
+              [luluGroupOrder[idx - 1], luluGroupOrder[idx]] = [
+                luluGroupOrder[idx],
+                luluGroupOrder[idx - 1],
+              ];
+              localStorage.setItem(
+                "lulu_wb_native_group_order",
+                JSON.stringify(luluGroupOrder),
+              );
+            }
+          });
+        $header
+          .find(".lulu-move-down")
+          .off("click")
+          .on("click", function (e) {
+            e.stopPropagation();
+            const idx = luluGroupOrder.indexOf(gName);
+            if (idx !== -1 && idx < luluGroupOrder.length - 1) {
+              [luluGroupOrder[idx + 1], luluGroupOrder[idx]] = [
+                luluGroupOrder[idx],
+                luluGroupOrder[idx + 1],
+              ];
+              localStorage.setItem(
+                "lulu_wb_native_group_order",
+                JSON.stringify(luluGroupOrder),
+              );
+            }
+          });
+
+        // ✨ 单个一键开关：根据当前状态智能全开/全关
+        $header
+          .find(".lulu-grp-toggle")
+          .off("click")
+          .on("click", function (e) {
+            e.stopPropagation();
+            const grp = $header.attr("data-groupname");
+            const next = $(this).attr("data-next"); // "on" 或 "off"
+            luluToggleGroupEntries(grp, next === "on");
+          });
+
+        $container.append($header);
+      } else {
+        $header.find(".lulu-g-count").text(`(${groupCounts[gName]}项)`);
+        const $icon = $header.find(".lulu-fold-icon");
+        if (isFolded)
+          $icon.removeClass("fa-chevron-down").addClass("fa-chevron-right");
+        else $icon.removeClass("fa-chevron-right").addClass("fa-chevron-down");
+      }
+      // ✨ 每轮同步都更新一下这个分组的一键开关图标
+      luluUpdateGroupSwitchIcon(gName);
+      $header.css("order", baseOrder);
+      // ✨ 关键修复：每次循环都实时读取最新折叠状态，而不是用创建表头时的旧变量
+      const isFoldedNow = groupFoldState[gName] === true;
+      // 顺便同步一下图标，保证图标和实际状态一致
+      const $iconSync = $header.find(".lulu-fold-icon");
+      if (isFoldedNow)
+        $iconSync.removeClass("fa-chevron-down").addClass("fa-chevron-right");
+      else
+        $iconSync.removeClass("fa-chevron-right").addClass("fa-chevron-down");
+      $container
+        .children(`.world_entry[data-lulu-grp="${gName}"]`)
+        .each(function () {
+          const nativeIdx = parseInt(
+            $(this).attr("data-lulu-native-index") || 0,
+          );
+          const targetOrder = baseOrder + 1 + nativeIdx;
+          const $this = $(this);
+          // ✨【性能优化】用 data 属性缓存 order，避免每次读取样式强制重排
+          if (parseInt($this.attr("data-lulu-order") || "") !== targetOrder) {
+            $this.attr("data-lulu-order", targetOrder);
+            $this.css("order", targetOrder);
+          }
+          if (isFoldedNow) {
+            if (!$this.hasClass("lulu-folded-hide"))
+              $this.addClass("lulu-folded-hide");
+          } else {
+            if ($this.hasClass("lulu-folded-hide")) {
+              $this.removeClass("lulu-folded-hide");
+              $this.css({ display: "", margin: "" });
+            }
+          }
+        });
+    });
+
+    $container.children(".lulu-native-group-header").each(function () {
+      const gName = $(this).attr("data-groupname");
+      if (!groupCounts[gName]) $(this).remove();
+    });
+    // ✨ 走到这里说明这一轮真的把分组画完了，现在才记录指纹
+    if (luluCurrentFp !== null) luluLastSyncFingerprint = luluCurrentFp;
+    isRendering = true;
+    setTimeout(() => {
+      isRendering = false;
+    }, 150);
+  }, 2000);
+};
+
+// 等酒馆的关键函数加载好之后，再自动启动（防止脚本跑太早报错）
+window.luluNativeSyncAutostartTimer = setInterval(() => {
+  if (
+    typeof getWorldbook === "function" &&
+    typeof getWorldbookNames === "function"
+  ) {
+    clearInterval(window.luluNativeSyncAutostartTimer);
+    window.luluNativeSyncAutostartTimer = null;
+    try {
+      window.luluStartNativeWbSync();
+      console.log("Lù-chan: 原生世界书同步已自动启动~（不用先开面板啦）");
+    } catch (e) {
+      console.error("Lulu 原生同步自动启动失败", e);
+    }
+  }
+}, 1000);
+// 60 秒兜底：如果酒馆函数一直没加载好，就停止检测，避免无意义空转
+setTimeout(() => {
+  if (window.luluNativeSyncAutostartTimer) {
+    clearInterval(window.luluNativeSyncAutostartTimer);
+    window.luluNativeSyncAutostartTimer = null;
+  }
+}, 60000);
 
 const loadBindingCache = () => {
   let vars = getVariables({ type: "global" });
@@ -3203,6 +3779,7 @@ $menuBtn.on("click", async () => {
                                  <button class="menu_button interactable btn-primary wb-nowrap-btn" id="wb-btn-entry-batch-recursion"><i class="fa-solid fa-shield-halved"></i> 防止递归</button>
                                  <button class="menu_button interactable btn-primary wb-nowrap-btn" id="wb-btn-entry-batch-strategy"><i class="fa-solid fa-lightbulb"></i> 批量灯色</button>
                                  <button class="menu_button interactable btn-info wb-nowrap-btn" id="wb-btn-entry-batch-position"><i class="fa-solid fa-location-dot"></i> 批量位移</button>
+                                 <button class="menu_button interactable btn-primary wb-nowrap-btn" id="wb-btn-entry-batch-wrap"><i class="fa-solid fa-code"></i> 批量包裹</button>                                 
                                  <button class="menu_button interactable btn-danger wb-nowrap-btn" id="wb-btn-entry-confirm-delete"><i class="fa-solid fa-burst"></i> 暂存移除所选项</button>
                             </div>
                         </div>
@@ -11025,6 +11602,369 @@ $menuBtn.on("click", async () => {
     $ui.find("#wb-entry-batch-count").text("0");
     renderEntryList();
     toastr.success("批量位移成功！记得点左下角绿色保存按钮才会生效哦~");
+  });
+  // ✨ 新增：批量包裹条目内容（XML标签 / 分隔符 / 自定义头尾，支持智能识别去除）
+  $ui.find("#wb-btn-entry-batch-wrap").on("click", async () => {
+    if (entryBatchSelected.size === 0)
+      return toastr.warning("请先选中要操作的条目哦~");
+
+    // —— 智能识别：扫描一条内容从外到内的所有包裹层（支持多层嵌套）——
+    const luluScanWrapLayers = (content) => {
+      const layers = [];
+      let core = String(content || "").trim();
+      let guard = 0;
+      while (guard++ < 50 && core) {
+        let stripped = false;
+        // XML 成对标签层（标签名可含中文、英文、数字等，只要不是空格和斜杠）
+        const m = core.match(/^<([^\s\/>]+)>/);
+        if (m) {
+          const tag = m[1];
+          const endTag = `</${tag}>`;
+          if (
+            core.endsWith(endTag) &&
+            core.length > m[0].length + endTag.length
+          ) {
+            layers.push({
+              key: `XML|${tag}`,
+              display: `<${tag}> ... </${tag}>`,
+              head: m[0],
+              tail: endTag,
+            });
+            core = core.slice(m[0].length, core.length - endTag.length).trim();
+            stripped = true;
+          }
+        }
+        // --- 分隔符层
+        if (
+          !stripped &&
+          core.startsWith("---") &&
+          core.endsWith("---") &&
+          core.length >= 8
+        ) {
+          layers.push({
+            key: "DASH|---",
+            display: "--- ... ---",
+            head: "---",
+            tail: "---",
+          });
+          core = core.slice(3, core.length - 3).trim();
+          stripped = true;
+        }
+        if (!stripped) break;
+      }
+      return layers;
+    };
+
+    // —— 剥离：脱掉勾选的层（能穿过未勾选的外层，深入剥离内层后再包回去）——
+    const luluStripByLayers = (content, chosenKeys) => {
+      const process = (text) => {
+        let result = String(text || "").trim();
+        let guard = 0;
+        while (guard++ < 50 && result) {
+          const layersHere = luluScanWrapLayers(result);
+          if (layersHere.length === 0) break;
+          const outer = layersHere[0];
+          const inner = result
+            .slice(outer.head.length, result.length - outer.tail.length)
+            .trim();
+          if (chosenKeys.has(outer.key)) {
+            // 这层被勾选 → 脱掉，继续往里看
+            result = inner;
+          } else {
+            // 这层没勾选 → 保留它，深入内部剥掉勾选的嵌套层，再原样包回去
+            const strippedInner = process(inner);
+            result = `${outer.head}\n${strippedInner}\n${outer.tail}`;
+            break;
+          }
+        }
+        return result;
+      };
+      return process(content);
+    };
+
+    const dialogHtml = `
+      <div style="padding:6px; font-family:sans-serif; min-width:300px; max-width:440px; text-align:left;">
+        <div style="font-weight:bold; margin-bottom:10px; color:var(--SmartThemeQuoteColor); font-size:15px;">
+          <i class="fa-solid fa-code"></i> 批量包裹条目内容（选中 ${entryBatchSelected.size} 项）
+        </div>
+
+        <div style="margin-bottom:12px; padding:10px; background:rgba(0,0,0,0.1); border-radius:6px;">
+          <div style="font-size:12px; font-weight:bold; margin-bottom:8px; color:var(--SmartThemeQuoteColor);">① 操作类型：</div>
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px; margin-bottom:6px; cursor:pointer;">
+            <input type="radio" name="lulu-wrap-action" value="add" checked style="accent-color:var(--SmartThemeQuoteColor);"> <span>➕ 加包裹（把头尾内容拼到条目首尾）</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer;">
+            <input type="radio" name="lulu-wrap-action" value="remove" style="accent-color:var(--SmartThemeQuoteColor);"> <span>➖ 去包裹（自动识别已包的标签/分隔符，勾选即删）</span>
+          </label>
+        </div>
+
+        <div id="lulu-wrap-remove-panel" style="display:none; margin-bottom:12px; padding:10px; background:rgba(255,107,107,0.06); border:1px dashed rgba(255,107,107,0.4); border-radius:6px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <span style="font-size:12px; font-weight:bold; color:#ff6b6b;"><i class="fa-solid fa-wand-magic-sparkles"></i> 检测到的包裹层（勾选要去掉的）：</span>
+              <button id="lulu-wrap-rescan" class="menu_button interactable wb-nowrap-btn" style="margin:0; padding:3px 10px; font-size:11px;" title="重新扫描选中条目"><i class="fa-solid fa-rotate-right"></i> 重扫</button>
+          </div>
+          <div id="lulu-wrap-layer-list" style="max-height:30vh; overflow-y:auto; display:flex; flex-direction:column; gap:6px;"></div>
+          <div id="lulu-wrap-layer-empty" style="display:none; font-size:12px; color:gray; line-height:1.6; padding:6px 0;">
+            没在选中条目里识别到任何已包裹的 XML 标签或 --- 分隔符~<br>
+            可以在下方手动输入要删的头尾内容。
+          </div>
+        </div>
+
+        <div id="lulu-wrap-add-panel">
+          <div style="margin-bottom:12px; padding:10px; background:rgba(0,0,0,0.1); border-radius:6px;">
+            <div style="font-size:12px; font-weight:bold; margin-bottom:8px; color:var(--SmartThemeQuoteColor);">② 快捷预设（点一下自动填入下方头尾框）：</div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button id="lulu-wrap-preset-xml" class="menu_button interactable btn-primary wb-nowrap-btn" style="margin:0; padding:6px 12px; font-size:12px;"><i class="fa-solid fa-code"></i> XML标签</button>
+              <button id="lulu-wrap-preset-dash" class="menu_button interactable btn-primary wb-nowrap-btn" style="margin:0; padding:6px 12px; font-size:12px;"><i class="fa-solid fa-minus"></i> 分隔符 ---</button>
+            </div>
+          </div>
+
+          <div style="margin-bottom:10px;">
+            <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">③ 头部内容（会拼在条目内容最前面）：</label>
+            <textarea id="lulu-wrap-head" class="wb-input-dt" placeholder="例如：＜a角色信息＞" style="width:100%; box-sizing:border-box; padding:8px; min-height:52px; resize:vertical; font-size:13px;"></textarea>
+          </div>
+          <div style="margin-bottom:10px;">
+            <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">④ 尾部内容（会拼在条目内容最后面）：</label>
+            <textarea id="lulu-wrap-tail" class="wb-input-dt" placeholder="例如：＜/a角色信息＞" style="width:100%; box-sizing:border-box; padding:8px; min-height:52px; resize:vertical; font-size:13px;"></textarea>
+          </div>
+        </div>
+
+        <div id="lulu-wrap-manual-remove" style="display:none;">
+          <div style="margin-bottom:10px;">
+            <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">手动输入要删除的头部内容：</label>
+            <textarea id="lulu-wrap-mhead" class="wb-input-dt" style="width:100%; box-sizing:border-box; padding:8px; min-height:44px; resize:vertical; font-size:13px;"></textarea>
+          </div>
+          <div style="margin-bottom:10px;">
+            <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">手动输入要删除的尾部内容：</label>
+            <textarea id="lulu-wrap-mtail" class="wb-input-dt" style="width:100%; box-sizing:border-box; padding:8px; min-height:44px; resize:vertical; font-size:13px;"></textarea>
+          </div>
+        </div>
+
+        <div style="font-size:11px; color:gray; line-height:1.6;">
+          * 加包裹时：已经包着相同头尾的条目会自动跳过，不会重复包两层。<br>
+          * 去包裹时：自动识别多层嵌套（比如 ＜a＞ 里面再包 ＜b＞ 的情况），只删你勾选的层，未勾选的外层会原样保留。<br>
+          * 处理后只是暂存，记得点左下角绿色「确认并覆盖源文件」才会真正生效哦~
+        </div>
+      </div>`;
+
+    const $dlg = $(dialogHtml);
+    $dlg
+      .attr("id", "lulu-entry-batch-wrap-dialog")
+      .prepend(
+        `<style>${buildPopupThemeCSS("dialog:has(#lulu-entry-batch-wrap-dialog)")}</style>`,
+      );
+
+    // —— 扫描并渲染检测到的包裹层清单 ——
+    const runLayerScan = () => {
+      const stat = new Map(); // key -> { display, count }
+      entryBatchSelected.forEach((idx) => {
+        const e = tuneEntries[idx];
+        if (!e) return;
+        const seenInEntry = new Set();
+        luluScanWrapLayers(e.content || "").forEach((layer) => {
+          if (seenInEntry.has(layer.key)) return;
+          seenInEntry.add(layer.key);
+          if (!stat.has(layer.key))
+            stat.set(layer.key, { display: layer.display, count: 0 });
+          stat.get(layer.key).count++;
+        });
+      });
+
+      const $list = $dlg.find("#lulu-wrap-layer-list").empty();
+      if (stat.size === 0) {
+        $dlg.find("#lulu-wrap-layer-empty").show();
+        $dlg.find("#lulu-wrap-manual-remove").show();
+        return;
+      }
+      $dlg.find("#lulu-wrap-layer-empty").hide();
+      $dlg.find("#lulu-wrap-manual-remove").hide();
+
+      // 按出现次数从多到少排
+      const sorted = [...stat.entries()].sort(
+        (a, b) => b[1].count - a[1].count,
+      );
+      sorted.forEach(([key, info]) => {
+        // 关键修复：用 .text() 纯文本方式插入标签名，浏览器绝不会把它当 HTML 标签吞掉
+        // （此方案代码里不含任何 HTML 实体，复制粘贴代码时不会被浏览器解码破坏）
+        const $label = $("<label>").css({
+          display: "flex",
+          "align-items": "center",
+          gap: "8px",
+          padding: "7px 10px",
+          background: "var(--SmartThemeBotMesColor)",
+          border: "1px solid var(--SmartThemeBorderColor)",
+          "border-radius": "6px",
+          cursor: "pointer",
+          "font-size": "12.5px",
+        });
+        const $chk = $("<input>", { type: "checkbox" })
+          .addClass("lulu-wrap-layer-chk")
+          .attr("data-key", encodeURIComponent(key))
+          .prop("checked", true)
+          .css({ "accent-color": "#ff6b6b", "flex-shrink": "0" });
+        const $name = $("<span>")
+          .css({
+            flex: "1",
+            "min-width": "0",
+            "word-break": "break-all",
+            "font-family": "monospace",
+          })
+          .text(info.display);
+        const $count = $("<span>")
+          .css({
+            "font-size": "11px",
+            color: "gray",
+            "white-space": "nowrap",
+          })
+          .text(`${info.count} 条`);
+        $label.append($chk, $name, $count);
+        $list.append($label);
+      });
+    };
+
+    // 切换 加/去包裹 时切换面板
+    $dlg.find('input[name="lulu-wrap-action"]').on("change", function () {
+      const isRemove = $(this).val() === "remove";
+      $dlg
+        .find("#lulu-wrap-remove-panel")
+        .css("display", isRemove ? "block" : "none");
+      $dlg
+        .find("#lulu-wrap-add-panel")
+        .css("display", isRemove ? "none" : "block");
+      // 修复：切回「加包裹」时，把手动剥除输入框也一起藏起来
+      if (!isRemove) $dlg.find("#lulu-wrap-manual-remove").hide();
+      if (isRemove) runLayerScan();
+    });
+    $dlg.find("#lulu-wrap-rescan").on("click", runLayerScan);
+
+    // 预设：XML 标签（问标签名后自动拼好 <名> ... </名>）
+    $dlg.find("#lulu-wrap-preset-xml").on("click", async () => {
+      let tag = await SillyTavern.callGenericPopup(
+        "请输入 XML 标签名（只写名字，不带尖括号）：",
+        SillyTavern.POPUP_TYPE.INPUT,
+        "a角色信息",
+      );
+      if (!tag || typeof tag !== "string" || !(tag = tag.trim())) return;
+      $dlg.find("#lulu-wrap-head").val(`<${tag}>\n`);
+      $dlg.find("#lulu-wrap-tail").val(`\n</${tag}>`);
+    });
+
+    // 预设：分隔符 ---
+    $dlg.find("#lulu-wrap-preset-dash").on("click", () => {
+      $dlg.find("#lulu-wrap-head").val("---\n");
+      $dlg.find("#lulu-wrap-tail").val("\n---");
+    });
+
+    const result = await SillyTavern.callGenericPopup(
+      $dlg,
+      SillyTavern.POPUP_TYPE.CONFIRM,
+      "",
+      { okButton: "确认执行", cancelButton: "取消" },
+    );
+    if (result !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+
+    const action = $dlg.find('input[name="lulu-wrap-action"]:checked').val();
+    let doneCount = 0;
+    let skipCount = 0;
+
+    if (action === "add") {
+      const head = $dlg.find("#lulu-wrap-head").val();
+      const tail = $dlg.find("#lulu-wrap-tail").val();
+      if (!head.trim() && !tail.trim())
+        return toastr.warning("头部和尾部不能都为空哦~");
+      const headT = head.trim();
+      const tailT = tail.trim();
+
+      entryBatchSelected.forEach((idx) => {
+        const e = tuneEntries[idx];
+        if (!e) return;
+        const c = e.content || "";
+        const core = c.trim();
+        // 防重复：内容已经被同样的头尾包着就跳过
+        const headOk = headT && core.startsWith(headT);
+        const tailOk = tailT && core.endsWith(tailT);
+        const already =
+          headT && tailT
+            ? headOk && tailOk && core.length >= headT.length + tailT.length
+            : headT
+              ? headOk
+              : tailOk;
+        if (already) {
+          skipCount++;
+          return;
+        }
+        e.content = head + c + tail;
+        doneCount++;
+      });
+    } else {
+      // 去包裹：优先用自动识别勾选结果
+      const chosenKeys = new Set();
+      $dlg.find(".lulu-wrap-layer-chk:checked").each(function () {
+        chosenKeys.add(decodeURIComponent($(this).attr("data-key")));
+      });
+
+      if (chosenKeys.size > 0) {
+        // 智能剥离模式（支持穿过未勾选的外层，剥内层）
+        entryBatchSelected.forEach((idx) => {
+          const e = tuneEntries[idx];
+          if (!e) return;
+          const before = (e.content || "").trim();
+          const after = luluStripByLayers(before, chosenKeys);
+          if (after !== before) {
+            e.content = after;
+            doneCount++;
+          } else {
+            skipCount++;
+          }
+        });
+      } else {
+        // 回退：手动输入头尾模式
+        const head = $dlg.find("#lulu-wrap-mhead").val();
+        const tail = $dlg.find("#lulu-wrap-mtail").val();
+        if (!head.trim() && !tail.trim())
+          return toastr.warning(
+            "没勾选任何检测到的包裹层，也没手动输入头尾内容哦~",
+          );
+        const headT = head.trim();
+        const tailT = tail.trim();
+        entryBatchSelected.forEach((idx) => {
+          const e = tuneEntries[idx];
+          if (!e) return;
+          let core = (e.content || "").trim();
+          let stripped = false;
+          if (headT && core.startsWith(headT)) {
+            core = core.slice(headT.length);
+            stripped = true;
+          }
+          if (tailT && core.endsWith(tailT)) {
+            core = core.slice(0, core.length - tailT.length);
+            stripped = true;
+          }
+          if (stripped) {
+            e.content = core.trim();
+            doneCount++;
+          } else {
+            skipCount++;
+          }
+        });
+      }
+    }
+
+    entryBatchSelected.clear();
+    $ui.find("#wb-entry-batch-count").text("0");
+    if (typeof luluTokenCache !== "undefined")
+      delete luluTokenCache[tuneWbName];
+    renderEntryList();
+
+    if (action === "add") {
+      toastr.success(
+        `✨ 已给 ${doneCount} 个条目加上包裹！${skipCount > 0 ? `（${skipCount} 个已包着相同头尾，自动跳过）` : ""}记得点左下角绿色保存按钮哦~`,
+      );
+    } else {
+      toastr.success(
+        `✨ 已帮 ${doneCount} 个条目脱掉包裹！${skipCount > 0 ? `（${skipCount} 个没有匹配的包裹层，自动跳过）` : ""}记得点左下角绿色保存按钮哦~`,
+      );
+    }
   });
   // ✨ 新增：批量修改蓝灯/绿灯（触发策略）
   $ui.find("#wb-btn-entry-batch-strategy").on("click", async () => {
