@@ -51,8 +51,26 @@ window.luluGetExtractedName = (avatar, bookName) => {
   const map = window.luluGetExtractedMap();
   return map[`${avatar}||${bookName}`] || null;
 };
+// ========== 【性能】全局变量缓存层：避免每次读取都深拷贝整棵变量树 ==========
+// 读：第一次访问时取一次并存起来；写：任何写入后缓存失效，下次读取自动拿新数据
+let __luluGlobalVarsCache = null;
+const luluGetGlobalVars = () => {
+  if (__luluGlobalVarsCache === null) {
+    __luluGlobalVarsCache = getVariables({ type: "global" });
+  }
+  return __luluGlobalVarsCache;
+};
+const luluInvalidateGlobalVars = () => {
+  __luluGlobalVarsCache = null;
+};
+const luluUpdateGlobalVars = (updater, options) => {
+  const result = updateVariablesWith(updater, options || { type: "global" });
+  luluInvalidateGlobalVars();
+  return result;
+};
+
 const getWbUiGroups = () => {
-  let vars = getVariables({ type: "global" });
+  let vars = luluGetGlobalVars();
   let map = vars.lulu_wb_ui_groups;
   if (typeof map === "string") {
     try {
@@ -64,7 +82,7 @@ const getWbUiGroups = () => {
   return map && typeof map === "object" ? map : {};
 };
 const saveWbUiGroups = (obj) => {
-  updateVariablesWith(
+  luluUpdateGlobalVars(
     (v) => {
       v.lulu_wb_ui_groups = obj;
       return v;
@@ -93,27 +111,61 @@ const luluGetFreeEntryUid = (entries) => {
   while (used.has(uid)) uid++;
   return uid;
 };
-// ========== 【通用】给弹窗生成跟随主题的 CSS（全局版）==========
-window.buildPopupThemeCSS = (selector) => {
+// ========== 【性能】中文排序比较器：Intl.Collator 实例只建一次，反复复用 ==========
+const luluZhCollator = new Intl.Collator("zh-CN");
+const luluZhCompare = (a, b) => luluZhCollator.compare(a, b);
+// ========== 【通用】长任务互斥锁：防止弹窗里连点造成重复执行 ==========
+const luluBusyTasks = new Set();
+const luluTryStartTask = (key) => {
+  if (luluBusyTasks.has(key)) return false;
+  luluBusyTasks.add(key);
+  return true;
+};
+const luluEndTask = (key) => {
+  luluBusyTasks.delete(key);
+};
+// ========== 【通用】稳定序列化：键序无关，专用于"内容是否被改过"的对比 ==========
+const luluStableStringify = (obj) => {
+  const normalize = (o, seen) => {
+    if (Array.isArray(o)) return o.map((v) => normalize(v, seen));
+    if (o && typeof o === "object") {
+      if (seen.has(o)) return null; // 防循环引用
+      seen.add(o);
+      const out = {};
+      Object.keys(o)
+        .sort()
+        .forEach((k) => {
+          const v = o[k];
+          if (v === undefined || typeof v === "function") return;
+          out[k] = normalize(v, seen);
+        });
+      seen.delete(o);
+      return out;
+    }
+    return o;
+  };
+  return JSON.stringify(normalize(obj, new WeakSet()));
+};
+// ========== 【通用】#rrggbb + 透明度(0-100) 转 rgba 字符串（全脚本统一用这一份） ==========
+const luluHexToRgba = (hex, alpha) => {
+  let r = 0,
+    g = 0,
+    b = 0;
+  if (hex && hex.length === 7) {
+    r = parseInt(hex.substring(1, 3), 16);
+    g = parseInt(hex.substring(3, 5), 16);
+    b = parseInt(hex.substring(5, 7), 16);
+  }
+  return `rgba(${r},${g},${b},${alpha / 100})`;
+};
+// ========== 【通用】读取面板主题色板：模式 + 自定义色 + 各模式色值（各弹窗统一从这里拿，别再手抄） ==========
+const luluGetPanelThemePalette = () => {
   const mode = localStorage.getItem("lulu_wb_panel_theme") || "default";
   const custom = JSON.parse(
     localStorage.getItem("lulu_wb_panel_custom_colors") ||
       '{"bg":"#2a2e33", "text":"#ffffff", "accent":"#70a1ff", "alpha":95, "inputBg":"#1a1c1f"}',
   );
-  const toRgba = (hex, alpha) => {
-    let r = 0,
-      g = 0,
-      b = 0;
-    if (hex && hex.length === 7) {
-      r = parseInt(hex.substring(1, 3), 16);
-      g = parseInt(hex.substring(3, 5), 16);
-      b = parseInt(hex.substring(5, 7), 16);
-    }
-    return `rgba(${r},${g},${b},${alpha / 100})`;
-  };
-
   let bg, botMes, body, quote, border, inputBg;
-
   if (mode === "dark") {
     bg = "rgba(22,24,28,1)";
     botMes = "rgba(32,35,40,1)";
@@ -129,13 +181,21 @@ window.buildPopupThemeCSS = (selector) => {
     border = "#e0d0b8";
     inputBg = "rgba(255,255,255,0.7)";
   } else if (mode === "custom") {
-    bg = toRgba(custom.bg, custom.alpha);
+    bg = luluHexToRgba(custom.bg, custom.alpha);
     botMes = custom.bg;
     body = custom.text;
     quote = custom.accent || "#70a1ff";
     border = custom.inputBg || custom.bg;
     inputBg = custom.inputBg || custom.bg;
-  } else {
+  }
+  return { mode, custom, bg, botMes, body, quote, border, inputBg };
+};
+// ========== 【通用】给弹窗生成跟随主题的 CSS（全局版）==========
+window.buildPopupThemeCSS = (selector) => {
+  const { mode, bg, botMes, body, quote, border, inputBg } =
+    luluGetPanelThemePalette();
+
+  if (mode !== "dark" && mode !== "light" && mode !== "custom") {
     // default 模式跟随酒馆，不强改，只统一输入框和按钮
     return `
       ${selector} input[type="text"],
@@ -283,7 +343,7 @@ const resolvePrefixByGroup = (prefixMap, groupName) => {
 // —— 记住"每本书里，每个分组该用什么前缀" ——
 // 存在全局变量 lulu_wb_group_prefix 里，结构：{ 世界书名: { 长分组名: 前缀 } }
 const getGroupPrefixStore = () => {
-  let vars = getVariables({ type: "global" });
+  let vars = luluGetGlobalVars();
   let store = vars.lulu_wb_group_prefix;
   if (typeof store === "string") {
     try {
@@ -297,7 +357,7 @@ const getGroupPrefixStore = () => {
     : {};
 };
 const saveGroupPrefixStore = (obj) => {
-  updateVariablesWith(
+  luluUpdateGlobalVars(
     (v) => {
       v.lulu_wb_group_prefix = obj;
       return v;
@@ -424,7 +484,7 @@ const setSharedGroupOrder = (arr) =>
   localStorage.setItem("lulu_wb_native_group_order", JSON.stringify(arr));
 // ========== 【功能8：快照排序】工具函数 开始 ==========
 const getSnapshotOrder = () => {
-  let vars = getVariables({ type: "global" });
+  let vars = luluGetGlobalVars();
   let order = vars.wb_snapshot_order;
   if (typeof order === "string") {
     try {
@@ -433,10 +493,10 @@ const getSnapshotOrder = () => {
       order = [];
     }
   }
-  return Array.isArray(order) ? order : [];
+  return Array.isArray(order) ? [...order] : [];
 };
 const setSnapshotOrder = (arr) => {
-  updateVariablesWith(
+  luluUpdateGlobalVars(
     (v) => {
       v.wb_snapshot_order = arr;
       return v;
@@ -465,7 +525,7 @@ const sortSnapshotNames = (names) => {
 };
 // 角色快照顺序：按角色名分开存
 const getCharSnapshotOrder = (charName) => {
-  let vars = getVariables({ type: "global" });
+  let vars = luluGetGlobalVars();
   let allOrder = vars.wb_char_snapshot_order;
   if (typeof allOrder === "string") {
     try {
@@ -476,10 +536,10 @@ const getCharSnapshotOrder = (charName) => {
   }
   if (!allOrder || typeof allOrder !== "object" || Array.isArray(allOrder))
     allOrder = {};
-  return Array.isArray(allOrder[charName]) ? allOrder[charName] : [];
+  return Array.isArray(allOrder[charName]) ? [...allOrder[charName]] : [];
 };
 const setCharSnapshotOrder = (charName, arr) => {
-  updateVariablesWith(
+  luluUpdateGlobalVars(
     (v) => {
       let allOrder = v.wb_char_snapshot_order;
       if (typeof allOrder === "string") {
@@ -628,7 +688,7 @@ const rebindPersonaWorldbook = async (newWbName, oldWbToUnbind = null) => {
 
 window.luluOpenQuickSnapshotView = async () => {
   /* 保持原有快照控制台代码不变，受限字数省略详细内部只展开外皮，此处保留全部防止损坏 */
-  let snapshots = getVariables({ type: "global" }).wb_snapshots;
+  let snapshots = luluGetGlobalVars().wb_snapshots;
   if (typeof snapshots === "string") {
     try {
       snapshots = JSON.parse(snapshots);
@@ -638,23 +698,7 @@ window.luluOpenQuickSnapshotView = async () => {
   }
   if (!snapshots || typeof snapshots !== "object" || Array.isArray(snapshots))
     snapshots = {};
-  const savedMode = localStorage.getItem("lulu_wb_panel_theme") || "default";
-  const savedCustom = JSON.parse(
-    localStorage.getItem("lulu_wb_panel_custom_colors") ||
-      '{"bg":"#2a2e33", "text":"#ffffff", "alpha":95}',
-  );
-
-  const hexToRgba = (hex, alpha) => {
-    let r = 0,
-      g = 0,
-      b = 0;
-    if (hex.length === 7) {
-      r = parseInt(hex.substring(1, 3), 16);
-      g = parseInt(hex.substring(3, 5), 16);
-      b = parseInt(hex.substring(5, 7), 16);
-    }
-    return `rgba(${r},${g},${b},${alpha / 100})`;
-  };
+  const { mode: savedMode, custom: savedCustom } = luluGetPanelThemePalette();
 
   let themeOverrideCSS = "";
   if (savedMode === "dark") {
@@ -662,7 +706,7 @@ window.luluOpenQuickSnapshotView = async () => {
   } else if (savedMode === "light") {
     themeOverrideCSS = `dialog.lulu-qs-dialog { background: rgba(253, 246, 227, 1) !important; border: 1px solid #8b5d33 !important; } dialog.lulu-qs-dialog, #lulu-quick-snap-modal { --SmartThemeBlurTintColor: rgba(253, 246, 227, 1) !important; --SmartThemeBotMesColor: rgba(255, 251, 240, 1) !important; --SmartThemeBodyColor: #4a3b32 !important; --SmartThemeQuoteColor: #8b5d33 !important; --SmartThemeBorderColor: #e0d0b8 !important; color: #4a3b32 !important; } dialog.lulu-qs-dialog *, #lulu-quick-snap-modal * { text-shadow: none !important; }`;
   } else if (savedMode === "custom") {
-    const bgRgba = hexToRgba(savedCustom.bg, savedCustom.alpha);
+    const bgRgba = luluHexToRgba(savedCustom.bg, savedCustom.alpha);
     themeOverrideCSS = `dialog.lulu-qs-dialog { background: ${bgRgba} !important; border: 1px solid var(--SmartThemeQuoteColor) !important; } dialog.lulu-qs-dialog, #lulu-quick-snap-modal { --SmartThemeBlurTintColor: ${bgRgba} !important; --SmartThemeBotMesColor: ${savedCustom.bg} !important; --SmartThemeBodyColor: ${savedCustom.text} !important; color: ${savedCustom.text} !important; }`;
   }
 
@@ -866,8 +910,8 @@ ${themeOverrideCSS} </style>
 
   // 切换标签栏
   html += `<div style="display:flex; gap:6px; margin-bottom:12px;">
-    <div id="lulu-qs-tab-global" class="lulu-qs-tab lulu-qs-tab-active" style="flex:1; text-align:center; padding:9px; border-radius:6px; cursor:pointer; font-size:13.5px; font-weight:bold; transition:0.2s;"><i class="fa-solid fa-earth-asia"></i> 全局快照</div>
-    <div id="lulu-qs-tab-char" class="lulu-qs-tab" style="flex:1; text-align:center; padding:9px; border-radius:6px; cursor:pointer; font-size:13.5px; font-weight:bold; transition:0.2s;"><i class="fa-solid fa-user-astronaut"></i> 当前角色</div>
+    <div id="lulu-qs-tab-global" class="lulu-qs-tab lulu-qs-tab-active" style="flex:1; text-align:center; padding:9px; border-radius:6px; cursor:pointer; font-size:13px; font-weight:bold; transition:0.2s;"><i class="fa-solid fa-earth-asia"></i> 全局快照</div>
+    <div id="lulu-qs-tab-char" class="lulu-qs-tab" style="flex:1; text-align:center; padding:9px; border-radius:6px; cursor:pointer; font-size:13px; font-weight:bold; transition:0.2s;"><i class="fa-solid fa-user-astronaut"></i> 当前角色</div>
   </div>`;
 
   // ===== 全局快照区（默认显示）=====
@@ -875,8 +919,8 @@ ${themeOverrideCSS} </style>
   html += `<div style="margin-bottom:10px;">
     <input type="text" id="lulu-qs-search" class="text_pole" placeholder="🔍 检索快照名称..." style="width:100%; box-sizing:border-box; padding:8px; border-radius:6px; font-size:13px; margin-bottom:10px;">
     <div style="display:flex; gap:6px; flex-wrap:wrap;">
-      <button id="lulu-qs-clear-all" class="menu_button interactable lulu-qs-btn-hover" style="flex:1; margin:0; border:1px solid #fcc419; padding:9px; border-radius:6px; background:rgba(252,196,25,0.1); color:#fcc419; font-weight:bold; font-size:12.5px; display:flex; justify-content:center; align-items:center; gap:6px;"><i class="fa-solid fa-power-off"></i> 一键关闭</button>
-      <button id="lulu-qs-batch-del" class="menu_button interactable lulu-qs-btn-hover" style="flex:1; margin:0; border:1px solid #ff6b6b; padding:9px; border-radius:6px; background:rgba(255,107,107,0.1); color:#ff6b6b; font-weight:bold; font-size:12.5px; display:flex; justify-content:center; align-items:center; gap:6px;"><i class="fa-solid fa-trash-can"></i> 批量删除</button>
+      <button id="lulu-qs-clear-all" class="menu_button interactable lulu-qs-btn-hover" style="flex:1; margin:0; border:1px solid #fcc419; padding:9px; border-radius:6px; background:rgba(252,196,25,0.1); color:#fcc419; font-weight:bold; font-size:12px; display:flex; justify-content:center; align-items:center; gap:6px;"><i class="fa-solid fa-power-off"></i> 一键关闭</button>
+      <button id="lulu-qs-batch-del" class="menu_button interactable lulu-qs-btn-hover" style="flex:1; margin:0; border:1px solid #ff6b6b; padding:9px; border-radius:6px; background:rgba(255,107,107,0.1); color:#ff6b6b; font-weight:bold; font-size:12px; display:flex; justify-content:center; align-items:center; gap:6px;"><i class="fa-solid fa-trash-can"></i> 批量删除</button>
     </div>
   </div>
   <div style="max-height: 50vh; overflow-y: auto; display:flex; flex-direction:column; gap:10px; padding:4px;" class="scrollableInnerFull">`;
@@ -905,7 +949,7 @@ ${themeOverrideCSS} </style>
         /[^a-zA-Z0-9]/g,
         "",
       );
-      html += `<div class="lulu-qs-item" data-itemname="${safeName}" style="background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:8px; padding:12px; display:flex; justify-content:space-between; align-items:center; gap: 10px;"><div style="flex:1; min-width:0;"><div style="font-weight:bold; font-size:14.5px; color:var(--SmartThemeBodyColor); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><i class="fa-solid ${isDetailed ? "fa-puzzle-piece" : "fa-camera-retro"}" style="color:var(--SmartThemeQuoteColor);"></i> ${name}</div><div style="font-size:11px; color:gray; margin-top:6px; display:flex; align-items:center; gap:6px;"><span>${isDetailed ? "复合场景" : "基础组合"} | 共涉及 ${wbs.length || 0} 本书</span></div><div class="lulu-qs-badge" data-badgename="${safeName}" style="display:none; margin-top:6px; font-size:11px; color:#51cf66; font-weight:bold;"><i class="fa-solid fa-circle-check"></i> 当前全局生效中</div></div><div style="display:flex; align-items:center; gap:6px; flex-shrink:0;"><div style="display:flex; flex-direction:column; gap:2px;"><button class="menu_button interactable lulu-qs-move-up" data-rawname="${encodeURIComponent(name)}" style="margin:0; padding:2px 8px; min-width:unset; font-size:11px; line-height:1;" title="上移"><i class="fa-solid fa-chevron-up"></i></button><button class="menu_button interactable lulu-qs-move-down" data-rawname="${encodeURIComponent(name)}" style="margin:0; padding:2px 8px; min-width:unset; font-size:11px; line-height:1;" title="下移"><i class="fa-solid fa-chevron-down"></i></button></div><button class="menu_button interactable btn-primary lulu-qs-btn-hover lulu-qs-apply-btn"data-btnname="${safeName}" data-rawname="${encodeURIComponent(name)}" style="margin:0; border:none; border-radius:6px; font-size:13px; font-weight:bold; padding: 8px 14px; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; gap:6px; white-space:nowrap !important; word-break:keep-all;">运行 <i class="fa-solid fa-play"></i></button></div></div>`;
+      html += `<div class="lulu-qs-item" data-itemname="${safeName}" style="background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:8px; padding:12px; display:flex; justify-content:space-between; align-items:center; gap: 10px;"><div style="flex:1; min-width:0;"><div style="font-weight:bold; font-size:15px; color:var(--SmartThemeBodyColor); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><i class="fa-solid ${isDetailed ? "fa-puzzle-piece" : "fa-camera-retro"}" style="color:var(--SmartThemeQuoteColor);"></i> ${name}</div><div style="font-size:11px; color:gray; margin-top:6px; display:flex; align-items:center; gap:6px;"><span>${isDetailed ? "复合场景" : "基础组合"} | 共涉及 ${wbs.length || 0} 本书</span></div><div class="lulu-qs-badge" data-badgename="${safeName}" style="display:none; margin-top:6px; font-size:11px; color:#51cf66; font-weight:bold;"><i class="fa-solid fa-circle-check"></i> 当前全局生效中</div></div><div style="display:flex; align-items:center; gap:6px; flex-shrink:0;"><div style="display:flex; flex-direction:column; gap:2px;"><button class="menu_button interactable lulu-qs-move-up" data-rawname="${encodeURIComponent(name)}" style="margin:0; padding:2px 8px; min-width:unset; font-size:11px; line-height:1;" title="上移"><i class="fa-solid fa-chevron-up"></i></button><button class="menu_button interactable lulu-qs-move-down" data-rawname="${encodeURIComponent(name)}" style="margin:0; padding:2px 8px; min-width:unset; font-size:11px; line-height:1;" title="下移"><i class="fa-solid fa-chevron-down"></i></button></div><button class="menu_button interactable btn-primary lulu-qs-btn-hover lulu-qs-apply-btn"data-btnname="${safeName}" data-rawname="${encodeURIComponent(name)}" style="margin:0; border:none; border-radius:6px; font-size:13px; font-weight:bold; padding: 8px 14px; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; gap:6px; white-space:nowrap !important; word-break:keep-all;">运行 <i class="fa-solid fa-play"></i></button></div></div>`;
     });
   }
   html += `</div>`; // 关闭全局列表滚动区
@@ -916,7 +960,7 @@ ${themeOverrideCSS} </style>
     <div id="lulu-qs-char-header" style="font-size:13px; color:var(--SmartThemeQuoteColor); font-weight:bold; margin-bottom:6px; padding:8px 10px; background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:6px; display:flex; align-items:center; gap:6px;"></div>
     <input type="text" id="lulu-qs-char-search" class="text_pole" placeholder="🔍 检索角色快照名称..." style="width:100%; box-sizing:border-box; padding:8px; border-radius:6px; font-size:13px; margin-bottom:8px;">
     <div style="display:flex; gap:6px; margin-bottom:10px;">
-      <button id="lulu-qs-char-batch-del" class="menu_button interactable lulu-qs-btn-hover" style="flex:1; margin:0; border:1px solid #ff6b6b; padding:9px; border-radius:6px; background:rgba(255,107,107,0.1); color:#ff6b6b; font-weight:bold; font-size:12.5px; display:flex; justify-content:center; align-items:center; gap:6px;"><i class="fa-solid fa-trash-can"></i> 批量删除</button>
+      <button id="lulu-qs-char-batch-del" class="menu_button interactable lulu-qs-btn-hover" style="flex:1; margin:0; border:1px solid #ff6b6b; padding:9px; border-radius:6px; background:rgba(255,107,107,0.1); color:#ff6b6b; font-weight:bold; font-size:12px; display:flex; justify-content:center; align-items:center; gap:6px;"><i class="fa-solid fa-trash-can"></i> 批量删除</button>
     </div>
     <div id="lulu-qs-char-list" style="max-height:50vh; overflow-y:auto; display:flex; flex-direction:column; gap:10px; padding:4px;" class="scrollableInnerFull"></div>
   </div>`;
@@ -960,7 +1004,7 @@ ${themeOverrideCSS} </style>
 
         // 读取角色快照对象
         const qsGetCharSnaps = () => {
-          let cs = getVariables({ type: "global" }).wb_char_snapshots;
+          let cs = luluGetGlobalVars().wb_char_snapshots;
           if (typeof cs === "string") {
             try {
               cs = JSON.parse(cs);
@@ -1005,22 +1049,26 @@ ${themeOverrideCSS} </style>
         };
 
         // 检测某个角色快照当前是否正生效
-        const qsIsCharSnapActive = async (snapData) => {
+        // ✨ readFn 可传入带缓存的读取函数；所有绑定书并行读取（原来是逐本串行 await）
+        const qsIsCharSnapActive = async (snapData, readFn = getWorldbook) => {
           const boundBooks = qsGetCharBoundBooks();
           const snapWbNames = Object.keys(snapData);
           for (const wb of snapWbNames) {
             if (!boundBooks.includes(wb)) return false;
           }
-          for (const wb of boundBooks) {
-            let entries = await getWorldbook(wb);
+          const allEntries = await Promise.all(
+            boundBooks.map((wb) => readFn(wb)),
+          );
+          for (let i = 0; i < boundBooks.length; i++) {
+            const entries = allEntries[i];
             const enabledUIDs = entries
               .filter((e) => e.enabled)
               .map((e) => e.uid)
               .sort();
-            const targetUIDs = [...(snapData[wb] || [])].sort();
+            const targetUIDs = [...(snapData[boundBooks[i]] || [])].sort();
             if (
               enabledUIDs.length !== targetUIDs.length ||
-              !enabledUIDs.every((v, i) => v === targetUIDs[i])
+              !enabledUIDs.every((v, idx) => v === targetUIDs[idx])
             )
               return false;
           }
@@ -1079,6 +1127,23 @@ ${themeOverrideCSS} </style>
             renderCharSnapList();
           };
 
+          // ✨ 并行预检所有快照的生效状态；同一次渲染里同一本书只读一次
+          const wbReadCache = new Map();
+          const cachedWbRead = (wb) => {
+            if (!wbReadCache.has(wb)) wbReadCache.set(wb, getWorldbook(wb));
+            return wbReadCache.get(wb);
+          };
+          const activeMap = new Map();
+          await Promise.all(
+            snapNames.map(async (n) => {
+              let flag = false;
+              try {
+                flag = await qsIsCharSnapActive(mySnaps[n], cachedWbRead);
+              } catch (e) {}
+              activeMap.set(n, flag);
+            }),
+          );
+
           for (const name of snapNames) {
             const snapData = mySnaps[name];
             const bookCount = Object.keys(snapData).length;
@@ -1089,7 +1154,7 @@ ${themeOverrideCSS} </style>
             const $item = $(
               `<div class="lulu-qs-item" data-snapname="${encodeURIComponent(name)}" style="background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:8px; padding:12px; display:flex; justify-content:space-between; align-items:center; gap:10px;">
                 <div style="flex:1; min-width:0;">
-                  <div style="font-weight:bold; font-size:14.5px; color:var(--SmartThemeBodyColor); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><i class="fa-solid fa-camera-retro" style="color:var(--SmartThemeQuoteColor);"></i> ${name}</div>
+                  <div style="font-weight:bold; font-size:15px; color:var(--SmartThemeBodyColor); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><i class="fa-solid fa-camera-retro" style="color:var(--SmartThemeQuoteColor);"></i> ${name}</div>
                   <div style="font-size:11px; color:gray; margin-top:6px;">涉及 ${bookCount} 本书 · 共开启 ${totalEntries} 项</div>
                   <div class="lulu-qs-char-badge" style="display:none; margin-top:6px; font-size:11px; color:#51cf66; font-weight:bold;"><i class="fa-solid fa-circle-check"></i> 当前生效中</div>
                 </div>
@@ -1103,11 +1168,8 @@ ${themeOverrideCSS} </style>
               </div>`,
             );
 
-            // 检测是否生效
-            let isActive = false;
-            try {
-              isActive = await qsIsCharSnapActive(snapData);
-            } catch (e) {}
+            // 检测是否生效（已在上面并行预检过）
+            const isActive = activeMap.get(name) === true;
             if (isActive) {
               $item.find(".lulu-qs-char-badge").show();
               $item.addClass("lulu-qs-active");
@@ -1245,7 +1307,7 @@ ${themeOverrideCSS} </style>
             });
             if (del.length === 0) return toastr.info("没勾选任何快照~");
 
-            updateVariablesWith(
+            luluUpdateGlobalVars(
               (v) => {
                 if (typeof v.wb_char_snapshots === "string") {
                   try {
@@ -1315,6 +1377,16 @@ ${themeOverrideCSS} </style>
             typeof getGlobalWorldbookNames === "function"
               ? getGlobalWorldbookNames()
               : [];
+          // ✨ 同一次检测里同一本书只读一次（复合快照往往涉及同一批书）
+          const qsWbReadCache = new Map();
+          const cachedWbRead = (wb) => {
+            if (!qsWbReadCache.has(wb))
+              qsWbReadCache.set(
+                wb,
+                getWorldbook(wb).catch(() => null),
+              );
+            return qsWbReadCache.get(wb);
+          };
           for (const [name, snapData] of Object.entries(snapshots)) {
             const safeName = btoa(unescape(encodeURIComponent(name))).replace(
               /[^a-zA-Z0-9]/g,
@@ -1337,24 +1409,29 @@ ${themeOverrideCSS} </style>
                 let b = [...targetWbNames].sort();
                 if (a.every((val, index) => val === b[index])) {
                   let deepMatch = true;
-                  for (const wbName of targetWbNames) {
-                    try {
-                      let wbEntries = await getWorldbook(wbName);
-                      let enabledUIDsInWb = wbEntries
-                        .filter((e) => e.enabled)
-                        .map((e) => e.uid)
-                        .sort();
-                      let targetUIDs = [...snapData.data[wbName]].sort();
-                      if (
-                        enabledUIDsInWb.length !== targetUIDs.length ||
-                        !enabledUIDsInWb.every(
-                          (val, idx) => val === targetUIDs[idx],
-                        )
-                      ) {
-                        deepMatch = false;
-                        break;
-                      }
-                    } catch (e) {
+                  // ✨ 并行读取所有目标书（原来是逐本串行 await）
+                  const results = await Promise.all(
+                    targetWbNames.map((wbName) => cachedWbRead(wbName)),
+                  );
+                  for (let i = 0; i < targetWbNames.length; i++) {
+                    const wbEntries = results[i];
+                    if (!wbEntries) {
+                      deepMatch = false;
+                      break;
+                    }
+                    let enabledUIDsInWb = wbEntries
+                      .filter((e) => e.enabled)
+                      .map((e) => e.uid)
+                      .sort();
+                    let targetUIDs = [
+                      ...snapData.data[targetWbNames[i]],
+                    ].sort();
+                    if (
+                      enabledUIDsInWb.length !== targetUIDs.length ||
+                      !enabledUIDsInWb.every(
+                        (val, idx) => val === targetUIDs[idx],
+                      )
+                    ) {
                       deepMatch = false;
                       break;
                     }
@@ -1424,7 +1501,7 @@ ${themeOverrideCSS} </style>
             del.push(decodeURIComponent($(this).attr("data-name")));
           });
           if (del.length === 0) return toastr.info("没勾选任何快照~");
-          updateVariablesWith(
+          luluUpdateGlobalVars(
             (v) => {
               if (typeof v.wb_snapshots === "string") {
                 try {
@@ -1613,20 +1690,7 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
   );
   const appear = getFloatAppearance();
 
-  // 把 #rrggbb + 透明度 转成 rgba 颜色
-  const luluHexToRgba = (hex, alpha) => {
-    let r = 0,
-      g = 0,
-      b = 0;
-    if (hex && hex.length === 7) {
-      r = parseInt(hex.substring(1, 3), 16);
-      g = parseInt(hex.substring(3, 5), 16);
-      b = parseInt(hex.substring(5, 7), 16);
-    }
-    return `rgba(${r},${g},${b},${alpha / 100})`;
-  };
-
-  // 决定颜色：跟随主题 or 自定义
+  // 决定颜色：跟随主题 or 自定义（luluHexToRgba 用脚本顶部的共享版）
   const bgAlpha = appear.bgAlpha === undefined ? 100 : appear.bgAlpha;
   const bgCss = appear.useThemeColor
     ? "var(--SmartThemeBotMesColor, #2a2e33)"
@@ -1657,19 +1721,25 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
             align-items: center !important;
             justify-content: center !important;
             font-size: ${flConf.size * 0.45}px !important;
-            cursor: pointer !important;
+            cursor: grab !important;
             box-shadow: none !important;
-            z-index: 2147483647 !important;
+            z-index: 9990 !important;
             user-select: none !important;
             touch-action: none !important;
             -webkit-tap-highlight-color: transparent !important;
-            transition: transform 0.2s, opacity 0.2s !important;
-            /* 新增：防止闪屏和性能优化 */
-            will-change: auto !important;
-            backface-visibility: hidden !important;
-            -webkit-backface-visibility: hidden !important;
-            transform: translateZ(0) !important;
-            -webkit-transform: translateZ(0) !important;
+            transition: left 0.28s cubic-bezier(0.2, 0.8, 0.3, 1), top 0.28s cubic-bezier(0.2, 0.8, 0.3, 1), transform 0.28s cubic-bezier(0.2, 0.8, 0.3, 1), opacity 0.2s !important;
+        }
+        /* ✨ 贴边半隐：用 transform 平移实现（GPU 合成，不触发布局），left/top 保持不动 */
+        #lulu-wb-floating-btn[data-docked-edge="left"] {
+            transform: translateX(-55%) !important;
+        }
+        #lulu-wb-floating-btn[data-docked-edge="right"] {
+            transform: translateX(55%) !important;
+        }
+        /* hover 或菜单展开时整条滑出 */
+        #lulu-wb-floating-btn[data-docked-edge]:hover,
+        #lulu-wb-floating-btn.lulu-awake {
+            transform: translateX(0) !important;
         }
         #lulu-wb-floating-btn img.lulu-float-img {
             width: 90% !important;
@@ -1702,7 +1772,7 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
             pointer-events: none !important;
         }
         #lulu-wb-floating-btn:active {
-            transform: scale(0.9) !important;
+            cursor: grabbing !important;
         }
         #lulu-wb-floating-btn:hover {
             opacity: 1 !important;
@@ -1811,69 +1881,121 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
     )
     .appendTo("#app_container, body");
   const btnNode = $floatBtn[0];
-  // ✨ 贴边后 hover 自动露出 / 移开缩回
-  const edgeGapHover = 12;
-  let hoverCollapseTimer = null; // 缩回的定时器
-
-  const getRealWinW = () => {
+  // ✨ 贴边停靠 & 位置记忆（新手感：永远完整可见，不再半隐藏）
+  const getWinSize = () => {
     const realWin =
       window.parent && window.parent !== window ? window.parent : window;
-    return realWin.innerWidth || document.documentElement.clientWidth;
+    return {
+      w: realWin.innerWidth || document.documentElement.clientWidth,
+      h: realWin.innerHeight || document.documentElement.clientHeight,
+    };
   };
 
-  // 滑出来
-  const slideOut = () => {
-    const edge = btnNode.dataset.dockedEdge;
-    if (!edge) return;
-    const winW = getRealWinW();
-    const btnW = btnNode.offsetWidth || 48;
-    btnNode.style.setProperty("transition", "left 0.22s ease", "important");
-    if (edge === "left") {
-      btnNode.style.setProperty("left", "2px", "important");
-    } else {
-      btnNode.style.setProperty("left", winW - btnW - 2 + "px", "important");
-    }
-  };
-
-  // 缩回去
-  const slideBack = () => {
-    const edge = btnNode.dataset.dockedEdge;
-    if (!edge) return;
-    const winW = getRealWinW();
-    const btnW = btnNode.offsetWidth || 48;
-    btnNode.style.setProperty("transition", "left 0.22s ease", "important");
-    if (edge === "left") {
-      btnNode.style.setProperty(
-        "left",
-        edgeGapHover - btnW + "px",
-        "important",
+  const LULU_FLOAT_POS_KEY = "lulu_wb_floating_pos";
+  const saveFloatPos = (edge, top, left = null) => {
+    const { w, h } = getWinSize();
+    try {
+      localStorage.setItem(
+        LULU_FLOAT_POS_KEY,
+        JSON.stringify({
+          edge, // "left" / "right" / null(停在屏幕中间)
+          topRatio: h > 0 ? top / h : 0.45,
+          leftRatio: left !== null && w > 0 ? left / w : null,
+        }),
       );
-    } else {
-      btnNode.style.setProperty(
-        "left",
-        winW - edgeGapHover + "px",
-        "important",
-      );
+    } catch (e) {}
+  };
+  const loadFloatPos = () => {
+    try {
+      return JSON.parse(localStorage.getItem(LULU_FLOAT_POS_KEY) || "null");
+    } catch (e) {
+      return null;
     }
   };
 
-  btnNode.addEventListener("mouseenter", () => {
-    // 鼠标回来了，取消掉正在等待的"缩回"
-    if (hoverCollapseTimer) {
-      clearTimeout(hoverCollapseTimer);
-      hoverCollapseTimer = null;
-    }
-    slideOut();
-  });
+  const EDGE_GAP = 8; // 贴边停靠时与屏幕边的间距（半隐由 transform 实现，露出一小条便于点按）
 
-  btnNode.addEventListener("mouseleave", () => {
-    // 不立刻缩回，等 200 毫秒。如果这期间鼠标又进来，上面会 clear 掉
-    if (hoverCollapseTimer) clearTimeout(hoverCollapseTimer);
-    hoverCollapseTimer = setTimeout(() => {
-      slideBack();
-      hoverCollapseTimer = null;
-    }, 200);
-  });
+  // 把球停靠到指定边的指定高度。位置由 left/top 决定，半隐由 CSS 按 data-docked-edge 用 transform 实现
+  const dockBall = (edge, top, animate = true) => {
+    const { w, h } = getWinSize();
+    const btnW = btnNode.offsetWidth || 48;
+    const btnH = btnNode.offsetHeight || 48;
+    const finalTop = Math.max(6, Math.min(top, h - btnH - 6));
+    const finalLeft = edge === "left" ? EDGE_GAP : w - btnW - EDGE_GAP;
+    if (animate) {
+      btnNode.style.removeProperty("transition"); // 交还 CSS 默认缓动
+    } else {
+      btnNode.style.setProperty("transition", "none", "important");
+    }
+    btnNode.style.removeProperty("transform"); // 交还 CSS 的贴边半隐规则
+    btnNode.dataset.dockedEdge = edge;
+    btnNode.style.setProperty("left", finalLeft + "px", "important");
+    btnNode.style.setProperty("top", finalTop + "px", "important");
+    btnNode.style.setProperty("right", "auto", "important");
+    if (!animate) {
+      // 位置落定了再把过渡还给 CSS，之后的 hover 滑出才有动画
+      requestAnimationFrame(() => btnNode.style.removeProperty("transition"));
+    }
+    return finalTop;
+  };
+
+  // 把球放在屏幕中间的任意位置（不贴边、不半隐）；会夹进屏幕内
+  const placeBall = (left, top, animate = true) => {
+    const { w, h } = getWinSize();
+    const btnW = btnNode.offsetWidth || 48;
+    const btnH = btnNode.offsetHeight || 48;
+    const finalLeft = Math.max(0, Math.min(left, w - btnW));
+    const finalTop = Math.max(6, Math.min(top, h - btnH - 6));
+    if (animate) {
+      btnNode.style.removeProperty("transition");
+    } else {
+      btnNode.style.setProperty("transition", "none", "important");
+    }
+    btnNode.style.removeProperty("transform");
+    btnNode.removeAttribute("data-docked-edge"); // 不贴边，CSS 半隐规则不生效
+    btnNode.style.setProperty("left", finalLeft + "px", "important");
+    btnNode.style.setProperty("top", finalTop + "px", "important");
+    btnNode.style.setProperty("right", "auto", "important");
+    if (!animate) {
+      requestAnimationFrame(() => btnNode.style.removeProperty("transition"));
+    }
+    return { left: finalLeft, top: finalTop };
+  };
+
+  // ✨ 常驻半透明（沿用用户配置的透明度），hover/拖动时恢复全亮——纯 CSS，无需定时器
+
+  // ✨ 窗口大小变化时保持位置合理、不飞出屏幕（重绑函数挂在 window 上，重建球后自动指向新球）
+  window.__luluFloatRedock = () => {
+    const edge = btnNode.dataset.dockedEdge;
+    const rect = btnNode.getBoundingClientRect();
+    if (edge === "left" || edge === "right") {
+      dockBall(edge, rect.top, false);
+    } else {
+      placeBall(rect.left, rect.top, false); // 停在中间的球只是夹回屏幕内
+    }
+  };
+  if (!window.__luluFloatResizeBound) {
+    window.__luluFloatResizeBound = true;
+    let resizeT = null;
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeT);
+      resizeT = setTimeout(() => {
+        if (typeof window.__luluFloatRedock === "function")
+          window.__luluFloatRedock();
+      }, 150);
+    });
+  }
+
+  // ✨ 还原上次的位置：贴边的回贴边位，停中间的回中间位；没有记录就保持默认（右上角，完整显示）
+  const savedPos = loadFloatPos();
+  if (savedPos && (savedPos.edge === "left" || savedPos.edge === "right")) {
+    const { h } = getWinSize();
+    dockBall(savedPos.edge, (savedPos.topRatio || 0.45) * h, false);
+  } else if (savedPos && typeof savedPos.leftRatio === "number") {
+    const { w, h } = getWinSize();
+    placeBall(savedPos.leftRatio * w, (savedPos.topRatio || 0.45) * h, false);
+  }
+  // 没有记录就保持 CSS 默认位置（右上角，完整显示）
 
   let isDragging = false;
   let startX, startY, initX, initY, clickTimer;
@@ -1889,25 +2011,49 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
     const rect = btnNode.getBoundingClientRect();
     initX = rect.left;
     initY = rect.top;
-    let lastLeft = initX; // 新增：记录当前left
-    let lastTop = initY; // 新增：记录当前top
+    // 球正半隐贴边时，水平方向要换算回"逻辑位置"（视觉位置被 transform 推出了屏幕）
+    if (btnNode.dataset.dockedEdge) {
+      const { w } = getWinSize();
+      const bw = btnNode.offsetWidth || 48;
+      initX =
+        btnNode.dataset.dockedEdge === "left" ? EDGE_GAP : w - bw - EDGE_GAP;
+    }
+    let lastLeft = initX;
+    let lastTop = initY;
+    let rafPending = false; // ✨ 同一帧的多个移动事件只画一次
 
     const onPointerMove = (ev) => {
       const dx = (ev.clientX || 0) - startX;
       const dy = (ev.clientY || 0) - startY;
-      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+      if (!isDragging) {
+        if (Math.abs(dx) <= 5 && Math.abs(dy) <= 5) return;
         isDragging = true;
         $floatBtn.find(".lulu-float-menu-opts").removeClass("show");
-        lastLeft = initX + dx; // 新增：存起来
-        lastTop = initY + dy; // 新增：存起来
-        // 用 requestAnimationFrame 优化拖拽性能，减少闪屏
-        requestAnimationFrame(() => {
-          btnNode.style.setProperty("left", initX + dx + "px", "important");
-          btnNode.style.setProperty("top", initY + dy + "px", "important");
-          btnNode.style.setProperty("right", "auto", "important");
-          btnNode.style.setProperty("transition", "none", "important");
-        });
+        btnNode.classList.remove("lulu-awake");
+        // 只给 transform 留过渡：半隐的球从墙里滑出来跟手，left/top 保持零延迟
+        btnNode.style.setProperty(
+          "transition",
+          "transform 0.28s cubic-bezier(0.2, 0.8, 0.3, 1)",
+          "important",
+        );
+        btnNode.style.setProperty("transform", "translateX(0)", "important");
       }
+      lastLeft = initX + dx;
+      lastTop = initY + dy;
+      if (rafPending) return;
+      rafPending = true;
+      requestAnimationFrame(() => {
+        rafPending = false;
+        const { w, h } = getWinSize();
+        const btnW = btnNode.offsetWidth || 48;
+        const btnH = btnNode.offsetHeight || 48;
+        // 拖动中也夹在屏幕内，不会拖到外面去
+        const cl = Math.max(0, Math.min(lastLeft, w - btnW));
+        const ct = Math.max(0, Math.min(lastTop, h - btnH));
+        btnNode.style.setProperty("left", cl + "px", "important");
+        btnNode.style.setProperty("top", ct + "px", "important");
+        btnNode.style.setProperty("right", "auto", "important");
+      });
     };
     const onPointerUp = (ev) => {
       btnNode.removeEventListener("pointermove", onPointerMove);
@@ -1919,64 +2065,29 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
 
       // 没拖动就啥也不干，直接返回，保持原样
       if (!isDragging) {
-        btnNode.style.setProperty(
-          "transition",
-          "transform 0.2s, opacity 0.2s",
-          "important",
-        );
+        btnNode.style.removeProperty("transition"); // 交还 CSS 默认缓动
         return;
       }
 
+      const { w: winW, h: winH } = getWinSize();
       const btnW = btnNode.offsetWidth || 48;
-      const realWin =
-        window.parent && window.parent !== window ? window.parent : window;
-      const winW = realWin.innerWidth || document.documentElement.clientWidth;
-      const winH = realWin.innerHeight || document.documentElement.clientHeight;
-      const edgeGap = 12;
-
-      // 保护：lastLeft/lastTop 必须是正常数字，否则用当前位置兜底
       let curLeft = Number(lastLeft);
       let curTop = Number(lastTop);
-      if (!Number.isFinite(curLeft)) curLeft = winW - btnW - 15;
+      if (!Number.isFinite(curLeft)) curLeft = winW - btnW - EDGE_GAP;
       if (!Number.isFinite(curTop)) curTop = winH * 0.45;
 
-      // 算吸附
+      // ✨ 吸附区判定：松手时离某条边 60px 以内才贴边半隐，否则就停在原地（拖到中间就停在中间）
+      const SNAP_ZONE = 60;
       const distLeft = curLeft;
       const distRight = winW - (curLeft + btnW);
-      let finalLeft = curLeft;
-      let dockedEdge = null; // 记录贴哪边：'left' / 'right' / null(没贴)
-      if (Math.min(distLeft, distRight) <= 40) {
-        if (distLeft <= distRight) {
-          finalLeft = edgeGap - btnW;
-          dockedEdge = "left";
-        } else {
-          finalLeft = winW - edgeGap;
-          dockedEdge = "right";
-        }
+      const edge = distLeft <= distRight ? "left" : "right";
+      if (Math.min(distLeft, distRight) <= SNAP_ZONE) {
+        const finalTop = dockBall(edge, curTop, true);
+        saveFloatPos(edge, finalTop);
+      } else {
+        const placed = placeBall(curLeft, curTop, true);
+        saveFloatPos(null, placed.top, placed.left);
       }
-      // 把状态存到球的属性上，供 hover 时读取
-      btnNode.dataset.dockedEdge = dockedEdge || "";
-
-      // 【关键防呆】强制夹进合理范围，物理上不许飞
-      const minLeft = edgeGap - btnW; // 最左（贴左边露一点）
-      const maxLeft = winW - edgeGap; // 最右
-      if (finalLeft < minLeft) finalLeft = minLeft;
-      if (finalLeft > maxLeft) finalLeft = maxLeft;
-
-      let finalTop = curTop;
-      if (finalTop < 6) finalTop = 6;
-      if (finalTop > winH - btnW - 6) finalTop = winH - btnW - 6;
-
-      console.log("最终落点：", { finalLeft, finalTop, btnW, winW });
-
-      btnNode.style.setProperty(
-        "transition",
-        "left 0.25s ease, top 0.25s ease, transform 0.2s, opacity 0.2s",
-        "important",
-      );
-      btnNode.style.setProperty("left", finalLeft + "px", "important");
-      btnNode.style.setProperty("top", finalTop + "px", "important");
-      btnNode.style.setProperty("right", "auto", "important");
     };
 
     btnNode.addEventListener("pointermove", onPointerMove);
@@ -2007,9 +2118,13 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
       }
 
       $menu.toggleClass("show");
+      btnNode.classList.toggle("lulu-awake", $menu.hasClass("show"));
       clearTimeout(clickTimer);
       if ($menu.hasClass("show")) {
-        clickTimer = setTimeout(() => $menu.removeClass("show"), 4000);
+        clickTimer = setTimeout(() => {
+          $menu.removeClass("show");
+          btnNode.classList.remove("lulu-awake");
+        }, 4000);
       }
     }
   });
@@ -2113,8 +2228,9 @@ window.luluStartNativeWbSync = function () {
   let isFetching = false;
   let isRendering = false;
   let luluLastSyncFingerprint = "";
-  window.lulu_native_sync_interval = setInterval(async () => {
-    if (isRendering) return;
+  // ✨ 抽成命名函数：除了 2 秒轮询自己调，用户拖拽/点箭头排序后也可以立刻强制调用，不用干等下一轮
+  const luluNativeSyncTick = async (force = false) => {
+    if (isRendering && !force) return;
     if (document.hidden) return;
     const isNativeMagicEnabled =
       localStorage.getItem("lulu_wb_native_magic_enabled") !== "false";
@@ -2122,7 +2238,8 @@ window.luluStartNativeWbSync = function () {
     // 【性能优化】原生分类已关闭且已清理完时，直接休息，连选择器都不跑
     if (!isNativeMagicEnabled && window.lulu_native_cleaned) return;
 
-    const $entries = $(".world_entry");
+    // ✨ 只选真实条目（带 uid 属性的）：排除酒馆页面底部常驻的隐藏条目模板，不然计数永远多 1
+    const $entries = $(".world_entry[uid]");
     if ($entries.length === 0) return;
     const $container = $entries.first().parent();
     if (!$container.length) return;
@@ -2138,7 +2255,8 @@ window.luluStartNativeWbSync = function () {
         ".lulu-native-group-header",
       ).length;
       luluCurrentFp = `${_wbName}|${$entries.length}|${_order}|${_fold}|${_headerCount}`;
-      if (luluCurrentFp === luluLastSyncFingerprint) return;
+      // ✨ 强制调用（点了箭头/拖拽）跳过指纹判断，必须立即重排
+      if (!force && luluCurrentFp === luluLastSyncFingerprint) return;
     }
     if (!isNativeMagicEnabled) {
       // ✨【性能优化】只清理一次，不再每轮反复检查样式
@@ -2153,7 +2271,8 @@ window.luluStartNativeWbSync = function () {
 
     // ✨ 原生分组开启时，重置清理标记（这样以后关闭时还能再清理一次）
     window.lulu_native_cleaned = false;
-    if (isFetching) return;
+    // ✨ 强制调用（点了箭头/拖拽）不被 fetch 挡住；书名不一致时下面自然还会返回
+    if (isFetching && !force) return;
     if (
       $container.css("display") !== "flex" ||
       $container.css("flex-direction") !== "column"
@@ -2345,13 +2464,13 @@ window.luluStartNativeWbSync = function () {
       const isDraggable = gName !== "📁 未分类条目";
       if ($header.length === 0) {
         const dragIconHtml = isDraggable
-          ? `<i class="fa-solid fa-hand-paper lulu-drag-handle" style="cursor:grab; font-size:14px; color:gray; padding-right:8px; display:inline-flex; align-items:center;" title="按住拖拽排序分类"></i>`
+          ? `<i class="fa-solid fa-hand-paper lulu-drag-handle" style="cursor:grab; font-size:13px; color:gray; padding-right:8px; display:inline-flex; align-items:center;" title="按住拖拽排序分类"></i>`
           : "";
         const sortButtonsHtml = !isDraggable
           ? ""
-          : `<div style="display:flex; gap: 6px; margin-right: 15px;" class="lulu-sort-btns"><i class="fa-solid fa-arrow-up lulu-move-up" title="将此分类上移" style="padding:4px; font-size:14px; color:gray; transition:0.2s; cursor:pointer;"></i><i class="fa-solid fa-arrow-down lulu-move-down" title="将此分类下移" style="padding:4px; font-size:14px; color:gray; transition:0.2s; cursor:pointer;"></i></div>`;
+          : `<div style="display:flex; gap: 6px; margin-right: 15px;" class="lulu-sort-btns"><i class="fa-solid fa-arrow-up lulu-move-up" title="将此分类上移" style="padding:4px; font-size:13px; color:gray; transition:0.2s; cursor:pointer;"></i><i class="fa-solid fa-arrow-down lulu-move-down" title="将此分类下移" style="padding:4px; font-size:13px; color:gray; transition:0.2s; cursor:pointer;"></i></div>`;
         $header = $(
-          `<div class="lulu-native-group-header" data-groupname="${gName}" draggable="${isDraggable ? "true" : "false"}" style="background: var(--SmartThemeBlurTintColor, rgba(0,0,0,0.15)); padding:10px 14px; margin: 10px 0 6px 0; border-radius:6px; font-weight:bold; color:var(--SmartThemeQuoteColor, #70a1ff); border:1px solid var(--SmartThemeBorderColor, gray); display:flex; justify-content:space-between; align-items:center; user-select:none; transition: 0.2s; flex-shrink: 0; align-content: center; gap: 6px; flex-wrap: wrap;"><span style="display:flex; align-items:center; min-width:0;">${dragIconHtml}<span class="lulu-click-fold" style="display:flex; align-items:center; cursor:pointer; min-width:0;"><i class="fa-solid ${isFolded ? "fa-chevron-right" : "fa-chevron-down"} lulu-fold-icon" style="margin-right:8px; width: 16px; text-align:center; flex-shrink:0;"></i><span style="font-size: 14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" class="lulu-g-title">${gName}</span><span style="font-size: 11px; font-weight: normal; color: gray; margin-left: 6px; flex-shrink:0;" class="lulu-g-count">(${groupCounts[gName]}项)</span></span></span><span style="display:flex; align-items:center; gap:6px; flex-shrink:0;">${sortButtonsHtml}<i class="fa-solid fa-toggle-off lulu-grp-toggle" title="一键开关本组所有条目" data-next="on" style="padding:5px; font-size:15px; color:gray; cursor:pointer; transition:0.2s;"></i></span></div>`,
+          `<div class="lulu-native-group-header" data-groupname="${gName}" draggable="${isDraggable ? "true" : "false"}" style="background: var(--SmartThemeBlurTintColor, rgba(0,0,0,0.15)); padding:10px 14px; margin: 10px 0 6px 0; border-radius:6px; font-weight:bold; color:var(--SmartThemeQuoteColor, #70a1ff); border:1px solid var(--SmartThemeBorderColor, gray); display:flex; justify-content:space-between; align-items:center; user-select:none; transition: 0.2s; flex-shrink: 0; align-content: center; gap: 6px; flex-wrap: wrap;"><span style="display:flex; align-items:center; min-width:0;">${dragIconHtml}<span class="lulu-click-fold" style="display:flex; align-items:center; cursor:pointer; min-width:0;"><i class="fa-solid ${isFolded ? "fa-chevron-right" : "fa-chevron-down"} lulu-fold-icon" style="margin-right:8px; width: 16px; text-align:center; flex-shrink:0;"></i><span style="font-size: 15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" class="lulu-g-title">${gName}</span><span style="font-size: 11px; font-weight: normal; color: gray; margin-left: 6px; flex-shrink:0;" class="lulu-g-count">(${groupCounts[gName]}项)</span></span></span><span style="display:flex; align-items:center; gap:6px; flex-shrink:0;">${sortButtonsHtml}<i class="fa-solid fa-toggle-off lulu-grp-toggle" title="一键开关本组所有条目" data-next="on" style="padding:5px; font-size:15px; color:gray; cursor:pointer; transition:0.2s;"></i></span></div>`,
         );
         $header.hover(
           function () {
@@ -2462,6 +2581,8 @@ window.luluStartNativeWbSync = function () {
                   "lulu_wb_native_group_order",
                   JSON.stringify(order),
                 );
+                // ✨ 立刻重排，不用等下一轮 2 秒轮询
+                luluNativeSyncTick(true);
               }
             }
           });
@@ -2481,6 +2602,8 @@ window.luluStartNativeWbSync = function () {
                 "lulu_wb_native_group_order",
                 JSON.stringify(luluGroupOrder),
               );
+              // ✨ 立刻重排，不用等下一轮 2 秒轮询
+              luluNativeSyncTick(true);
             }
           });
         $header
@@ -2498,6 +2621,8 @@ window.luluStartNativeWbSync = function () {
                 "lulu_wb_native_group_order",
                 JSON.stringify(luluGroupOrder),
               );
+              // ✨ 立刻重排，不用等下一轮 2 秒轮询
+              luluNativeSyncTick(true);
             }
           });
 
@@ -2560,13 +2685,26 @@ window.luluStartNativeWbSync = function () {
       const gName = $(this).attr("data-groupname");
       if (!groupCounts[gName]) $(this).remove();
     });
-    // ✨ 走到这里说明这一轮真的把分组画完了，现在才记录指纹
-    if (luluCurrentFp !== null) luluLastSyncFingerprint = luluCurrentFp;
+    // ✨ 画完后用"当下最新"的状态记录指纹：等待 fetch 期间用户可能又改了顺序/折叠，记旧指纹会把改动吞掉
+    if (isNativeMagicEnabled) {
+      const _fpName =
+        $(".move_entry_button").first().attr("data-current-world") || "";
+      const _fpOrder = localStorage.getItem("lulu_wb_native_group_order") || "";
+      const _fpFold = localStorage.getItem("lulu_wb_native_fold_state") || "";
+      const _fpHeaders = $container.children(
+        ".lulu-native-group-header",
+      ).length;
+      luluLastSyncFingerprint = `${_fpName}|${$entries.length}|${_fpOrder}|${_fpFold}|${_fpHeaders}`;
+    }
     isRendering = true;
     setTimeout(() => {
       isRendering = false;
     }, 150);
-  }, 2000);
+  };
+  window.lulu_native_sync_interval = setInterval(
+    () => luluNativeSyncTick(),
+    2000, // ✨ 2 秒轮询 + 点按立即重排：实测最流畅的组合（MutationObserver 版已弃用，刷屏时反而拖慢页面）
+  );
 };
 
 // 等酒馆的关键函数加载好之后，再自动启动（防止脚本跑太早报错）
@@ -2594,11 +2732,11 @@ setTimeout(() => {
 }, 60000);
 
 const loadBindingCache = () => {
-  let vars = getVariables({ type: "global" });
+  let vars = luluGetGlobalVars();
   return vars.lulu_wb_binding_cache || null;
 };
 const saveBindingCache = (cacheObj) => {
-  updateVariablesWith(
+  luluUpdateGlobalVars(
     (v) => {
       v.lulu_wb_binding_cache = cacheObj;
       return v;
@@ -2609,6 +2747,7 @@ const saveBindingCache = (cacheObj) => {
 
 $menuBtn.on("click", async () => {
   $("#options").hide();
+  luluInvalidateGlobalVars(); // 开面板时丢弃缓存，防止其它脚本写入的数据过期
   // 📌 便签小窗还开着时，不重复开面板，改为闪烁提醒小窗位置
   if ($("#lulu-sticky-note-window").length) {
     const $sn = $("#lulu-sticky-note-window");
@@ -2770,7 +2909,7 @@ $menuBtn.on("click", async () => {
             .dsnap-entry-title { font-weight: bold; font-size: 13px; line-height: 1.3; word-break: break-word; }
             .dsnap-entry-meta-row { display: flex; gap: 6px; flex-wrap: nowrap; font-size: 11px; align-items: center; overflow-x: auto; overflow-y: hidden; white-space: nowrap; }
             .dsnap-entry-pos { font-size: 11px; color: var(--SmartThemeBodyColor); background: rgba(125,125,125,0.08); border: 1px solid var(--SmartThemeBorderColor); border-radius: 4px; padding: 2px 6px; display: inline-flex; align-items: center; flex: 0 0 auto; white-space: nowrap; max-width: none; }
-            .dsnap-entry-preview { font-size: 10.8px; color: gray; line-height: 1.28; margin-top: 2px; border-top: 1px dashed rgba(125,125,125,0.25); padding-top: 4px; max-height: 5.2em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+            .dsnap-entry-preview { font-size: 11px; color: gray; line-height: 1.28; margin-top: 2px; border-top: 1px dashed rgba(125,125,125,0.25); padding-top: 4px; max-height: 5.2em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 
             .wb-input-dt { width: 100%; box-sizing: border-box; padding: 8px; border-radius: 4px; border: 1px solid var(--SmartThemeBorderColor); background: var(--SmartThemeBlurTintColor); color: var(--SmartThemeBodyColor); transition: 0.2s; font-family: inherit;}
             .wb-input-dt:focus { border-color: var(--SmartThemeQuoteColor); outline: none; }
@@ -2789,7 +2928,7 @@ $menuBtn.on("click", async () => {
 
             /* 条目编辑模式：顶部控制区压缩，把空间优先让给核心编辑区 */
             #wb-manager-panel.wb-entry-focus #wb-top-control-bar { margin-bottom: 3px !important; padding-bottom: 3px !important; gap: 4px !important; }
-            #wb-manager-panel.wb-entry-focus #wb-top-control-bar h2 { font-size: 14px !important; margin: 0 !important; }
+            #wb-manager-panel.wb-entry-focus #wb-top-control-bar h2 { font-size: 13px !important; margin: 0 !important; }
             #wb-manager-panel.wb-entry-focus #wb-top-control-bar label,
             #wb-manager-panel.wb-entry-focus #wb-top-control-bar button,
             #wb-manager-panel.wb-entry-focus #wb-top-control-bar #wb-zoom-val { font-size: 11px !important; }
@@ -2813,13 +2952,13 @@ $menuBtn.on("click", async () => {
                     gap: 4px !important;
                 }
                 #wb-det-ui-compress label {
-                    font-size: 11.2px !important;
+                    font-size: 11px !important;
                     margin-bottom: 0 !important;
                     line-height: 1 !important;
                 }
                 #wb-det-ui-compress .wb-input-dt {
                     padding: 3px 6px !important;
-                    font-size: 11.6px !important;
+                    font-size: 12px !important;
                     height: 26px !important;
                 }
                 #wb-det-ui-compress .wb-re-checks {
@@ -2830,7 +2969,7 @@ $menuBtn.on("click", async () => {
                     padding-bottom: 2px !important;
                 }
                 #wb-det-ui-compress .wb-re-checks label {
-                    font-size: 10.5px !important;
+                    font-size: 11px !important;
                     padding: 0 !important;
                     display: flex !important;
                     align-items: center !important;
@@ -2876,7 +3015,7 @@ $menuBtn.on("click", async () => {
                 margin: 0 !important;
                 justify-content: center;
                 padding: 6px 4px !important;
-                font-size: 12.5px !important;
+                font-size: 12px !important;
             }
             @media (max-width: 768px) {
                 .lulu-batch-grid {
@@ -2897,7 +3036,7 @@ $menuBtn.on("click", async () => {
                 /* 顶部区域强压缩 */
                 #wb-top-control-bar { gap: 6px !important; margin-bottom: 4px !important; padding-bottom: 4px !important; }
                 #wb-top-control-bar > div:first-child { gap: 6px !important; }
-                #wb-top-control-bar h2 { font-size: 14px !important; }
+                #wb-top-control-bar h2 { font-size: 13px !important; }
                 #wb-top-control-bar label { padding: 3px 8px !important; font-size: 11px !important; }
                 #wb-top-control-bar button { padding: 3px 8px !important; font-size: 11px !important; }
                 #wb-top-control-bar #wb-zoom-val { font-size: 12px !important; min-width: 40px !important; }
@@ -2913,7 +3052,7 @@ $menuBtn.on("click", async () => {
                 .wb-toolbar > div:first-child > div:first-child { flex: 1 1 100%; display: flex !important; gap: 6px; margin-right: 0 !important; width: auto; }
 .wb-toolbar > div:first-child > #wb-filter-state,
 .wb-toolbar > div:first-child > #wb-sort-select { flex: 1 1 100%; }
-                .wb-toolbar > div:first-child > label { flex: 1 1 0 !important; min-width: 130px; max-width: 50%; box-sizing: border-box; justify-content: center !important; margin: 0 !important; padding: 6px 2px !important; font-size: 11.5px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .wb-toolbar > div:first-child > label { flex: 1 1 0 !important; min-width: 130px; max-width: 50%; box-sizing: border-box; justify-content: center !important; margin: 0 !important; padding: 6px 2px !important; font-size: 12px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
                 .wb-controls-group {
                     width: 100%;
                     display: grid !important;
@@ -2927,7 +3066,7 @@ $menuBtn.on("click", async () => {
                     width: 100% !important;
                     min-width: 0 !important;
                     margin: 0 !important;
-                    font-size: 11.2px !important;
+                    font-size: 11px !important;
                     padding: 6px !important;
                     box-sizing: border-box;
                     justify-content: center;
@@ -2952,34 +3091,34 @@ $menuBtn.on("click", async () => {
                 }
                 #wb-main-view > .wb-btn-group:not(#wb-main-close-row) { display: grid !important; grid-template-columns: 1fr 1fr; gap: 6px; margin: 6px 0 !important; }
                 #wb-main-ops-grid { grid-template-columns: 1fr 1fr !important; }
-                #wb-main-ops-grid .wb-action-btn { width: 100%; min-width: 0 !important; padding: 7px 4px !important; font-size: 10.8px !important; line-height: 1.18 !important; }
-                .wb-action-btn { width: 100%; min-width: 0 !important; padding: 8px 6px !important; font-size: 11.5px !important; }
+                #wb-main-ops-grid .wb-action-btn { width: 100%; min-width: 0 !important; padding: 7px 4px !important; font-size: 11px !important; line-height: 1.18 !important; }
+                .wb-action-btn { width: 100%; min-width: 0 !important; padding: 8px 6px !important; font-size: 12px !important; }
 
                 .wb-list-grid { grid-template-columns: 1fr; padding: 7px; gap: 10px; }
                 .wb-item-wrapper { padding: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); border-left-width: 4px; }
                 .wb-item-bottom { flex-direction: row; align-items: center; gap: 6px; flex-wrap: wrap; }
                 .wb-item-actions { width: auto; justify-content: flex-start; flex-wrap: nowrap !important; gap: 4px !important; flex-shrink: 0; }
-                .wb-item-actions .wb-icon-btn { width: 24px !important; height: 24px !important; font-size: 10.5px !important; }
+                .wb-item-actions .wb-icon-btn { width: 24px !important; height: 24px !important; font-size: 11px !important; }
                 .wb-tag-area { margin-bottom: 0; flex: 1 1 100%; order: 2; }
                 .wb-name-text { white-space: normal; overflow: visible; text-overflow: initial; word-break: break-word; line-height: 1.35; }
 
                 #dsnap-container { flex-direction: column; height: 76vh; max-height: unset; }
                 #dsnap-wb-list-wrapper { max-width: 100%; border-right: none; border-bottom: 2px solid var(--SmartThemeBorderColor); padding-right: 0; padding-bottom: 8px; margin-bottom: 8px; flex: 0 0 46%; min-height: 190px; }
-                #dsnap-wb-list-wrapper .dsnap-wb-item { font-size: 11.2px !important; padding: 7px !important; }
+                #dsnap-wb-list-wrapper .dsnap-wb-item { font-size: 11px !important; padding: 7px !important; }
                 #dsnap-entry-list-wrapper { padding-left: 0; flex: 1; min-height: 160px; }
                 #dsnap-entry-list-wrapper > div:first-child { margin-bottom: 4px !important; padding-bottom: 4px !important; }
-                #dsnap-entry-list-wrapper > div:first-child > span { font-size: 10.8px !important; }
-                #dsnap-entry-sort { font-size: 10.5px !important; padding: 3px 5px !important; }
-                #dsnap-entry-list-wrapper label { font-size: 10.2px !important; padding: 2px 6px !important; }
+                #dsnap-entry-list-wrapper > div:first-child > span { font-size: 11px !important; }
+                #dsnap-entry-sort { font-size: 11px !important; padding: 3px 5px !important; }
+                #dsnap-entry-list-wrapper label { font-size: 11px !important; padding: 2px 6px !important; }
                 .dsnap-entry-item { gap: 6px !important; padding: 6px !important; }
-                .dsnap-entry-title { font-size: 11.6px !important; line-height: 1.22 !important; }
+                .dsnap-entry-title { font-size: 12px !important; line-height: 1.22 !important; }
                 .dsnap-entry-meta-row { gap: 4px !important; flex-wrap: nowrap !important; overflow-x: auto; overflow-y: hidden; white-space: nowrap; }
                 .dsnap-entry-item .badge-blue,
                 .dsnap-entry-item .badge-green,
                 .dsnap-entry-item .badge-grey,
-                .dsnap-entry-pos { font-size: 9.8px !important; padding: 1px 5px !important; margin-right: 0 !important; white-space: nowrap; flex: 0 0 auto; }
+                .dsnap-entry-pos { font-size: 11px !important; padding: 1px 5px !important; margin-right: 0 !important; white-space: nowrap; flex: 0 0 auto; }
                 .dsnap-entry-pos { max-width: none !important; }
-                .dsnap-entry-preview { font-size: 10px !important; line-height: 1.22 !important; max-height: 4.9em !important; -webkit-line-clamp: 4 !important; }
+                .dsnap-entry-preview { font-size: 11px !important; line-height: 1.22 !important; max-height: 4.9em !important; -webkit-line-clamp: 4 !important; }
                 #wb-detailed-snap-view .wb-btn-group { order: -1; margin-bottom: 10px; }
 
                 /* 条目页：继续强压缩顶部 */
@@ -3024,7 +3163,7 @@ $menuBtn.on("click", async () => {
                     box-sizing: border-box !important;
                     justify-content: center !important;
                     padding: 5px 2px !important;
-                    font-size: 10.5px !important;
+                    font-size: 11px !important;
                     margin: 0 !important;
                     white-space: nowrap !important;
                     overflow: hidden !important;
@@ -3035,7 +3174,7 @@ $menuBtn.on("click", async () => {
                     box-sizing: border-box !important;
                     justify-content: center !important;
                     padding: 5px 2px !important;
-                    font-size: 10.5px !important;
+                    font-size: 11px !important;
                     margin: 0 !important;
                 }
                 #wb-entry-view > div:first-child > div label span {
@@ -3043,22 +3182,22 @@ $menuBtn.on("click", async () => {
                     overflow: hidden !important;
                     text-overflow: ellipsis !important;
                 }
-                #wb-entry-view > div:first-child label { padding: 3px 7px !important; font-size: 10.8px !important; }
+                #wb-entry-view > div:first-child label { padding: 3px 7px !important; font-size: 11px !important; }
                 #wb-entry-list-side > div:first-child { gap: 5px !important; margin-bottom: 5px !important; }
                 #wb-entry-list-side > div:first-child input,
-                #wb-entry-list-side > div:first-child select { padding: 5px !important; font-size: 11.2px !important; }
+                #wb-entry-list-side > div:first-child select { padding: 5px !important; font-size: 11px !important; }
 
                 #wb-entry-list-side .wb-btn-group { display: grid !important; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 5px !important; }
-                #wb-entry-list-side .wb-action-btn { width: 100% !important; min-width: 0 !important; padding: 5px 4px !important; font-size: 10.6px !important; line-height: 1.1 !important; }
+                #wb-entry-list-side .wb-action-btn { width: 100% !important; min-width: 0 !important; padding: 5px 4px !important; font-size: 11px !important; line-height: 1.1 !important; }
                 /* 手机端：折叠触发条占满整行 */
                 #wb-entry-list-side #wb-entry-btn-toggle,
                 #wb-main-controls-group #wb-main-ctrl-toggle {
                     grid-column: 1 / -1 !important;
-                    font-size: 11.5px !important;
+                    font-size: 12px !important;
                     padding: 6px !important;
                 }
                 .lulu-ui-group-header { padding: 5px 6px !important; margin-top: 5px !important; font-size: 11px !important; }
-                .lulu-ui-group-header .menu_button { padding: 2px 4px !important; font-size: 9.8px !important; }
+                .lulu-ui-group-header .menu_button { padding: 2px 4px !important; font-size: 11px !important; }
 
                 /* 关键修复：条目卡片避免“左挤右空” */
                 .lulu-wb-entry-item {
@@ -3072,7 +3211,7 @@ $menuBtn.on("click", async () => {
                 }
                 .lulu-wb-entry-item > div:nth-child(2) { min-width: 0 !important; width: 100% !important; overflow: hidden; }
                 .lulu-wb-entry-item > div:nth-child(2) > div:first-child { font-size: 12px !important; line-height: 1.2 !important; margin-bottom: 2px !important; word-break: break-word !important; }
-                .lulu-wb-entry-item > div:nth-child(2) > div:nth-child(2) { font-size: 10.2px !important; line-height: 1.2 !important; gap: 2px !important; }
+                .lulu-wb-entry-item > div:nth-child(2) > div:nth-child(2) { font-size: 11px !important; line-height: 1.2 !important; gap: 2px !important; }
                 .lulu-wb-entry-item input[type="checkbox"] { transform: scale(0.95) !important; margin-top: 1px !important; }
                 .lulu-wb-entry-item > div:last-child {
                     display: grid !important;
@@ -3086,13 +3225,13 @@ $menuBtn.on("click", async () => {
                     width: 26px !important;
                     height: 24px !important;
                     padding: 0 !important;
-                    font-size: 10px !important;
+                    font-size: 11px !important;
                 }
 
                 .content-preview {
                     margin-top: 3px !important;
                     padding-top: 3px !important;
-                    font-size: 10.5px !important;
+                    font-size: 11px !important;
                     line-height: 1.28 !important;
                     max-height: 6.4em !important;
                     -webkit-line-clamp: 5 !important;
@@ -3127,7 +3266,7 @@ $menuBtn.on("click", async () => {
                 #wb-entry-batch-actions .lulu-batch-grid button {
                     min-height: 30px !important;
                     padding: 4px 4px !important;
-                    font-size: 10.5px !important;
+                    font-size: 11px !important;
                 }
                 #wb-entry-batch-actions > div:first-child {
                     display: grid !important;
@@ -3153,7 +3292,7 @@ $menuBtn.on("click", async () => {
                     min-width: 0 !important;
                     margin: 0 !important;
                     padding: 4px 4px !important;
-                    font-size: 10.2px !important;
+                    font-size: 11px !important;
                     line-height: 1.05 !important;
                     border-width: 1px !important;
                 }
@@ -3163,14 +3302,14 @@ $menuBtn.on("click", async () => {
                     grid-template-columns: 1fr 1fr 1fr;
                     gap: 4px !important;
                 }
-                #wb-entry-batch-actions i { font-size: 10px !important; }
+                #wb-entry-batch-actions i { font-size: 11px !important; }
                 #wb-entry-list-side > .wb-btn-group:last-child {
                     margin-top: 6px !important;
                     gap: 4px !important;
                 }
                 #wb-entry-list-side > .wb-btn-group:last-child .wb-action-btn {
                     padding: 5px 2px !important;
-                    font-size: 10.2px !important;
+                    font-size: 11px !important;
                 }
 
                 #wb-entry-detail-side {
@@ -3186,7 +3325,7 @@ $menuBtn.on("click", async () => {
                 #wb-entry-detail-side > div:first-child {
                     margin-bottom: 2px !important;
                     padding: 0 2px;
-                    font-size: 10.8px !important;
+                    font-size: 11px !important;
                 }
                 #wb-entry-detail-side > .scrollableInnerFull { padding-right: 0 !important; }
                 #wb-entry-detail-side > .scrollableInnerFull > div:first-child {
@@ -3200,13 +3339,13 @@ $menuBtn.on("click", async () => {
                 }
                 #wb-entry-detail-side > .scrollableInnerFull > div:first-child > .wb-form-group:nth-child(3) { grid-column: 1 / -1; }
                 #wb-entry-detail-side .wb-form-group { margin-bottom: 0 !important; min-width: 0 !important; }
-                #wb-entry-detail-side .wb-input-dt { padding: 1px 3px !important; font-size: 10.2px !important; height: 20px !important; }
-                #wb-entry-detail-side label { margin-bottom: 0 !important; font-size: 9.3px !important; line-height: 1.05 !important; }
+                #wb-entry-detail-side .wb-input-dt { padding: 1px 3px !important; font-size: 11px !important; height: 20px !important; }
+                #wb-entry-detail-side label { margin-bottom: 0 !important; font-size: 11px !important; line-height: 1.05 !important; }
                 #wb-entry-detail-side textarea#wb-det-content {
                     flex: 1 !important;
                     min-height: 320px !important;
                     height: auto !important;
-                    font-size: 11.6px !important;
+                    font-size: 12px !important;
                     line-height: 1.35 !important;
                 }
                 #wb-entry-detail-side .wb-btn-group {
@@ -3216,7 +3355,7 @@ $menuBtn.on("click", async () => {
                     gap: 3px;
                     flex-shrink: 0;
                 }
-                #wb-entry-detail-side .wb-action-btn { font-size: 10px !important; padding: 4px 2px !important; }
+                #wb-entry-detail-side .wb-action-btn { font-size: 11px !important; padding: 4px 2px !important; }
 
                 #wb-btn-det-close-mobile { display: none !important; }
 
@@ -3285,7 +3424,6 @@ $menuBtn.on("click", async () => {
             }
             .scrollableInnerFull {
                 -webkit-overflow-scrolling: touch;
-                will-change: scroll-position;
                 contain: layout style;
             }
 
@@ -3342,7 +3480,7 @@ $menuBtn.on("click", async () => {
                     height: 28px !important;
                     min-height: 28px !important;
                     padding: 3px 10px !important;
-                    font-size: 11.5px !important;
+                    font-size: 12px !important;
                 }
                 /* 8个批量按钮改为固定4列2行，整齐又不占高度 */
                 #wb-entry-batch-actions .lulu-batch-grid {
@@ -3353,7 +3491,7 @@ $menuBtn.on("click", async () => {
                     height: 30px !important;
                     min-height: 30px !important;
                     padding: 4px 4px !important;
-                    font-size: 11.5px !important;
+                    font-size: 12px !important;
                     line-height: 1 !important;
                 }
             }
@@ -3440,7 +3578,7 @@ $menuBtn.on("click", async () => {
                         </div>
                         <!-- 🎲 盲盒控制区 -->
                         <div style="display:flex; align-items:center; gap:6px; border-left: 1px dashed var(--SmartThemeBorderColor); padding-left: 10px;">
-                            <select id="wb-theme-random-mode" class="wb-input-dt" style="width: auto; padding: 4px; font-size: 11.5px; height: 26px;" title="设定你想Roll出的色彩范围">
+                            <select id="wb-theme-random-mode" class="wb-input-dt" style="width: auto; padding: 4px; font-size: 12px; height: 26px;" title="设定你想Roll出的色彩范围">
                                 <option value="random">🎲 随机配色</option>
                                 <option value="dark">🌙 仅Roll深色系</option>
                                 <option value="light">☀️ 仅Roll浅色系</option>
@@ -3479,8 +3617,8 @@ $menuBtn.on("click", async () => {
 
             <div id="wb-main-view">
                 <div style="display:flex; gap:8px; margin-bottom:10px;">
-                     <input type="text" id="wb-search-input" class="text_pole" placeholder="🔍 检索世界书或绑定的角色..." style="flex:1; min-width:0; box-sizing: border-box; padding: 8px; font-size: 13.5px;">
-                     <label style="cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12.5px; margin:0; white-space:nowrap; background:rgba(125,125,125,0.1); padding:4px 10px; border-radius:6px; border:1px solid var(--SmartThemeBorderColor); flex-shrink:0;" title="勾选后，检索将会深入翻看所有世界书的条目正文与关键字（文字极多时可能会有稍微的算力延迟喔）">
+                     <input type="text" id="wb-search-input" class="text_pole" placeholder="🔍 检索世界书或绑定的角色..." style="flex:1; min-width:0; box-sizing: border-box; padding: 8px; font-size: 13px;">
+                     <label style="cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12px; margin:0; white-space:nowrap; background:rgba(125,125,125,0.1); padding:4px 10px; border-radius:6px; border:1px solid var(--SmartThemeBorderColor); flex-shrink:0;" title="勾选后，检索将会深入翻看所有世界书的条目正文与关键字（文字极多时可能会有稍微的算力延迟喔）">
                          <input type="checkbox" id="wb-deep-search-toggle" style="accent-color: var(--SmartThemeQuoteColor); transform: scale(1.1);">
                          <span style="font-weight: bold; color: var(--SmartThemeQuoteColor);">🔎 深度搜索正文</span>
                      </label>
@@ -3541,7 +3679,7 @@ $menuBtn.on("click", async () => {
 
                 <div id="wb-batch-actions" style="display: none; background: rgba(0,0,0, 0.15); border: 1px dashed var(--SmartThemeQuoteColor); border-radius: 6px; padding: 10px; margin-bottom: 10px; flex-direction: column; gap: 10px;">
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap: wrap; gap: 10px;">
-                        <span style="color: var(--SmartThemeQuoteColor); font-weight: bold; font-size: 14px; margin-top: 4px;"><i class="fa-solid fa-check-double"></i> 选中的世界书 (<span id="wb-batch-count">0</span>)：</span>
+                        <span style="color: var(--SmartThemeQuoteColor); font-weight: bold; font-size: 13px; margin-top: 4px;"><i class="fa-solid fa-check-double"></i> 选中的世界书 (<span id="wb-batch-count">0</span>)：</span>
                         <div style="display:flex; gap: 8px; flex-wrap: wrap;">
                              <button class="menu_button interactable btn-warning wb-nowrap-btn" id="wb-btn-batch-group" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px; background: rgba(252, 196, 25, 0.15); color: #fcc419;"><i class="fa-solid fa-folder-tree"></i> 批量分组</button>
                              <button class="menu_button interactable btn-secondary wb-nowrap-btn" id="wb-btn-batch-ungroup" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-folder-minus"></i> 批量移出分类</button>
@@ -3593,7 +3731,7 @@ $menuBtn.on("click", async () => {
 
                 <div style="display: flex; flex-direction: column; gap: 15px; overflow-y: auto; padding-right: 5px;" class="scrollableInnerFull">
                     <div style="background: rgba(0,0,0,0.1); border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px; padding: 12px;">
-                        <h3 style="margin-top:0; font-size:14px;"><i class="fa-solid fa-user" style="color:#339af0;"></i> 👤 当前用户 (Persona) 已绑定的世界书</h3>
+                        <h3 style="margin-top:0; font-size:13px;"><i class="fa-solid fa-user" style="color:#339af0;"></i> 👤 当前用户 (Persona) 已绑定的世界书</h3>
                         <div style="font-size:12px; color:gray; margin-bottom:10px;">* ✨ 现在在这里可以给当前的 Persona 选择并绑定世界书啦。Persona 一般仅支持绑定一本哦。</div>
 
                         <div id="wb-assoc-user-add-area" style="margin-bottom: 15px; display:flex; flex-direction:column; gap:8px;">
@@ -3608,7 +3746,7 @@ $menuBtn.on("click", async () => {
                     </div>
 
                     <div style="background: rgba(0,0,0,0.1); border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px; padding: 12px;">
-                        <h3 style="margin-top:0; font-size:14px;"><i class="fa-solid fa-robot" style="color:var(--SmartThemeQuoteColor);"></i> 🤖 当前聊天角色卡已绑定的世界书</h3>
+                        <h3 style="margin-top:0; font-size:13px;"><i class="fa-solid fa-robot" style="color:var(--SmartThemeQuoteColor);"></i> 🤖 当前聊天角色卡已绑定的世界书</h3>
                         <div id="wb-assoc-char-add-area" style="margin-bottom: 15px; display:flex; flex-direction:column; gap:8px;">
                             <input type="text" id="wb-assoc-char-add-search" class="text_pole" placeholder="🔍 检索想绑定的世界书，可多选..." style="max-width:320px; box-sizing: border-box; padding: 8px;">
 <div id="wb-assoc-char-add-list" style="max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; margin: 8px 0; padding: 6px; background: var(--SmartThemeBotMesColor); border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px;"></div>
@@ -3763,7 +3901,7 @@ $menuBtn.on("click", async () => {
                         <div id="wb-entry-batch-actions" style="display: none; background: rgba(255, 107, 107, 0.08); border: 1px dashed #ff6b6b; border-radius: 6px; padding: 10px; margin-bottom: 10px; flex-direction: column; gap: 8px; flex-shrink: 0;">
                             <!-- 第一排：标题与全选/取消 -->
                             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px dashed rgba(255,107,107,0.3); padding-bottom: 8px;">
-                                <span style="color: #ff6b6b; font-weight: bold; font-size: 14px; white-space: nowrap;"><i class="fa-solid fa-triangle-exclamation"></i> 选中 (<span id="wb-entry-batch-count">0</span>)</span>
+                                <span style="color: #ff6b6b; font-weight: bold; font-size: 13px; white-space: nowrap;"><i class="fa-solid fa-triangle-exclamation"></i> 选中 (<span id="wb-entry-batch-count">0</span>)</span>
                                 <div style="display:flex; gap: 6px;">
                                      <button class="menu_button interactable wb-nowrap-btn btn-primary" id="wb-btn-entry-batch-select-all" style="margin: 0; padding: 4px 10px; font-size: 12px;"><i class="fa-solid fa-check-double"></i> 全页勾选</button>
                                      <button class="menu_button interactable wb-nowrap-btn btn-secondary" id="wb-btn-entry-batch-deselect-all" style="margin: 0; padding: 4px 10px; font-size: 12px;"><i class="fa-regular fa-square"></i> 全页撤销</button>
@@ -3962,18 +4100,6 @@ $menuBtn.on("click", async () => {
         </div>
     `);
 
-  const hexToRgba = (hex, alpha) => {
-    let r = 0,
-      g = 0,
-      b = 0;
-    if (hex.length === 7) {
-      r = parseInt(hex.substring(1, 3), 16);
-      g = parseInt(hex.substring(3, 5), 16);
-      b = parseInt(hex.substring(5, 7), 16);
-    }
-    return `rgba(${r},${g},${b},${alpha / 100})`;
-  };
-
   const applyTheme = (mode, customConfig) => {
     $("#lulu-theme-override-style").remove();
     let overrideCSS = "";
@@ -4010,7 +4136,7 @@ $menuBtn.on("click", async () => {
     } else if (mode === "custom") {
       inputBgCss = `--lulu-input-bg: ${customConfig.inputBg || customConfig.bg};`;
       accentCss = `--SmartThemeQuoteColor: ${customConfig.accent || "#70a1ff"} !important;`;
-      const bgRgba = hexToRgba(customConfig.bg, customConfig.alpha);
+      const bgRgba = luluHexToRgba(customConfig.bg, customConfig.alpha);
       overrideCSS = `dialog.wb-manager-dialog { background: ${bgRgba} !important; border: 1px solid var(--SmartThemeQuoteColor) !important; } dialog.wb-manager-dialog, #wb-manager-panel { --SmartThemeBlurTintColor: ${bgRgba} !important; --SmartThemeBotMesColor: ${customConfig.bg} !important; --SmartThemeBodyColor: ${customConfig.text} !important; ${accentCss} color: ${customConfig.text} !important; }`;
 
       $ui
@@ -4168,11 +4294,7 @@ $menuBtn.on("click", async () => {
   };
 
   const loadThemeSettings = () => {
-    const savedMode = localStorage.getItem("lulu_wb_panel_theme") || "default";
-    const savedCustom = JSON.parse(
-      localStorage.getItem("lulu_wb_panel_custom_colors") ||
-        '{"bg":"#2a2e33", "text":"#ffffff", "accent":"#70a1ff", "alpha":95, "inputBg":"#1a1c1f"}',
-    );
+    const { mode: savedMode, custom: savedCustom } = luluGetPanelThemePalette();
     $ui.find("#wb-theme-select").val(savedMode);
     $ui.find("#wb-theme-cp-bg").val(savedCustom.bg);
     $ui.find("#wb-theme-cp-text").val(savedCustom.text);
@@ -4648,7 +4770,7 @@ $menuBtn.on("click", async () => {
             <!-- 收藏区 -->
             <div style="margin-top:8px; padding:10px; border-radius:6px; border:1px dashed var(--SmartThemeBorderColor); background:rgba(0,0,0,0.08);">
               <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
-                <span style="font-size:12.5px; font-weight:bold; color:var(--SmartThemeQuoteColor);"><i class="fa-solid fa-bookmark"></i> 我的图标收藏</span>
+                <span style="font-size:12px; font-weight:bold; color:var(--SmartThemeQuoteColor);"><i class="fa-solid fa-bookmark"></i> 我的图标收藏</span>
                 <input type="text" id="wb-float-fav-name" class="wb-input-dt" placeholder="给上面的图标起个名字..." style="flex:1; min-width:120px; padding:5px 8px; margin:0; font-size:12px;">
                 <button id="wb-float-fav-save" class="menu_button interactable btn-success wb-nowrap-btn" style="margin:0; padding:5px 12px; border:none; font-size:12px;"><i class="fa-solid fa-plus"></i> 收藏当前</button>
               </div>
@@ -5052,7 +5174,17 @@ $menuBtn.on("click", async () => {
   };
 
   // 还原：把回收站里的书重新创建回来
+  // ✨ 防连点：上一次还原还没结束就忽略新点击（回收站弹窗在还原期间不会关闭，遮罩又在弹窗后面看不到）
   const restoreWbFromRecycle = async (idx) => {
+    if (!luluTryStartTask("restoreWb"))
+      return toastr.info("正在还原中，请稍等哦~");
+    try {
+      await restoreWbFromRecycleInner(idx);
+    } finally {
+      luluEndTask("restoreWb");
+    }
+  };
+  const restoreWbFromRecycleInner = async (idx) => {
     let bin = getRecycleBin();
     const item = bin[idx];
     if (!item) return;
@@ -5113,7 +5245,7 @@ $menuBtn.on("click", async () => {
   // ========== 【功能1：回收站】 结束 ==========
   // ========== 【锁定世界书】防误删 开始 ==========
   const getLockedWbs = () => {
-    let vars = getVariables({ type: "global" });
+    let vars = luluGetGlobalVars();
     let locked = vars.wb_locked_list;
     if (typeof locked === "string") {
       try {
@@ -5125,7 +5257,7 @@ $menuBtn.on("click", async () => {
     return Array.isArray(locked) ? locked : [];
   };
   const saveLockedWbs = (arr) => {
-    updateVariablesWith(
+    luluUpdateGlobalVars(
       (v) => {
         v.wb_locked_list = arr;
         return v;
@@ -5149,12 +5281,20 @@ $menuBtn.on("click", async () => {
   // ========== 【锁定世界书】防误删 结束 ==========
 
   // ========== 【锁定条目】防误删 开始 ==========
+  // ✨ 按原始字符串做缓存：内容没变就不重复 JSON.parse（渲染几百个条目时提速明显）
+  let __luluLockedEntriesRaw = null;
+  let __luluLockedEntriesMap = null;
   const getLockedEntriesMap = () => {
-    try {
-      return JSON.parse(localStorage.getItem("lulu_wb_locked_entries") || "{}");
-    } catch (e) {
-      return {};
+    const raw = localStorage.getItem("lulu_wb_locked_entries") || "{}";
+    if (raw !== __luluLockedEntriesRaw) {
+      __luluLockedEntriesRaw = raw;
+      try {
+        __luluLockedEntriesMap = JSON.parse(raw);
+      } catch (e) {
+        __luluLockedEntriesMap = {};
+      }
     }
+    return __luluLockedEntriesMap;
   };
   const saveLockedEntriesMap = (obj) => {
     localStorage.setItem("lulu_wb_locked_entries", JSON.stringify(obj));
@@ -5209,7 +5349,7 @@ $menuBtn.on("click", async () => {
   // ========== 【全库对照跳过标记】 结束 ==========
 
   const getCategories = () => {
-    let vars = getVariables({ type: "global" });
+    let vars = luluGetGlobalVars();
     let cats = vars.wb_categories;
     if (typeof cats === "string") {
       try {
@@ -5220,7 +5360,7 @@ $menuBtn.on("click", async () => {
     }
     if (!cats || typeof cats !== "object" || Array.isArray(cats)) {
       cats = { "🌟默认收藏夹": [] };
-      updateVariablesWith(
+      luluUpdateGlobalVars(
         (v) => {
           v.wb_categories = cats;
           return v;
@@ -5231,7 +5371,7 @@ $menuBtn.on("click", async () => {
     return cats;
   };
   const saveCategories = (catObj) => {
-    updateVariablesWith(
+    luluUpdateGlobalVars(
       (v) => {
         v.wb_categories = catObj;
         return v;
@@ -5499,7 +5639,7 @@ $menuBtn.on("click", async () => {
         html += `
           <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:10px; background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:6px; flex-wrap:wrap;">
             <div style="flex:1; min-width:150px;">
-              <div style="font-weight:bold; font-size:14px;"><i class="fa-solid fa-book-skull" style="color:#fcc419;"></i> ${item.name}</div>
+              <div style="font-weight:bold; font-size:13px;"><i class="fa-solid fa-book-skull" style="color:#fcc419;"></i> ${item.name}</div>
               <div style="font-size:11px; color:gray; margin-top:4px;">含 ${entryCount} 个条目 | 删除于 ${timeStr}</div>
             </div>
             <div style="display:flex; gap:6px;">
@@ -5512,30 +5652,15 @@ $menuBtn.on("click", async () => {
       return html;
     };
 
-    const savedRecycleMode =
-      localStorage.getItem("lulu_wb_panel_theme") || "default";
-    const savedRecycleCustom = JSON.parse(
-      localStorage.getItem("lulu_wb_panel_custom_colors") ||
-        '{"bg":"#2a2e33", "text":"#ffffff", "accent":"#70a1ff", "alpha":95, "inputBg":"#1a1c1f"}',
-    );
-    const rcHexToRgba = (hex, alpha) => {
-      let r = 0,
-        g = 0,
-        b = 0;
-      if (hex && hex.length === 7) {
-        r = parseInt(hex.substring(1, 3), 16);
-        g = parseInt(hex.substring(3, 5), 16);
-        b = parseInt(hex.substring(5, 7), 16);
-      }
-      return `rgba(${r},${g},${b},${alpha / 100})`;
-    };
+    const { mode: savedRecycleMode, custom: savedRecycleCustom } =
+      luluGetPanelThemePalette();
     let recycleThemeCSS = "";
     if (savedRecycleMode === "dark") {
       recycleThemeCSS = `dialog:has(#lulu-recycle-list-wrap) { background: rgba(22,24,28,1) !important; border: 1px solid #d1c5a1 !important; --SmartThemeBotMesColor: rgba(32,35,40,1) !important; --SmartThemeBodyColor: #c0c2c8 !important; --SmartThemeQuoteColor: #d1c5a1 !important; --SmartThemeBorderColor: #3d414d !important; color: #c0c2c8 !important; }`;
     } else if (savedRecycleMode === "light") {
       recycleThemeCSS = `dialog:has(#lulu-recycle-list-wrap) { background: rgba(253,246,227,1) !important; border: 1px solid #8b5d33 !important; --SmartThemeBotMesColor: rgba(255,251,240,1) !important; --SmartThemeBodyColor: #4a3b32 !important; --SmartThemeQuoteColor: #8b5d33 !important; --SmartThemeBorderColor: #e0d0b8 !important; color: #4a3b32 !important; }`;
     } else if (savedRecycleMode === "custom") {
-      const bgRgba = rcHexToRgba(
+      const bgRgba = luluHexToRgba(
         savedRecycleCustom.bg,
         savedRecycleCustom.alpha,
       );
@@ -5617,15 +5742,14 @@ $menuBtn.on("click", async () => {
   // 渲染某一侧的世界书候选下拉列表
   const renderWbDropdown = (side) => {
     const $drop = $ui.find(`.wb-transfer-wbdrop[data-side="${side}"]`).empty();
-    // 用 fixed 定位，浮到最顶层，不被任何容器裁剪
-    const $searchInput = $ui.find(`.wb-transfer-wbsearch[data-side="${side}"]`);
-    const rect = $searchInput[0].getBoundingClientRect();
+    // ✨ 挂在输入框容器里（父级 .wb-transfer-selbox 是 relative）：
+    // absolute 定位天然跟随输入框，弹窗滚动/缩放都不会跑偏
     $drop.css({
-      position: "fixed",
-      top: rect.bottom + 2 + "px",
-      left: rect.left + "px",
-      width: rect.width + "px",
-      "z-index": "2147483647",
+      position: "absolute",
+      top: "calc(100% + 2px)",
+      left: "0",
+      width: "100%",
+      "z-index": "100000",
     });
     const kw = $ui
       .find(`.wb-transfer-wbsearch[data-side="${side}"]`)
@@ -5730,7 +5854,7 @@ $menuBtn.on("click", async () => {
           : '<span class="badge-blue">常驻</span>';
 
       const $item = $(
-        `<div style="border-left:3px solid ${isEn ? "var(--okGreen)" : "gray"}; background:${isSel ? "rgba(81,207,102,0.1)" : "var(--SmartThemeBlurTintColor)"}; border-radius:4px; opacity:${isEn ? "1" : "0.6"}; transition:0.15s;"></div>`,
+        `<div style="border-left:3px solid ${isEn ? "var(--okGreen, #51cf66)" : "gray"}; background:${isSel ? "rgba(81,207,102,0.1)" : "var(--SmartThemeBlurTintColor)"}; border-radius:4px; opacity:${isEn ? "1" : "0.6"}; transition:0.15s;"></div>`,
       );
 
       // 顶部行：复选框 + 可点击展开的主体
@@ -5757,7 +5881,7 @@ $menuBtn.on("click", async () => {
       });
 
       const expandIcon = entry.content
-        ? `<i class="fa-solid fa-chevron-${isExpanded ? "up" : "down"}" style="margin-left:6px; font-size:10px; color:gray;"></i>`
+        ? `<i class="fa-solid fa-chevron-${isExpanded ? "up" : "down"}" style="margin-left:6px; font-size:11px; color:gray;"></i>`
         : "";
       const $body = $(
         `<div style="flex:1; min-width:0; cursor:pointer;">
@@ -5939,9 +6063,6 @@ $menuBtn.on("click", async () => {
         currentEntries = currentEntries.concat(toCopy);
         await replaceWorldbook(from.wbName, currentEntries);
 
-        if (typeof luluTokenCache !== "undefined")
-          delete luluTokenCache[from.wbName];
-
         // 更新两侧的内存数据（因为是同一本书，两边都要刷新）
         const freshEntries = JSON.parse(JSON.stringify(currentEntries));
         from.entries = freshEntries;
@@ -5986,9 +6107,6 @@ $menuBtn.on("click", async () => {
 
         targetEntries = targetEntries.concat(toCopy);
         await replaceWorldbook(to.wbName, targetEntries);
-
-        if (typeof luluTokenCache !== "undefined")
-          delete luluTokenCache[to.wbName];
 
         to.entries = JSON.parse(JSON.stringify(targetEntries));
         to.selected.clear();
@@ -6157,14 +6275,6 @@ $menuBtn.on("click", async () => {
 
     const winW = getStickyWinW(),
       winH = getStickyWinH();
-    console.log(
-      "[Lulu便签] V3 模块启动 | 真实视口:",
-      winW,
-      "x",
-      winH,
-      "| iframe环境:",
-      window.parent !== window,
-    ); // ★自检标记
 
     // ---- 初始位置/尺寸（坏数据自动回退默认，永远落在屏幕内） ----
     const defW = Math.min(620, Math.max(320, winW - 40));
@@ -6366,16 +6476,6 @@ $menuBtn.on("click", async () => {
         popup.dlg.close();
       } catch (e2) {}
     }
-    console.log(
-      "[Lulu便签] 窗口创建完成 → left:",
-      pos.left,
-      "top:",
-      pos.top,
-      "| w:",
-      pos.width,
-      "h:",
-      pos.height,
-    );
 
     // ---- 记忆位置的工具 ----
     const saveStickyPos = () => {
@@ -6398,7 +6498,8 @@ $menuBtn.on("click", async () => {
       try {
         if (
           $ui.find("#wb-entry-view").is(":visible") &&
-          JSON.stringify(tuneEntries) !== JSON.stringify(originalTuneEntries)
+          luluStableStringify(tuneEntries) !==
+            luluStableStringify(originalTuneEntries)
         ) {
           const c = await SillyTavern.callGenericPopup(
             `便签里还有没点<strong style="color:var(--SmartThemeQuoteColor);">绿色保存按钮</strong>的修改哦！<br>直接关闭会丢失这些修改，确定吗？`,
@@ -7810,7 +7911,7 @@ $menuBtn.on("click", async () => {
     renderData();
   });
   const renderCharView = () => {
-    let vars = getVariables({ type: "global" });
+    let vars = luluGetGlobalVars();
     let charSnaps = vars.wb_char_snapshots;
     if (typeof charSnaps === "string") {
       try {
@@ -7825,7 +7926,7 @@ $menuBtn.on("click", async () => {
       Array.isArray(charSnaps)
     ) {
       charSnaps = {};
-      updateVariablesWith(
+      luluUpdateGlobalVars(
         (v) => {
           v.wb_char_snapshots = charSnaps;
           return v;
@@ -7843,7 +7944,7 @@ $menuBtn.on("click", async () => {
     const $sCont = $ui.find("#wb-char-snap-container").empty();
     if (!charName) {
       $bCont.html(
-        '<div style="color:#ff6b6b; font-size:14px; font-weight:bold; padding:10px; width: 100%;">当前好像没有打开任何角色卡的对话呢，必须要先进入聊天界面，才能为角色配置专属世界书和组合哦~</div>',
+        '<div style="color:#ff6b6b; font-size:13px; font-weight:bold; padding:10px; width: 100%;">当前好像没有打开任何角色卡的对话呢，必须要先进入聊天界面，才能为角色配置专属世界书和组合哦~</div>',
       );
       $sCont.html(
         '<div style="color:gray; padding:10px;">暂无可用的角色快照呢~</div>',
@@ -7860,14 +7961,14 @@ $menuBtn.on("click", async () => {
     if (charBooksObj.additional) cBooks.push(...charBooksObj.additional);
     if (cBooks.length === 0) {
       $bCont.html(
-        '<div style="color:gray; font-size:14px; padding:10px; width: 100%;">这名角色目前一本世界书都还没有绑定。请点击上面的管理按钮去绑定吧~</div>',
+        '<div style="color:gray; font-size:13px; padding:10px; width: 100%;">这名角色目前一本世界书都还没有绑定。请点击上面的管理按钮去绑定吧~</div>',
       );
     } else {
       cBooks.forEach((wb) => {
         const isPrimary = wb === charBooksObj.primary;
         const tagLabelHtml = isPrimary
-          ? `<span style="font-size:10px; background:var(--SmartThemeQuoteColor); color:#fff; padding:2px 5px; border-radius:4px; margin-left:4px; margin-bottom:2px;">主</span>`
-          : `<span style="font-size:10px; border:1px solid gray; color:gray; background:transparent; padding:1px 4px; border-radius:4px; margin-left:4px; margin-bottom:2px;">附</span>`;
+          ? `<span style="font-size:11px; background:var(--SmartThemeQuoteColor); color:#fff; padding:2px 5px; border-radius:4px; margin-left:4px; margin-bottom:2px;">主</span>`
+          : `<span style="font-size:11px; border:1px solid gray; color:gray; background:transparent; padding:1px 4px; border-radius:4px; margin-left:4px; margin-bottom:2px;">附</span>`;
         const $wrapper = $(
           '<div class="wb-item-wrapper" style="cursor: pointer;"></div>',
         );
@@ -7948,7 +8049,7 @@ $menuBtn.on("click", async () => {
         // ---- 角色快照拖拽排序结束 ----
 
         $item.append(
-          `<div style="flex:1; min-width: 150px;"><div style="font-weight:bold;font-size:14px;"><i class="fa-solid fa-grip-vertical lulu-char-snap-drag-handle" style="cursor:grab; color:gray; margin-right:6px;" title="按住拖拽排序"></i><i class="fa-solid fa-camera-retro" style="color:var(--SmartThemeQuoteColor);"></i> ${snapName}</div>
+          `<div style="flex:1; min-width: 150px;"><div style="font-weight:bold;font-size:13px;"><i class="fa-solid fa-grip-vertical lulu-char-snap-drag-handle" style="cursor:grab; color:gray; margin-right:6px;" title="按住拖拽排序"></i><i class="fa-solid fa-camera-retro" style="color:var(--SmartThemeQuoteColor);"></i> ${snapName}</div>
 <div style="font-size:12px;color:gray;">牵涉 ${includedBooks} 本世界书，共开启 ${totalEntries} 项条目</div></div>`,
         );
         const $act = $(
@@ -8024,7 +8125,7 @@ $menuBtn.on("click", async () => {
                 SillyTavern.POPUP_TYPE.CONFIRM,
               )) === SillyTavern.POPUP_RESULT.AFFIRMATIVE
             ) {
-              updateVariablesWith(
+              luluUpdateGlobalVars(
                 (v) => {
                   if (typeof v.wb_char_snapshots === "string") {
                     try {
@@ -8180,7 +8281,10 @@ $menuBtn.on("click", async () => {
   };
   // ✨ 公用：HTML 转义 & 逐行差异高亮（单卡救援 + 全库对照共用）
   const luluEscHtml = (s) =>
-    String(s).replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">");
+    String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
 
   const luluDiffText = (oldStr, newStr) => {
     const oldLines = String(oldStr || "").split("\n");
@@ -8270,7 +8374,7 @@ $menuBtn.on("click", async () => {
                   <div style="max-height:200px; overflow:auto; background:rgba(0,0,0,0.15); border-radius:4px; padding:4px; white-space:pre-wrap; word-break:break-word;">${diff.newHtml || "(空)"}</div>
                 </div>
               </div>
-              <div style="font-size:10px; color:gray; margin-top:4px;"><span style="background:rgba(255,107,107,0.25); padding:0 4px;">红底</span>=卡内有本地删了　<span style="background:rgba(81,207,102,0.25); padding:0 4px;">绿底</span>=本地新加的</div>
+              <div style="font-size:11px; color:gray; margin-top:4px;"><span style="background:rgba(255,107,107,0.25); padding:0 4px;">红底</span>=卡内有本地删了　<span style="background:rgba(81,207,102,0.25); padding:0 4px;">绿底</span>=本地新加的</div>
             </div>
           </div>`;
       });
@@ -8389,7 +8493,7 @@ $menuBtn.on("click", async () => {
            <div style="font-size:13px; margin-bottom:8px;"><i class="fa-solid fa-robot" style="color:var(--SmartThemeQuoteColor); width:18px;"></i> 角色：<strong>${charName}</strong></div>
            <div style="font-size:13px;"><i class="fa-solid fa-book" style="color:var(--SmartThemeQuoteColor); width:18px;"></i> 世界书：<strong>${bookName}</strong></div>
          </div>
-         <div style="font-size:12.5px; color:var(--SmartThemeBodyColor); line-height:1.7; margin-bottom:12px;">
+         <div style="font-size:12px; color:var(--SmartThemeBodyColor); line-height:1.7; margin-bottom:12px;">
            这张卡自带的世界书原版，和本地同名的这本<strong style="color:var(--SmartThemeQuoteColor);">内容不一样</strong>了。<br>
            <span style="color:gray;">可能是导入时被本地旧书接管，也可能是你改过本地这本、现在想还原成卡里的原版~</span>
          </div>
@@ -8524,7 +8628,7 @@ $menuBtn.on("click", async () => {
           : null;
     if (!charName) return toastr.warning("需要先打开某个角色的聊天哦~");
 
-    let vars = getVariables({ type: "global" });
+    let vars = luluGetGlobalVars();
     let charSnaps = vars.wb_char_snapshots;
     if (typeof charSnaps === "string") {
       try {
@@ -8586,7 +8690,7 @@ $menuBtn.on("click", async () => {
     });
     if (toDelete.length === 0) return toastr.info("你没有勾选任何快照哦~");
 
-    updateVariablesWith(
+    luluUpdateGlobalVars(
       (v) => {
         if (typeof v.wb_char_snapshots === "string") {
           try {
@@ -8625,7 +8729,7 @@ $menuBtn.on("click", async () => {
         newSnapData[wb] = entries.filter((e) => e.enabled).map((e) => e.uid);
       }
     }, "正在读取现在的条目配置...");
-    let vars = getVariables({ type: "global" });
+    let vars = luluGetGlobalVars();
     let charSnaps = vars.wb_char_snapshots;
     if (typeof charSnaps === "string") {
       try {
@@ -8698,7 +8802,7 @@ $menuBtn.on("click", async () => {
       );
       if (!snapName || !(snapName = snapName.trim())) return;
       if (btnRes === 999 && snapName !== duplicateSnapName) {
-        updateVariablesWith(
+        luluUpdateGlobalVars(
           (v) => {
             if (typeof v.wb_char_snapshots === "string") {
               try {
@@ -8729,7 +8833,7 @@ $menuBtn.on("click", async () => {
       );
       if (overRes !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
     }
-    updateVariablesWith(
+    luluUpdateGlobalVars(
       (v) => {
         if (typeof v.wb_char_snapshots === "string") {
           try {
@@ -8767,7 +8871,7 @@ $menuBtn.on("click", async () => {
       if (chatSec.length === 0) {
         chatSec =
           $(`<div id="lulu-assoc-chat-section" style="background: rgba(0,0,0,0.1); border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px; padding: 12px;">
-        <h3 style="margin-top:0; font-size:14px;"><i class="fa-solid fa-comment-dots" style="color:#4dabf7;"></i> 💬 当前聊天已绑定的世界书</h3>
+        <h3 style="margin-top:0; font-size:13px;"><i class="fa-solid fa-comment-dots" style="color:#4dabf7;"></i> 💬 当前聊天已绑定的世界书</h3>
         <div style="font-size:12px; color:gray; margin-bottom:10px;"><span id="wb-assoc-chat-name">正在检测当前聊天...</span> * 聊天世界书只会影响当前这个聊天，不会动到其它聊天哦。</div>
         <div id="wb-assoc-chat-list" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
         <div style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--SmartThemeBorderColor);">
@@ -8818,7 +8922,7 @@ $menuBtn.on("click", async () => {
       if (currentChatWb) {
         const $bindItem =
           $(`<div style="display:inline-flex; align-items:center; gap:8px; background:var(--SmartThemeBotMesColor); border:1px solid #4dabf7; padding:6px 12px; border-radius:4px; transition:0.2s;">
-        <span style="font-weight:bold; font-size:14px; color:#4dabf7; cursor:pointer; display:flex; align-items:center;" class="wb-assoc-entry-edit" title="点击编辑内容"><i class="fa-solid fa-comment-dots" style="margin-right:5px;"></i> ${currentChatWb}</span>
+        <span style="font-weight:bold; font-size:13px; color:#4dabf7; cursor:pointer; display:flex; align-items:center;" class="wb-assoc-entry-edit" title="点击编辑内容"><i class="fa-solid fa-comment-dots" style="margin-right:5px;"></i> ${currentChatWb}</span>
         <div class="hover-red" style="cursor:pointer; color:gray; margin-left:4px;" title="解绑当前聊天的世界书"><i class="fa-solid fa-xmark"></i></div>
       </div>`);
         $bindItem
@@ -8927,7 +9031,7 @@ $menuBtn.on("click", async () => {
     } else {
       userBooks.forEach((wb) => {
         const $item = $(
-          `<div style="display:inline-flex; align-items:center; gap:8px; background:var(--SmartThemeBotMesColor); border:1px solid #339af0; padding:6px 12px; border-radius:4px; transition:0.2s;"><span style="font-weight:bold; font-size:14px; color:#339af0; cursor:pointer;" title="点击编辑内容" class="wb-assoc-entry-edit"><i class="fa-solid fa-book"></i> ${wb}</span><div class="hover-red" style="cursor:pointer; color:gray; margin-left: 4px;" title="为您解绑 Persona 世界书哦"><i class="fa-solid fa-xmark"></i></div></div>`,
+          `<div style="display:inline-flex; align-items:center; gap:8px; background:var(--SmartThemeBotMesColor); border:1px solid #339af0; padding:6px 12px; border-radius:4px; transition:0.2s;"><span style="font-weight:bold; font-size:13px; color:#339af0; cursor:pointer;" title="点击编辑内容" class="wb-assoc-entry-edit"><i class="fa-solid fa-book"></i> ${wb}</span><div class="hover-red" style="cursor:pointer; color:gray; margin-left: 4px;" title="为您解绑 Persona 世界书哦"><i class="fa-solid fa-xmark"></i></div></div>`,
         );
         $item
           .find(".wb-assoc-entry-edit")
@@ -9018,10 +9122,10 @@ $menuBtn.on("click", async () => {
         cBooks.forEach((wb) => {
           const isPrimary = wb === charBooksObj.primary;
           const tagLabelHtml = isPrimary
-            ? `<span style="font-size:10px; background:var(--SmartThemeQuoteColor); color:#fff; padding:2px 5px; border-radius:4px; margin-left:4px; margin-bottom:2px;">主</span>`
-            : `<span style="font-size:10px; border:1px solid gray; color:gray; background:transparent; padding:1px 4px; border-radius:4px; margin-left:4px; margin-bottom:2px;">附</span>`;
+            ? `<span style="font-size:11px; background:var(--SmartThemeQuoteColor); color:#fff; padding:2px 5px; border-radius:4px; margin-left:4px; margin-bottom:2px;">主</span>`
+            : `<span style="font-size:11px; border:1px solid gray; color:gray; background:transparent; padding:1px 4px; border-radius:4px; margin-left:4px; margin-bottom:2px;">附</span>`;
           const $item = $(
-            `<div style="display:inline-flex; align-items:center; gap:8px; background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeQuoteColor); padding:6px 12px; border-radius:4px; transition:0.2s;"><span style="font-weight:bold; font-size:14px; color:var(--SmartThemeQuoteColor); cursor:pointer; display:flex; align-items:center;" title="点击编辑内容" class="wb-assoc-entry-edit"><i class="fa-solid fa-robot" style="margin-right: 5px;"></i> ${wb} ${tagLabelHtml}</span><div class="hover-red" style="cursor:pointer; color:gray; margin-left: 4px;" title="解除绑定"><i class="fa-solid fa-xmark"></i></div></div>`,
+            `<div style="display:inline-flex; align-items:center; gap:8px; background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeQuoteColor); padding:6px 12px; border-radius:4px; transition:0.2s;"><span style="font-weight:bold; font-size:13px; color:var(--SmartThemeQuoteColor); cursor:pointer; display:flex; align-items:center;" title="点击编辑内容" class="wb-assoc-entry-edit"><i class="fa-solid fa-robot" style="margin-right: 5px;"></i> ${wb} ${tagLabelHtml}</span><div class="hover-red" style="cursor:pointer; color:gray; margin-left: 4px;" title="解除绑定"><i class="fa-solid fa-xmark"></i></div></div>`,
           );
           $item
             .find(".wb-assoc-entry-edit")
@@ -9160,8 +9264,8 @@ $menuBtn.on("click", async () => {
         list.sort((a, b) => {
           const na = (a.name || "").toLowerCase();
           const nb = (b.name || "").toLowerCase();
-          if (sortMode === "name_asc") return na.localeCompare(nb, "zh-CN");
-          return nb.localeCompare(na, "zh-CN");
+          if (sortMode === "name_asc") return luluZhCompare(na, nb);
+          return luluZhCompare(nb, na);
         });
       } else if (sortMode === "import_asc" || sortMode === "import_desc") {
         list.sort((a, b) => {
@@ -9182,7 +9286,7 @@ $menuBtn.on("click", async () => {
         </h3>
         <div style="display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap;">
           <input type="text" id="lulu-scan-char-search" class="text_pole" placeholder="🔍 搜索角色名或文件名..." style="flex:1; min-width:150px; box-sizing:border-box; padding:8px; font-size:13px; border-radius:4px;">
-          <select id="lulu-scan-char-sort" class="wb-input-dt" style="width:auto; padding:8px; font-size:12.5px; border-radius:4px; flex-shrink:0;">
+          <select id="lulu-scan-char-sort" class="wb-input-dt" style="width:auto; padding:8px; font-size:12px; border-radius:4px; flex-shrink:0;">
             <option value="import_asc">📅 导入时间 ↑</option>
             <option value="import_desc">📅 导入时间 ↓</option>
             <option value="name_asc">🔤 名称 A-Z</option>
@@ -9221,7 +9325,7 @@ $menuBtn.on("click", async () => {
           <label style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:6px; cursor:pointer;">
             <input type="checkbox" class="lulu-scan-char-chk" data-avatar="${avatar}" ${isChecked ? "checked" : ""} style="accent-color: var(--SmartThemeQuoteColor); flex-shrink:0;">
             <span style="flex:1; min-width:0; word-break:break-all;"><i class="fa-solid fa-robot" style="color:var(--SmartThemeQuoteColor); margin-right:4px;"></i>${name}</span>
-            <span style="font-size:10px; color:gray; white-space:nowrap; max-width:80px; overflow:hidden; text-overflow:ellipsis;">${avatar}</span>
+            <span style="font-size:11px; color:gray; white-space:nowrap; max-width:80px; overflow:hidden; text-overflow:ellipsis;">${avatar}</span>
           </label>
         `);
         const $chk = $label.find(".lulu-scan-char-chk");
@@ -9237,9 +9341,14 @@ $menuBtn.on("click", async () => {
     // 初始化渲染
     renderList("", $dlg.find("#lulu-scan-char-sort").val());
 
-    // 搜索事件
+    // 搜索事件（200ms 防抖：连续敲键盘只渲染最后一次，角色多时不卡顿）
+    let charSearchTimer = null;
     $dlg.find("#lulu-scan-char-search").on("input", function () {
-      renderList($(this).val(), $dlg.find("#lulu-scan-char-sort").val());
+      const kw = $(this).val();
+      clearTimeout(charSearchTimer);
+      charSearchTimer = setTimeout(() => {
+        renderList(kw, $dlg.find("#lulu-scan-char-sort").val());
+      }, 200);
     });
 
     // 排序事件
@@ -9410,7 +9519,10 @@ $menuBtn.on("click", async () => {
     }
 
     const escHtml = (s) =>
-      String(s).replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">");
+      String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
 
     let rowsHtml = "";
     suspects.forEach((s, i) => {
@@ -9419,13 +9531,13 @@ $menuBtn.on("click", async () => {
           <div style="display:flex; align-items:flex-start; gap:8px; flex-wrap:nowrap;">
             <input type="checkbox" class="lulu-scan-chk" data-idx="${i}" style="transform:scale(1.15); flex-shrink:0; margin-top:4px;">
             <div style="flex:1; min-width:0;">
-              <div style="font-weight:bold; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><i class="fa-solid fa-robot" style="color:var(--SmartThemeQuoteColor);"></i> ${escHtml(s.charName)}</div>
-              <div style="font-size:11.5px; color:gray; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📖 内嵌世界书：<strong>${escHtml(s.bookName)}</strong></div>
-              <div style="font-size:11.5px; color:#ff6b6b; margin-top:2px;">卡内原版 ${s.embeddedCount} 条 <span style="color:gray;">vs</span> 本地当前 ${s.localCount} 条</div>
+              <div style="font-weight:bold; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><i class="fa-solid fa-robot" style="color:var(--SmartThemeQuoteColor);"></i> ${escHtml(s.charName)}</div>
+              <div style="font-size:12px; color:gray; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📖 内嵌世界书：<strong>${escHtml(s.bookName)}</strong></div>
+              <div style="font-size:12px; color:#ff6b6b; margin-top:2px;">卡内原版 ${s.embeddedCount} 条 <span style="color:gray;">vs</span> 本地当前 ${s.localCount} 条</div>
               
               <!-- 优化后的操作区 -->
               <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px; padding-top:8px; border-top:1px dashed rgba(125,125,125,0.2);">
-                <select class="lulu-scan-action wb-input-dt" data-idx="${i}" style="min-height:44px; padding:8px 10px; font-size:14px; width:100%; box-sizing:border-box; pointer-events:auto; touch-action:manipulation; position:relative; z-index:5; background:var(--SmartThemeBotMesColor)!important; color:var(--SmartThemeBodyColor)!important; border:1px solid var(--SmartThemeBorderColor)!important; border-radius:6px;">
+                <select class="lulu-scan-action wb-input-dt" data-idx="${i}" style="min-height:44px; padding:8px 10px; font-size:13px; width:100%; box-sizing:border-box; pointer-events:auto; touch-action:manipulation; position:relative; z-index:5; background:var(--SmartThemeBotMesColor)!important; color:var(--SmartThemeBodyColor)!important; border:1px solid var(--SmartThemeBorderColor)!important; border-radius:6px;">
   <option value="extract">📥 另存卡内原版为新书</option>
   <option value="overwrite">⚠️ 危险：覆盖本地旧书</option>
   <option value="skip">🚫 标记跳过全库对照</option>
@@ -9459,7 +9571,7 @@ $menuBtn.on("click", async () => {
 
         <!-- 搜索栏与全选按钮整合在一行 -->
         <div style="display:flex; gap:6px; margin-bottom:10px; align-items:center;">
-          <input type="text" id="lulu-scan-search" class="text_pole" placeholder="🔍 搜索角色或书名..." style="flex:1; min-width:0; box-sizing:border-box; padding:7px; font-size:12.5px; border-radius:4px;">
+          <input type="text" id="lulu-scan-search" class="text_pole" placeholder="🔍 搜索角色或书名..." style="flex:1; min-width:0; box-sizing:border-box; padding:7px; font-size:12px; border-radius:4px;">
           <button id="lulu-scan-selall" class="menu_button interactable btn-success wb-nowrap-btn" style="margin:0; padding:7px 12px; font-size:12px; border:none; flex-shrink:0;">全选</button>
           <button id="lulu-scan-deselall" class="menu_button interactable btn-secondary wb-nowrap-btn" style="margin:0; padding:7px 12px; font-size:12px; flex-shrink:0;">清空</button>
         </div>
@@ -9620,7 +9732,7 @@ $menuBtn.on("click", async () => {
       `<div style="text-align:left; line-height:1.7; max-height:55vh; overflow-y:auto;">
         <strong style="color:var(--SmartThemeQuoteColor);">🎉 批量处理完成！</strong><br><br>
         提取新书 ${extractCount} 本，覆盖本地 ${overwriteCount} 本，标记跳过 ${skipCount} 本。<br><br>
-        <div style="font-size:12.5px;">${resultLines.map((l) => `<div style="padding:2px 0;">${escHtml(l)}</div>`).join("")}</div>
+        <div style="font-size:12px;">${resultLines.map((l) => `<div style="padding:2px 0;">${escHtml(l)}</div>`).join("")}</div>
         ${tipHtml}
       </div>`,
       SillyTavern.POPUP_TYPE.TEXT,
@@ -9694,7 +9806,10 @@ $menuBtn.on("click", async () => {
     renderCharView();
   });
 
+  // ✨ 渲染序号：每次 renderData 递增，深度搜索等异步操作完成后先对序号，过期就直接丢弃
+  let __luluRenderSeq = 0;
   const renderData = async (highlightName = null) => {
+    const myRenderSeq = ++__luluRenderSeq;
     const keyword = $ui.find("#wb-search-input").val().toLowerCase();
     const showUnboundOnly = $ui.find("#wb-filter-unbound").is(":checked");
     const showLockedOnly = $ui.find("#wb-filter-locked").is(":checked");
@@ -9722,7 +9837,7 @@ $menuBtn.on("click", async () => {
 
     const allWbs = getWorldbookNames();
     const activeWbs = getGlobalWorldbookNames();
-    let snapshots = getVariables({ type: "global" }).wb_snapshots;
+    let snapshots = luluGetGlobalVars().wb_snapshots;
     if (typeof snapshots === "string") {
       try {
         snapshots = JSON.parse(snapshots);
@@ -9739,6 +9854,8 @@ $menuBtn.on("click", async () => {
         .find("#wb-deep-search-toggle")
         .next()
         .html('<i class="fa-solid fa-spinner fa-spin"></i> 翻阅全文中...');
+      // 第一遍：先做名字/绑定/过滤的同步匹配，收集需要翻正文的候选
+      const needDeepScan = [];
       for (let wb of allWbs) {
         const bindings = globalBindingMapCache[wb] || [];
         if (showUnboundOnly && bindings.length > 0) continue;
@@ -9762,23 +9879,30 @@ $menuBtn.on("click", async () => {
           " " +
           bindings.map((c) => c.name).join(" ")
         ).toLowerCase();
-        let isMatch = matchStr.includes(keyword);
-
-        if (!isMatch) {
+        if (matchStr.includes(keyword)) filteredWbs.push(wb);
+        else needDeepScan.push(wb);
+      }
+      // 第二遍：候选书并行翻正文（原来是逐本串行 await，书多时要等很久）
+      const scanResults = await Promise.all(
+        needDeepScan.map(async (wb) => {
           try {
-            let entries = await getWorldbook(wb);
+            const entries = await getWorldbook(wb);
             for (let e of entries) {
               let eStr =
                 `${e.name || ""} ${(e.strategy?.keys || []).join(" ")} ${e.content || ""}`.toLowerCase();
-              if (eStr.includes(keyword)) {
-                isMatch = true;
-                break;
-              }
+              if (eStr.includes(keyword)) return true;
             }
           } catch (err) {}
-        }
-        if (isMatch) filteredWbs.push(wb);
-      }
+          return false;
+        }),
+      );
+      // ✨ 等待期间用户又触发了新的渲染 → 本次结果已过期，直接丢弃
+      if (myRenderSeq !== __luluRenderSeq) return;
+      const matchSet = new Set(filteredWbs);
+      needDeepScan.forEach((wb, i) => {
+        if (scanResults[i]) matchSet.add(wb);
+      });
+      filteredWbs = allWbs.filter((wb) => matchSet.has(wb));
       $ui.find("#wb-deep-search-toggle").next().html("🔎 深度搜索正文");
     } else {
       filteredWbs = [...allWbs].filter((wb) => {
@@ -9808,11 +9932,11 @@ $menuBtn.on("click", async () => {
     }
 
     currentVisibleWbs = filteredWbs.sort((a, b) => {
-      if (sortMode === "az") return a.localeCompare(b, "zh-CN");
-      if (sortMode === "za") return b.localeCompare(a, "zh-CN");
+      if (sortMode === "az") return luluZhCompare(a, b);
+      if (sortMode === "za") return luluZhCompare(b, a);
       const aA = activeWbs.includes(a),
         bA = activeWbs.includes(b);
-      if (aA === bA) return a.localeCompare(b, "zh-CN");
+      if (aA === bA) return luluZhCompare(a, b);
       return aA ? -1 : 1;
     });
 
@@ -10308,6 +10432,19 @@ $menuBtn.on("click", async () => {
       wbFragment.appendChild($wrapper[0]);
     });
     $wbContainer.append(wbFragment);
+    // ✨ 空状态：区分"一本书都没有"和"搜索/筛选无结果"，不再一片空白
+    if (currentVisibleWbs.length === 0) {
+      const hasAnyWb =
+        typeof getWorldbookNames === "function" &&
+        getWorldbookNames().length > 0;
+      $wbContainer.html(
+        `<div style="padding:36px 16px; text-align:center; color:gray; border:1.5px dashed var(--SmartThemeBorderColor); border-radius:8px; font-size:13px; line-height:1.9;">${
+          hasAnyWb
+            ? `<i class="fa-solid fa-magnifying-glass" style="font-size:20px; opacity:0.5;"></i><br>没有找到符合条件的世界书<br><span style="font-size:12px; opacity:0.7;">换个关键词或筛选项试试~</span>`
+            : `<i class="fa-solid fa-book-open" style="font-size:20px; opacity:0.5;"></i><br>本地还没有世界书<br><span style="font-size:12px; opacity:0.7;">去酒馆里导入一本，或用上面的功能新建一本吧~</span>`
+        }</div>`,
+      );
+    }
     if (highlightName) {
       setTimeout(() => {
         const $highlightItem = $wbContainer.find(
@@ -10381,7 +10518,7 @@ $menuBtn.on("click", async () => {
       });
       // ---- 拖拽排序结束 ----
       $item.append(
-        `<div style="flex:1; min-width: 150px;"><div style="font-weight:bold;font-size:14px;"><i class="fa-solid fa-grip-vertical lulu-snap-drag-handle" style="cursor:grab; color:gray; margin-right:6px;" title="按住拖拽排序"></i><i class="fa-solid ${isDetailed ? "fa-puzzle-piece" : "fa-box-archive"}" style="color:var(--SmartThemeQuoteColor);"></i> ${name}</div>
+        `<div style="flex:1; min-width: 150px;"><div style="font-weight:bold;font-size:13px;"><i class="fa-solid fa-grip-vertical lulu-snap-drag-handle" style="cursor:grab; color:gray; margin-right:6px;" title="按住拖拽排序"></i><i class="fa-solid ${isDetailed ? "fa-puzzle-piece" : "fa-box-archive"}" style="color:var(--SmartThemeQuoteColor);"></i> ${name}</div>
 <div style="font-size:12px;color:gray;">${isDetailed ? `含 ${Object.values(snapData.data).reduce((a, c) => a + c.length, 0)} 个内容微调` : `含 ${(wbs || []).length} 项设定`}</div></div>`,
       );
       const $act = $(
@@ -10440,7 +10577,7 @@ $menuBtn.on("click", async () => {
               SillyTavern.POPUP_TYPE.CONFIRM,
             )) === SillyTavern.POPUP_RESULT.AFFIRMATIVE
           ) {
-            updateVariablesWith(
+            luluUpdateGlobalVars(
               (v) => {
                 if (typeof v.wb_snapshots === "string") {
                   try {
@@ -10462,6 +10599,12 @@ $menuBtn.on("click", async () => {
       snapFragment.appendChild($item[0]);
     });
     $snapContainer.append(snapFragment);
+    // ✨ 空状态：没有快照时给个提示，不再一片空白
+    if (sortedSnapNames.length === 0) {
+      $snapContainer.html(
+        `<div style="padding:24px 16px; text-align:center; color:gray; border:1.5px dashed var(--SmartThemeBorderColor); border-radius:8px; font-size:12px; line-height:1.9;"><i class="fa-solid fa-camera" style="font-size:18px; opacity:0.5;"></i><br>还没有快照<br><span style="font-size:12px; opacity:0.7;">给世界书拍个快照，改坏了随时能还原~</span></div>`,
+      );
+    }
   };
 
   let activeBindWb = "";
@@ -10481,7 +10624,7 @@ $menuBtn.on("click", async () => {
       : bChars
     ).forEach((char) => {
       $cont.append(
-        `<div style="display:flex; justify-content:space-between; align-items:center; background: var(--SmartThemeBotMesColor); border: 1px solid var(--SmartThemeBorderColor); border-radius:6px; padding: 10px;"><div style="display:flex; align-items:center; gap:12px;"><img src="${SillyTavern && typeof SillyTavern.getThumbnailUrl === "function" ? SillyTavern.getThumbnailUrl(char.name.includes("用户") ? "persona" : "avatar", char.avatar) : ""}" style="width:38px; height:38px; border-radius:50%; object-fit:cover; border:2px solid var(--SmartThemeQuoteColor); background:#333;"><div style="display:flex; flex-direction:column;"><span style="font-weight:bold; font-size:14px; margin-bottom:2px;">${char.name}</span><div style="font-size:11px;color:gray;">(${char.avatar})</div></div></div></div>`,
+        `<div style="display:flex; justify-content:space-between; align-items:center; background: var(--SmartThemeBotMesColor); border: 1px solid var(--SmartThemeBorderColor); border-radius:6px; padding: 10px;"><div style="display:flex; align-items:center; gap:12px;"><img src="${SillyTavern && typeof SillyTavern.getThumbnailUrl === "function" ? SillyTavern.getThumbnailUrl(char.name.includes("用户") ? "persona" : "avatar", char.avatar) : ""}" style="width:38px; height:38px; border-radius:50%; object-fit:cover; border:2px solid var(--SmartThemeQuoteColor); background:#333;"><div style="display:flex; flex-direction:column;"><span style="font-weight:bold; font-size:13px; margin-bottom:2px;">${char.name}</span><div style="font-size:11px;color:gray;">(${char.avatar})</div></div></div></div>`,
       );
     });
     if (bChars.length === 0)
@@ -10496,7 +10639,7 @@ $menuBtn.on("click", async () => {
   });
   // 全局快照批量删除
   $ui.find("#wb-btn-snap-batch-del").on("click", async () => {
-    let vars = getVariables({ type: "global" });
+    let vars = luluGetGlobalVars();
     let snapshots = vars.wb_snapshots;
     if (typeof snapshots === "string") {
       try {
@@ -10560,7 +10703,7 @@ $menuBtn.on("click", async () => {
     });
     if (toDelete.length === 0) return toastr.info("你没有勾选任何快照哦~");
 
-    updateVariablesWith(
+    luluUpdateGlobalVars(
       (v) => {
         if (typeof v.wb_snapshots === "string") {
           try {
@@ -10580,7 +10723,7 @@ $menuBtn.on("click", async () => {
     renderData();
   });
   $ui.find("#wb-btn-save-snap").on("click", async () => {
-    let vars = getVariables({ type: "global" });
+    let vars = luluGetGlobalVars();
     let snapshots = vars.wb_snapshots;
     if (typeof snapshots === "string") {
       try {
@@ -10652,7 +10795,7 @@ $menuBtn.on("click", async () => {
       if (overRes !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
     }
     snapshots[snapName] = { type: "simple", wbs: currentActive };
-    updateVariablesWith(
+    luluUpdateGlobalVars(
       (v) => {
         v.wb_snapshots = snapshots;
         return v;
@@ -10676,7 +10819,7 @@ $menuBtn.on("click", async () => {
         .sort((a, b) => {
           const ac = snapTempList.includes(a),
             bc = snapTempList.includes(b);
-          return ac === bc ? a.localeCompare(b, "zh-CN") : ac ? -1 : 1;
+          return ac === bc ? luluZhCompare(a, b) : ac ? -1 : 1;
         })
         .forEach((w) => {
           if (kw && !w.toLowerCase().includes(kw)) return;
@@ -10718,7 +10861,7 @@ $menuBtn.on("click", async () => {
   $ui.find("#wb-btn-edit-save").on("click", async () => {
     const nName = $ui.find("#wb-edit-snap-name").val().trim();
     if (!nName) return toastr.warning("名称不能为空哦。");
-    updateVariablesWith(
+    luluUpdateGlobalVars(
       (v) => {
         if (typeof v.wb_snapshots === "string") {
           try {
@@ -10774,7 +10917,7 @@ $menuBtn.on("click", async () => {
       filteredWbs.forEach((wbName) => {
         const selectedCount = (detailedSnapData[wbName] || []).length;
         const $item = $(
-          `<div class="dsnap-wb-item" data-wbname="${wbName}">${wbName} <b style="color:var(--okGreen); display:${selectedCount > 0 ? "inline" : "none"};">(${selectedCount})</b></div>`,
+          `<div class="dsnap-wb-item" data-wbname="${wbName}">${wbName} <b style="color:var(--okGreen, #51cf66); display:${selectedCount > 0 ? "inline" : "none"};">(${selectedCount})</b></div>`,
         );
         $item.on("click", async () => {
           if ($item.hasClass("active")) return;
@@ -10843,15 +10986,17 @@ $menuBtn.on("click", async () => {
         );
       else if (sortMode === "az")
         displayEntries.sort((a, b) =>
-          (a.name || "").localeCompare(b.name || "", "zh-CN"),
+          luluZhCompare(a.name || "", b.name || ""),
         );
       else if (sortMode === "za")
         displayEntries.sort((a, b) =>
-          (b.name || "").localeCompare(a.name || "", "zh-CN"),
+          luluZhCompare(b.name || "", a.name || ""),
         );
       displayEntries.forEach((entry) => {
         const isChecked = (detailedSnapData[wbName] || []).includes(entry.uid);
-        const rawStateColor = entry.enabled ? "var(--okGreen)" : "gray",
+        const rawStateColor = entry.enabled
+            ? "var(--okGreen, #51cf66)"
+            : "gray",
           sType = entry.strategy?.type,
           StrategyTxt = sType === "selective" ? "🟩 匹配" : "🟦 常驻",
           posBadge = formatPositionBadge(entry.position);
@@ -10919,9 +11064,14 @@ $menuBtn.on("click", async () => {
     await withLoadingOverlay(async () => {
       const allWbNames = getWorldbookNames(),
         targetWbNames = Object.keys(data);
-      for (const wbName of allWbNames) {
-        let wbEntries = await getWorldbook(wbName),
-          changed = false;
+      // ✨ 并行读取所有书（原来是逐本串行 await）；写入仍逐本进行，保证顺序安全
+      const allEntries = await Promise.all(
+        allWbNames.map((wbName) => getWorldbook(wbName)),
+      );
+      for (let i = 0; i < allWbNames.length; i++) {
+        const wbName = allWbNames[i];
+        const wbEntries = allEntries[i];
+        let changed = false;
         if (targetWbNames.includes(wbName)) {
           const enabledUIDs = data[wbName];
           wbEntries.forEach((entry) => {
@@ -10953,7 +11103,7 @@ $menuBtn.on("click", async () => {
     .on("click", async () => {
       const name = $ui.find("#dsnap-name").val().trim();
       if (!name) return toastr.warning("也要留下好听的名字啊！");
-      let vars = getVariables({ type: "global" });
+      let vars = luluGetGlobalVars();
       let snapshots = vars.wb_snapshots;
       if (typeof snapshots === "string") {
         try {
@@ -11015,7 +11165,7 @@ $menuBtn.on("click", async () => {
       if (name !== detailedSnapOldName && detailedSnapOldName)
         delete snapshots[detailedSnapOldName];
       snapshots[name] = { type: "detailed", data: detailedSnapData };
-      updateVariablesWith(
+      luluUpdateGlobalVars(
         (v) => {
           v.wb_snapshots = snapshots;
           return v;
@@ -11210,6 +11360,10 @@ $menuBtn.on("click", async () => {
 
     renderEntryList();
 
+    // ✨ 首次渲染完成后再拍一次快照作为"未改动"基准：
+    // 防止渲染过程中的字段规范化被误判成"用户修改"
+    originalTuneEntries = JSON.parse(JSON.stringify(tuneEntries));
+
     // ✨ 初始化条目页按钮组的折叠状态（电脑手机统一折叠）
     {
       const isCollapsed =
@@ -11325,7 +11479,7 @@ $menuBtn.on("click", async () => {
         const b = groupBuckets[grp];
         // 对照表还原的显示成【前缀】→ 长分组名，让你一眼看出被正确归位
         const labelHtml = b.resolved
-          ? `【${b.prefix}】 <i class="fa-solid fa-arrow-right" style="font-size:10px; color:gray; margin:0 4px;"></i> <strong style="color:#51cf66;">${grp}</strong> <span style="font-size:10px; color:gray;">(来自对照表)</span>`
+          ? `【${b.prefix}】 <i class="fa-solid fa-arrow-right" style="font-size:11px; color:gray; margin:0 4px;"></i> <strong style="color:#51cf66;">${grp}</strong> <span style="font-size:11px; color:gray;">(来自对照表)</span>`
           : `【${b.prefix}】 <span style="font-size:11px; color:gray;">→ 分组「${grp}」</span>`;
         listHtml += `
           <label style="display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:6px; background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); margin-bottom:6px; cursor:pointer;">
@@ -11795,7 +11949,7 @@ $menuBtn.on("click", async () => {
           border: "1px solid var(--SmartThemeBorderColor)",
           "border-radius": "6px",
           cursor: "pointer",
-          "font-size": "12.5px",
+          "font-size": "12px",
         });
         const $chk = $("<input>", { type: "checkbox" })
           .addClass("lulu-wrap-layer-chk")
@@ -11952,8 +12106,6 @@ $menuBtn.on("click", async () => {
 
     entryBatchSelected.clear();
     $ui.find("#wb-entry-batch-count").text("0");
-    if (typeof luluTokenCache !== "undefined")
-      delete luluTokenCache[tuneWbName];
     renderEntryList();
 
     if (action === "add") {
@@ -12516,13 +12668,9 @@ $menuBtn.on("click", async () => {
         (a, b) => (b.position?.depth ?? 0) - (a.position?.depth ?? 0),
       );
     else if (sortMode === "az")
-      sortedEntries.sort((a, b) =>
-        (a.name || "").localeCompare(b.name || "", "zh-CN"),
-      );
+      sortedEntries.sort((a, b) => luluZhCompare(a.name || "", b.name || ""));
     else if (sortMode === "za")
-      sortedEntries.sort((a, b) =>
-        (b.name || "").localeCompare(a.name || "", "zh-CN"),
-      );
+      sortedEntries.sort((a, b) => luluZhCompare(b.name || "", a.name || ""));
 
     $ui
       .find("#wb-btn-entry-batch-select-all")
@@ -12935,7 +13083,7 @@ $menuBtn.on("click", async () => {
           : "rgba(125,125,125,0.08)";
         const dynamicOpacity = isEn ? "1" : "0.55";
         const $item = $(
-          `<div class="lulu-wb-entry-item" style="display:flex; align-items:flex-start; gap:12px; padding:10px; border-left: 4px solid ${isEn ? "var(--okGreen)" : "gray"}; background:${dynamicBg}; border-radius:4px; opacity:${dynamicOpacity}; transition: 0.2s;"></div>`,
+          `<div class="lulu-wb-entry-item" style="display:flex; align-items:flex-start; gap:12px; padding:10px; border-left: 4px solid ${isEn ? "var(--okGreen, #51cf66)" : "gray"}; background:${dynamicBg}; border-radius:4px; opacity:${dynamicOpacity}; transition: 0.2s;"></div>`,
         );
 
         $item.hover(
@@ -12969,7 +13117,7 @@ $menuBtn.on("click", async () => {
               // ✨ 只更新当前这一条的外观，不整个列表重画（更顺滑）
               const _isEn = entry.enabled;
               $item.css({
-                "border-left-color": _isEn ? "var(--okGreen)" : "gray",
+                "border-left-color": _isEn ? "var(--okGreen, #51cf66)" : "gray",
                 background: _isEn
                   ? "var(--SmartThemeBotMesColor)"
                   : "rgba(125,125,125,0.08)",
@@ -12988,11 +13136,11 @@ $menuBtn.on("click", async () => {
           entry._lulu_ui_group &&
           entry._lulu_ui_group.trim() !== ""
         ) {
-          groupTagHtml = `<span style="font-size:10px; background:rgba(252,196,25,0.15); border:1px solid #fcc419; color:#fcc419; padding:2px 5px; border-radius:4px; margin-right:6px; vertical-align:middle; line-height:1;"><i class="fa-solid fa-folder"></i> ${entry._lulu_ui_group}</span>`;
+          groupTagHtml = `<span style="font-size:11px; background:rgba(252,196,25,0.15); border:1px solid #fcc419; color:#fcc419; padding:2px 5px; border-radius:4px; margin-right:6px; vertical-align:middle; line-height:1;"><i class="fa-solid fa-folder"></i> ${entry._lulu_ui_group}</span>`;
         }
 
         const $info = $(
-          `<div style="flex:1; min-width:0; cursor:${isEntryBatchMode ? "pointer" : "default"};"><div style="font-weight:bold; margin-bottom: 5px; font-size:14px; word-break:break-all; display:flex; align-items:center;">${groupTagHtml}${isLockedEntry ? '<i class="fa-solid fa-lock" style="color:#fcc419; margin-right:4px; font-size:12px;" title="已锁定"></i>' : ""}${entry.name || "未定义模块"}</div>
+          `<div style="flex:1; min-width:0; cursor:${isEntryBatchMode ? "pointer" : "default"};"><div style="font-weight:bold; margin-bottom: 5px; font-size:13px; word-break:break-all; display:flex; align-items:center;">${groupTagHtml}${isLockedEntry ? '<i class="fa-solid fa-lock" style="color:#fcc419; margin-right:4px; font-size:12px;" title="已锁定"></i>' : ""}${entry.name || "未定义模块"}</div>
 <div style="font-size:11px;color:gray;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${strategy.type !== "selective" ? '<span class="badge-blue">常驻</span>' : '<span class="badge-green">匹配</span>'}${posBadgeHtml} <span style="margin-left:5px;">${keysInfo}</span></div>${previewHtml}</div>`,
         );
 
@@ -13105,7 +13253,11 @@ $menuBtn.on("click", async () => {
         );
 
       const escapeReg = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const escapeHtml = (s) => String(s).replace(/</g, "<").replace(/>/g, ">");
+      const escapeHtml = (s) =>
+        String(s)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
 
       let matchList = [];
       let curMatchIdx = -1;
@@ -13223,7 +13375,7 @@ $menuBtn.on("click", async () => {
         Object.keys(byEntry).forEach((eIdx) => {
           const e = tuneEntries[eIdx];
           const items = byEntry[eIdx];
-          html += `<div style="margin-bottom:8px;"><div style="font-weight:bold; font-size:12.5px; color:var(--SmartThemeBodyColor); margin-bottom:2px;"><i class="fa-solid fa-file-lines" style="color:var(--SmartThemeQuoteColor); margin-right:4px;"></i>${escapeHtml(e.name || "(未命名条目)")} <span style="color:gray; font-weight:normal;">(${items.length}处)</span></div>`;
+          html += `<div style="margin-bottom:8px;"><div style="font-weight:bold; font-size:12px; color:var(--SmartThemeBodyColor); margin-bottom:2px;"><i class="fa-solid fa-file-lines" style="color:var(--SmartThemeQuoteColor); margin-right:4px;"></i>${escapeHtml(e.name || "(未命名条目)")} <span style="color:gray; font-weight:normal;">(${items.length}处)</span></div>`;
           items.forEach((mt) => {
             const text = getFieldText(mt);
             const start = mt.start;
@@ -13234,7 +13386,7 @@ $menuBtn.on("click", async () => {
             const suffix = end + CTX < text.length ? "…" : "";
             const isActive = mt.globalIdx === curMatchIdx;
             const markColor = isActive ? "#ff922b" : "#fcc419";
-            html += `<div class="lulu-rep-snippet" data-gidx="${mt.globalIdx}" style="padding:4px 6px; line-height:1.5; border-radius:4px; cursor:pointer; margin-bottom:2px; ${isActive ? "background:rgba(255,146,43,0.15); border:1px solid #ff922b;" : "border:1px solid transparent;"}"><span style="font-size:10px; color:var(--SmartThemeQuoteColor); background:rgba(125,125,125,0.15); padding:1px 4px; border-radius:3px; margin-right:4px;">${mt.fieldLabel}</span>${prefix}${escapeHtml(before)}<mark style="background:${markColor}; color:#000; padding:0 2px; border-radius:2px; font-weight:bold;">${escapeHtml(mt.matchText)}</mark>${escapeHtml(after)}${suffix} <i class="fa-solid fa-pen-to-square lulu-rep-one" data-gidx="${mt.globalIdx}" style="color:#51cf66; margin-left:4px;" title="替换这一处"></i></div>`;
+            html += `<div class="lulu-rep-snippet" data-gidx="${mt.globalIdx}" style="padding:4px 6px; line-height:1.5; border-radius:4px; cursor:pointer; margin-bottom:2px; ${isActive ? "background:rgba(255,146,43,0.15); border:1px solid #ff922b;" : "border:1px solid transparent;"}"><span style="font-size:11px; color:var(--SmartThemeQuoteColor); background:rgba(125,125,125,0.15); padding:1px 4px; border-radius:3px; margin-right:4px;">${mt.fieldLabel}</span>${prefix}${escapeHtml(before)}<mark style="background:${markColor}; color:#000; padding:0 2px; border-radius:2px; font-weight:bold;">${escapeHtml(mt.matchText)}</mark>${escapeHtml(after)}${suffix} <i class="fa-solid fa-pen-to-square lulu-rep-one" data-gidx="${mt.globalIdx}" style="color:#51cf66; margin-left:4px;" title="替换这一处"></i></div>`;
           });
           html += "</div>";
         });
@@ -13297,8 +13449,6 @@ $menuBtn.on("click", async () => {
           e.keys = arr;
         }
 
-        if (typeof luluTokenCache !== "undefined")
-          delete luluTokenCache[tuneWbName];
         renderEntryList();
 
         const prevIdx = gidx;
@@ -13449,9 +13599,7 @@ $menuBtn.on("click", async () => {
       return;
     }
 
-    // 刷新列表 + 让 Token 缓存失效
-    if (typeof luluTokenCache !== "undefined")
-      delete luluTokenCache[tuneWbName];
+    // 刷新列表
     renderEntryList();
 
     toastr.success(
@@ -13520,7 +13668,7 @@ $menuBtn.on("click", async () => {
       }
 
       // 读取角色快照
-      let vars = getVariables({ type: "global" });
+      let vars = luluGetGlobalVars();
       let charSnaps = vars.wb_char_snapshots;
       if (typeof charSnaps === "string") {
         try {
@@ -13615,7 +13763,7 @@ $menuBtn.on("click", async () => {
       }
 
       // 写入角色快照
-      updateVariablesWith(
+      luluUpdateGlobalVars(
         (v) => {
           if (typeof v.wb_char_snapshots === "string") {
             try {
@@ -13655,7 +13803,7 @@ $menuBtn.on("click", async () => {
       if (!tuneWbName) return toastr.warning("当前没有正在编辑的世界书哦~");
 
       // 读取所有快照
-      let vars = getVariables({ type: "global" });
+      let vars = luluGetGlobalVars();
       let snapshots = vars.wb_snapshots;
       if (typeof snapshots === "string") {
         try {
@@ -13748,7 +13896,7 @@ $menuBtn.on("click", async () => {
           listHtml += `
             <div class="lulu-entry-snap-item" data-snapname="${safeName}" style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:10px 12px; background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:6px; flex-wrap:wrap;">
               <div style="flex:1; min-width:120px;">
-                <div style="font-weight:bold; font-size:14px; word-break:break-all;"><i class="fa-solid ${isDetailed ? "fa-puzzle-piece" : "fa-box-archive"}" style="color:var(--SmartThemeQuoteColor); margin-right:4px;"></i>${name}</div>
+                <div style="font-weight:bold; font-size:13px; word-break:break-all;"><i class="fa-solid ${isDetailed ? "fa-puzzle-piece" : "fa-box-archive"}" style="color:var(--SmartThemeQuoteColor); margin-right:4px;"></i>${name}</div>
                 <div style="font-size:11px; color:gray; margin-top:4px;">${infoTxt}</div>
               </div>
               <button class="menu_button interactable btn-success wb-nowrap-btn lulu-entry-snap-apply" data-snapname="${safeName}" style="margin:0; padding:6px 14px; font-size:12px; border:none; flex-shrink:0;">应用 <i class="fa-solid fa-play"></i></button>
@@ -13861,7 +14009,7 @@ $menuBtn.on("click", async () => {
             }
           });
 
-          updateVariablesWith(
+          luluUpdateGlobalVars(
             (v) => {
               // 删全局快照
               if (typeof v.wb_snapshots === "string") {
@@ -14068,18 +14216,14 @@ $menuBtn.on("click", async () => {
     if (isSuccess === false) return; // 补丁：如果没成功，立刻停下，不要往下弹绿条了！
 
     originalTuneEntries = JSON.parse(JSON.stringify(tuneEntries));
-    // 修复补丁：先判断存不存在，防止代码在这里卡死崩溃
-    if (typeof luluTokenCache !== "undefined") {
-      delete luluTokenCache[tuneWbName]; // Token缓存失效（功能7）
-    }
-    // 修复补丁结束
     toastr.success(`[${tuneWbName}] 的修改已经成功保存啦！`);
     if (tuneReturnView === "#wb-main-view") renderData();
     else if (tuneReturnView === "#wb-char-view") renderCharView();
   });
   $ui.find("#wb-btn-entry-cancel").on("click", async () => {
     let isDirty =
-      JSON.stringify(tuneEntries) !== JSON.stringify(originalTuneEntries);
+      luluStableStringify(tuneEntries) !==
+      luluStableStringify(originalTuneEntries);
 
     if (!isDirty && tuneDetailIndex !== -1) {
       const e = tuneEntries[tuneDetailIndex];
@@ -14134,10 +14278,14 @@ $menuBtn.on("click", async () => {
 
   if (window.innerWidth <= 768) {
     refreshMobileVh();
-    window.addEventListener("resize", refreshMobileVh);
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener("resize", refreshMobileVh);
-      window.visualViewport.addEventListener("scroll", refreshMobileVh);
+    // 这三个全局监听只绑一次，避免每开一次面板就重复叠加（手机端越用越卡的根源）
+    if (!window.__luluMobileVhBound) {
+      window.__luluMobileVhBound = true;
+      window.addEventListener("resize", refreshMobileVh);
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", refreshMobileVh);
+        window.visualViewport.addEventListener("scroll", refreshMobileVh);
+      }
     }
   }
 
@@ -14462,11 +14610,6 @@ $menuBtn.on("click", async () => {
       $ui.find("#wb-det-advanced-toggle").is(":checked") ? "true" : "false",
     );
 
-    // 补丁2：给暂存按钮也加上 Token 缓存失效，防患于未然
-    if (typeof luluTokenCache !== "undefined") {
-      delete luluTokenCache[tuneWbName];
-    }
-
     if (typeof toastr !== "undefined") {
       toastr.info("当前内容已暂存，彻底保存还要另外点绿色的【确认】哦！");
     }
@@ -14640,7 +14783,8 @@ $menuBtn.on("click", async () => {
       //    这样在聊天消息很多的大DOM页面上，可以减少后台空转开销
       if (!isNativeMagicEnabled && window.lulu_native_cleaned) return;
 
-      const $entries = $(".world_entry");
+      // ✨ 只选真实条目（带 uid 属性的）：排除酒馆页面底部常驻的隐藏条目模板，不然计数永远多 1
+      const $entries = $(".world_entry[uid]");
       if ($entries.length === 0) return;
       const $container = $entries.first().parent();
       if (!$container.length) return;
@@ -14863,13 +15007,13 @@ $menuBtn.on("click", async () => {
         const isDraggable = gName !== "📁 未分类条目";
         if ($header.length === 0) {
           const dragIconHtml = isDraggable
-            ? `<i class="fa-solid fa-hand-paper lulu-drag-handle" style="cursor:grab; font-size:14px; color:gray; padding-right:8px; display:inline-flex; align-items:center;" title="按住拖拽排序分类"></i>`
+            ? `<i class="fa-solid fa-hand-paper lulu-drag-handle" style="cursor:grab; font-size:13px; color:gray; padding-right:8px; display:inline-flex; align-items:center;" title="按住拖拽排序分类"></i>`
             : "";
           const sortButtonsHtml = !isDraggable
             ? ""
-            : `<div style="display:flex; gap: 6px; margin-right: 15px;" class="lulu-sort-btns"><i class="fa-solid fa-arrow-up lulu-move-up" title="将此分类上移" style="padding:4px; font-size:14px; color:gray; transition:0.2s; cursor:pointer;"></i><i class="fa-solid fa-arrow-down lulu-move-down" title="将此分类下移" style="padding:4px; font-size:14px; color:gray; transition:0.2s; cursor:pointer;"></i></div>`;
+            : `<div style="display:flex; gap: 6px; margin-right: 15px;" class="lulu-sort-btns"><i class="fa-solid fa-arrow-up lulu-move-up" title="将此分类上移" style="padding:4px; font-size:13px; color:gray; transition:0.2s; cursor:pointer;"></i><i class="fa-solid fa-arrow-down lulu-move-down" title="将此分类下移" style="padding:4px; font-size:13px; color:gray; transition:0.2s; cursor:pointer;"></i></div>`;
           $header = $(
-            `<div class="lulu-native-group-header" data-groupname="${gName}" draggable="${isDraggable ? "true" : "false"}" style="background: var(--SmartThemeBlurTintColor, rgba(0,0,0,0.15)); padding:10px 14px; margin: 10px 0 6px 0; border-radius:6px; font-weight:bold; color:var(--SmartThemeQuoteColor, #70a1ff); border:1px solid var(--SmartThemeBorderColor, gray); display:flex; justify-content:space-between; align-items:center; user-select:none; transition: 0.2s; flex-shrink: 0; align-content: center; gap: 6px; flex-wrap: wrap;"><span style="display:flex; align-items:center; min-width:0;">${dragIconHtml}<span class="lulu-click-fold" style="display:flex; align-items:center; cursor:pointer; min-width:0;"><i class="fa-solid ${isFolded ? "fa-chevron-right" : "fa-chevron-down"} lulu-fold-icon" style="margin-right:8px; width: 16px; text-align:center; flex-shrink:0;"></i><span style="font-size: 14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" class="lulu-g-title">${gName}</span><span style="font-size: 11px; font-weight: normal; color: gray; margin-left: 6px; flex-shrink:0;" class="lulu-g-count">(${groupCounts[gName]}项)</span></span></span><span style="display:flex; align-items:center; gap:6px; flex-shrink:0;">${sortButtonsHtml}<i class="fa-solid fa-toggle-off lulu-grp-toggle" title="一键开关本组所有条目" data-next="on" style="padding:5px; font-size:15px; color:gray; cursor:pointer; transition:0.2s;"></i></span></div>`,
+            `<div class="lulu-native-group-header" data-groupname="${gName}" draggable="${isDraggable ? "true" : "false"}" style="background: var(--SmartThemeBlurTintColor, rgba(0,0,0,0.15)); padding:10px 14px; margin: 10px 0 6px 0; border-radius:6px; font-weight:bold; color:var(--SmartThemeQuoteColor, #70a1ff); border:1px solid var(--SmartThemeBorderColor, gray); display:flex; justify-content:space-between; align-items:center; user-select:none; transition: 0.2s; flex-shrink: 0; align-content: center; gap: 6px; flex-wrap: wrap;"><span style="display:flex; align-items:center; min-width:0;">${dragIconHtml}<span class="lulu-click-fold" style="display:flex; align-items:center; cursor:pointer; min-width:0;"><i class="fa-solid ${isFolded ? "fa-chevron-right" : "fa-chevron-down"} lulu-fold-icon" style="margin-right:8px; width: 16px; text-align:center; flex-shrink:0;"></i><span style="font-size: 15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" class="lulu-g-title">${gName}</span><span style="font-size: 11px; font-weight: normal; color: gray; margin-left: 6px; flex-shrink:0;" class="lulu-g-count">(${groupCounts[gName]}项)</span></span></span><span style="display:flex; align-items:center; gap:6px; flex-shrink:0;">${sortButtonsHtml}<i class="fa-solid fa-toggle-off lulu-grp-toggle" title="一键开关本组所有条目" data-next="on" style="padding:5px; font-size:15px; color:gray; cursor:pointer; transition:0.2s;"></i></span></div>`,
           );
           $header.hover(
             function () {
@@ -15255,6 +15399,9 @@ $menuBtn.on("click", async () => {
     }
   };
 
+  // ✨ 会话级缓存：本次会话已经查过的卡不再重复下载角色卡（切聊天/翻页不再反复请求）
+  const luluAutoCheckedAvatars = new Set();
+
   // —— 核心：检测当前打开的这张角色卡 ——
   const luluAutoCheckCurrentChar = async () => {
     try {
@@ -15276,12 +15423,20 @@ $menuBtn.on("click", async () => {
 
       // ✨ 这张卡已经处理/忽略过 → 永久跳过，不再打扰
       if (isCharHandled(avatar)) return;
+      // ✨ 本次会话已经查过这张卡 → 跳过（下载整张角色卡很贵，不重复来）
+      if (luluAutoCheckedAvatars.has(avatar)) return;
 
       const embedded = await luluAutoReadEmbeddedBook(avatar);
-      if (!embedded) return;
+      if (!embedded) {
+        luluAutoCheckedAvatars.add(avatar);
+        return;
+      }
 
       const bookName = embedded.name;
-      if (!bookName) return;
+      if (!bookName) {
+        luluAutoCheckedAvatars.add(avatar);
+        return;
+      }
 
       // 🚫 如果这本书被标记了“跳过全库对照”，自动检测也不再打扰
       try {
@@ -15292,15 +15447,18 @@ $menuBtn.on("click", async () => {
           Array.isArray(luluAutoScanSkipList) &&
           luluAutoScanSkipList.includes(bookName)
         ) {
+          luluAutoCheckedAvatars.add(avatar);
           return;
         }
       } catch (e) {}
 
-      // 本地没有同名书 → 不算污染，跳过（但不永久标记，万一以后创建了同名书还能提醒）
+      // 本地没有同名书 → 不算污染。本次会话内不再重复下载这张卡；
+      // 不做永久标记，下次启动会话还会再查，万一以后创建了同名书还能提醒
       if (
         typeof getWorldbookNames !== "function" ||
         !getWorldbookNames().includes(bookName)
       ) {
+        luluAutoCheckedAvatars.add(avatar);
         return;
       }
 
@@ -15315,6 +15473,7 @@ $menuBtn.on("click", async () => {
 
       // 内容一致 → 没被污染 → ✨ 永久标记，以后你自己改也不会再来烦你
       if (luluAutoBookSig(localEntries) === luluAutoBookSig(converted)) {
+        luluAutoCheckedAvatars.add(avatar);
         markCharHandled(avatar);
         return;
       }
@@ -15325,7 +15484,10 @@ $menuBtn.on("click", async () => {
 
       // ========== 自包含差异面板（与主动“体检/救援”同款） ==========
       const luluAutoEscHtml = (s) =>
-        String(s).replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">");
+        String(s)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
 
       const luluAutoDiffText = (oldStr, newStr) => {
         const oldLines = String(oldStr || "").split("\n");
@@ -15403,7 +15565,7 @@ $menuBtn.on("click", async () => {
                       <div style="max-height:200px; overflow:auto; background:rgba(0,0,0,0.15); border-radius:4px; padding:4px; white-space:pre-wrap; word-break:break-word;">${diff.newHtml || "(空)"}</div>
                     </div>
                   </div>
-                  <div style="font-size:10px; color:gray; margin-top:4px;"><span style="background:rgba(255,107,107,0.25); padding:0 4px;">红底</span>=卡内有本地删了　<span style="background:rgba(81,207,102,0.25); padding:0 4px;">绿底</span>=本地新加的</div>
+                  <div style="font-size:11px; color:gray; margin-top:4px;"><span style="background:rgba(255,107,107,0.25); padding:0 4px;">红底</span>=卡内有本地删了　<span style="background:rgba(81,207,102,0.25); padding:0 4px;">绿底</span>=本地新加的</div>
                 </div>
               </div>`;
           });
@@ -15470,7 +15632,7 @@ $menuBtn.on("click", async () => {
            <div style="font-size:13px; margin-bottom:8px;"><i class="fa-solid fa-robot" style="color:var(--SmartThemeQuoteColor); width:18px;"></i> 角色：<strong>${charName || "当前角色"}</strong></div>
            <div style="font-size:13px;"><i class="fa-solid fa-book" style="color:var(--SmartThemeQuoteColor); width:18px;"></i> 世界书：<strong>${bookName}</strong></div>
          </div>
-         <div style="font-size:12.5px; color:var(--SmartThemeBodyColor); line-height:1.7; margin-bottom:12px;">
+         <div style="font-size:12px; color:var(--SmartThemeBodyColor); line-height:1.7; margin-bottom:12px;">
            这张卡自带的世界书原版，和本地同名的这本<strong style="color:var(--SmartThemeQuoteColor);">内容不一样</strong>了。<br>
            <span style="color:gray;">可能是导入时被本地旧书接管，也可能是你改过本地这本、现在想还原成卡里的原版~</span>
          </div>
@@ -15561,12 +15723,32 @@ $menuBtn.on("click", async () => {
       }
       const es = ctx.eventSource;
       const et = ctx.eventTypes;
-      const delayedCheck = () => setTimeout(luluAutoCheckCurrentChar, 800);
+      // 防抖：连续事件只保留最后一次，避免多个检测排队下载角色卡
+      let autoCheckTimer = null;
+      const delayedCheck = () => {
+        clearTimeout(autoCheckTimer);
+        autoCheckTimer = setTimeout(luluAutoCheckCurrentChar, 800);
+      };
 
       if (et.CHAT_CHANGED) es.on(et.CHAT_CHANGED, delayedCheck);
       if (et.CHARACTER_PAGE_LOADED)
         es.on(et.CHARACTER_PAGE_LOADED, delayedCheck);
-      if (et.CHARACTER_EDITED) es.on(et.CHARACTER_EDITED, delayedCheck);
+      if (et.CHARACTER_EDITED)
+        es.on(et.CHARACTER_EDITED, () => {
+          // 这张卡被编辑过 → 清掉它的会话缓存，允许重新检测一次
+          try {
+            const c2 =
+              typeof SillyTavern !== "undefined"
+                ? SillyTavern.getContext()
+                : null;
+            const av =
+              c2 && c2.characters && c2.characterId != null
+                ? c2.characters[c2.characterId]?.avatar
+                : null;
+            if (av) luluAutoCheckedAvatars.delete(av);
+          } catch (e) {}
+          delayedCheck();
+        });
 
       console.log("Lù-chan: 世界书污染自动检测已挂载~（永久记忆版）");
     } catch (e) {
@@ -15585,6 +15767,31 @@ $menuBtn.on("click", async () => {
     dialog:has(#lulu-scan-char-select-dialog) * {
         box-sizing: border-box !important;
         max-width: 100% !important;
+    }
+
+    /* ✨ 全局细滚动条：面板与各弹窗统一，替换又粗又灰的默认滚动条 */
+    dialog,
+    .wb-manager-dialog,
+    #lulu-sticky-note-window {
+        scrollbar-width: thin;
+        scrollbar-color: var(--SmartThemeBorderColor, rgba(125,125,125,0.5)) transparent;
+    }
+    dialog ::-webkit-scrollbar,
+    .wb-manager-dialog ::-webkit-scrollbar,
+    #lulu-sticky-note-window ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    dialog ::-webkit-scrollbar-thumb,
+    .wb-manager-dialog ::-webkit-scrollbar-thumb,
+    #lulu-sticky-note-window ::-webkit-scrollbar-thumb {
+        background: var(--SmartThemeBorderColor, rgba(125,125,125,0.5));
+        border-radius: 4px;
+    }
+    dialog ::-webkit-scrollbar-track,
+    .wb-manager-dialog ::-webkit-scrollbar-track,
+    #lulu-sticky-note-window ::-webkit-scrollbar-track {
+        background: transparent;
     }
 
     /* 极速快照控制台：加一点右侧安全间距 */
