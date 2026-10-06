@@ -8497,7 +8497,7 @@ $menuBtn.on("click", async () => {
         );
         renderCharView();
       }
-    } else if (btnRes === 2) {
+    } else if (btnRes === 999) {
       if (isWbLocked(bookName))
         return toastr.warning(`🔒 [${bookName}] 已锁定，无法覆盖哦~`);
       const confirm2 = await SillyTavern.callGenericPopup(
