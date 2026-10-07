@@ -1731,15 +1731,21 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
         }
         /* ✨ 贴边半隐：用 transform 平移实现（GPU 合成，不触发布局），left/top 保持不动 */
         #lulu-wb-floating-btn[data-docked-edge="left"] {
-            transform: translateX(-55%) !important;
+            transform: translateX(-70%) !important;
         }
         #lulu-wb-floating-btn[data-docked-edge="right"] {
-            transform: translateX(55%) !important;
+            transform: translateX(70%) !important;
         }
-        /* hover 或菜单展开时整条滑出 */
-        #lulu-wb-floating-btn[data-docked-edge]:hover,
+        /* 菜单展开时整条滑出（触屏也生效） */
         #lulu-wb-floating-btn.lulu-awake {
             transform: translateX(0) !important;
+        }
+        /* 鼠标悬停整条滑出：只在有真悬停能力的设备上启用。
+           触屏点按会留下"假 hover"状态，会让球永远被滑出规则顶住、缩不进屏幕侧边 */
+        @media (hover: hover) {
+            #lulu-wb-floating-btn[data-docked-edge]:hover {
+                transform: translateX(0) !important;
+            }
         }
         #lulu-wb-floating-btn img.lulu-float-img {
             width: 90% !important;
@@ -1855,6 +1861,7 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
             e.stopPropagation();
             clearTimeout(clickTimer);
             $floatBtn.find(".lulu-float-menu-opts").removeClass("show");
+            btnNode.classList.remove("lulu-awake");
             window.luluOpenQuickSnapshotView();
           }),
         )
@@ -1864,6 +1871,8 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
             html: '<i class="fa-solid fa-earth-asia" style="color:#51cf66;"></i> 全局',
           }).on("click", (e) => {
             e.stopPropagation();
+            $floatBtn.find(".lulu-float-menu-opts").removeClass("show");
+            btnNode.classList.remove("lulu-awake");
             window.luluWbInitTabType = "global";
             $("#option_lulu_wb_manager").click();
           }),
@@ -1874,6 +1883,8 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
             html: '<i class="fa-solid fa-user-astronaut" style="color:#339af0;"></i> 当前角色',
           }).on("click", (e) => {
             e.stopPropagation();
+            $floatBtn.find(".lulu-float-menu-opts").removeClass("show");
+            btnNode.classList.remove("lulu-awake");
             window.luluWbInitTabType = "char";
             $("#option_lulu_wb_manager").click();
           }),
@@ -1881,7 +1892,7 @@ const toggleFloatingButton = (show, forceUpdate = false) => {
     )
     .appendTo("#app_container, body");
   const btnNode = $floatBtn[0];
-  // ✨ 贴边停靠 & 位置记忆（新手感：永远完整可见，不再半隐藏）
+  // ✨ 贴边停靠（transform 半隐）& 位置记忆
   const getWinSize = () => {
     const realWin =
       window.parent && window.parent !== window ? window.parent : window;
@@ -3673,8 +3684,8 @@ $menuBtn.on("click", async () => {
                 </div>
 
                 <div class="wb-btn-group" id="wb-main-ops-grid">
-                    <div class="wb-action-btn wb-nowrap-btn btn-primary" id="wb-btn-save-snap"><i class="fa-solid fa-box-archive"></i> 将当前勾选存为快照 (全局)</div>
-                    <div class="wb-action-btn wb-nowrap-btn btn-primary" id="wb-btn-create-detail-snap"><i class="fa-solid fa-puzzle-piece"></i> 创建复合快照 (全局)</div>
+                    <div class="wb-action-btn wb-nowrap-btn btn-primary" id="wb-btn-save-snap"><i class="fa-solid fa-box-archive"></i> 将当前勾选存为快照 </div>
+                    <div class="wb-action-btn wb-nowrap-btn btn-primary" id="wb-btn-create-detail-snap"><i class="fa-solid fa-puzzle-piece"></i> 创建复合快照 </div>
                 </div>
 
                 <div id="wb-batch-actions" style="display: none; background: rgba(0,0,0, 0.15); border: 1px dashed var(--SmartThemeQuoteColor); border-radius: 6px; padding: 10px; margin-bottom: 10px; flex-direction: column; gap: 10px;">
@@ -3864,8 +3875,8 @@ $menuBtn.on("click", async () => {
                         </label>
                         <!-- ✨📌 按前缀分组 + 便签模式（手机端两个按钮合并占一格） -->
                         <div id="lulu-prefix-sticky-pair" style="display:flex; gap:8px; align-items:center;">
-                            <button id="wb-btn-prefix-group" class="menu_button interactable wb-nowrap-btn btn-primary" style="margin: 0; padding: 6px 10px; font-size: 12px; border-radius: 6px; flex-shrink: 0; font-weight: bold;" title="扫描带【】前缀的条目，一键按前缀归入分组（会参考对照表，不会乱分）"><i class="fa-solid fa-wand-magic-sparkles"></i> 🗂️ 按前缀分组</button>
-                            <button id="wb-btn-sticky-mode" class="menu_button interactable wb-nowrap-btn btn-warning" style="margin: 0; padding: 6px 10px; font-size: 12px; border-radius: 6px; flex-shrink: 0; font-weight: bold;" title="把面板变成可拖动、可折叠的浮动小窗，方便一边翻酒馆页面复制资料，一边随手粘贴编辑条目"><i class="fa-solid fa-note-sticky"></i> 📌 便签模式</button>
+                            <button id="wb-btn-prefix-group" class="menu_button interactable wb-nowrap-btn btn-primary" style="margin: 0; padding: 6px 10px; font-size: 12px; border-radius: 6px; flex-shrink: 0; font-weight: bold;" title="扫描带【】前缀的条目，一键按前缀归入分组（会参考对照表，不会乱分）"><i class="fa-solid fa-wand-magic-sparkles"></i>按前缀分组</button>
+                            <button id="wb-btn-sticky-mode" class="menu_button interactable wb-nowrap-btn btn-warning" style="margin: 0; padding: 6px 10px; font-size: 12px; border-radius: 6px; flex-shrink: 0; font-weight: bold;" title="把面板变成可拖动、可折叠的浮动小窗，方便一边翻酒馆页面复制资料，一边随手粘贴编辑条目"><i class="fa-solid fa-note-sticky"></i>便签模式</button>
                         </div>
                     </div>
                 </div>
@@ -9324,8 +9335,8 @@ $menuBtn.on("click", async () => {
         const $label = $(`
           <label style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:6px; cursor:pointer;">
             <input type="checkbox" class="lulu-scan-char-chk" data-avatar="${avatar}" ${isChecked ? "checked" : ""} style="accent-color: var(--SmartThemeQuoteColor); flex-shrink:0;">
-            <span style="flex:1; min-width:0; word-break:break-all;"><i class="fa-solid fa-robot" style="color:var(--SmartThemeQuoteColor); margin-right:4px;"></i>${name}</span>
-            <span style="font-size:11px; color:gray; white-space:nowrap; max-width:80px; overflow:hidden; text-overflow:ellipsis;">${avatar}</span>
+            <span style="flex:1; min-width:0; word-break:break-word; line-height:1.35;"><i class="fa-solid fa-robot" style="color:var(--SmartThemeQuoteColor); margin-right:4px;"></i>${name}</span>
+            <span style="font-size:11px; color:gray; white-space:nowrap; width:80px !important; max-width:80px !important; min-width:0 !important; flex:0 0 80px !important; overflow:hidden; text-overflow:ellipsis; text-align:right;">${avatar}</span>
           </label>
         `);
         const $chk = $label.find(".lulu-scan-char-chk");
@@ -9531,8 +9542,8 @@ $menuBtn.on("click", async () => {
           <div style="display:flex; align-items:flex-start; gap:8px; flex-wrap:nowrap;">
             <input type="checkbox" class="lulu-scan-chk" data-idx="${i}" style="transform:scale(1.15); flex-shrink:0; margin-top:4px;">
             <div style="flex:1; min-width:0;">
-              <div style="font-weight:bold; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><i class="fa-solid fa-robot" style="color:var(--SmartThemeQuoteColor);"></i> ${escHtml(s.charName)}</div>
-              <div style="font-size:12px; color:gray; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📖 内嵌世界书：<strong>${escHtml(s.bookName)}</strong></div>
+              <div style="font-weight:bold; font-size:13px; display:-webkit-box!important; -webkit-box-orient:vertical!important; -webkit-line-clamp:2!important; overflow:hidden!important; word-break:break-all!important; line-height:1.4;"><i class="fa-solid fa-robot" style="color:var(--SmartThemeQuoteColor);"></i> ${escHtml(s.charName)}</div>
+              <div style="font-size:12px; color:gray; margin-top:3px; display:-webkit-box!important; -webkit-box-orient:vertical!important; -webkit-line-clamp:1!important; overflow:hidden!important; word-break:break-all!important;">📖 内嵌世界书：<strong>${escHtml(s.bookName)}</strong></div>
               <div style="font-size:12px; color:#ff6b6b; margin-top:2px;">卡内原版 ${s.embeddedCount} 条 <span style="color:gray;">vs</span> 本地当前 ${s.localCount} 条</div>
               
               <!-- 优化后的操作区 -->
@@ -9551,7 +9562,7 @@ $menuBtn.on("click", async () => {
     });
 
     const dialogHtml = `
-      <div id="lulu-scan-dialog-inner" style="padding:6px; font-family:sans-serif; min-width:320px; max-width:560px; text-align:left;">
+      <div id="lulu-scan-dialog-inner" style="padding:6px; font-family:sans-serif; min-width:min(320px, 88vw); max-width:560px; text-align:left;">
         <h3 style="margin-top:0; color:var(--SmartThemeQuoteColor); border-bottom:2px solid var(--SmartThemeBorderColor); padding-bottom:8px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
           <span><i class="fa-solid fa-clock-rotate-left"></i> 全库对照</span>
           <span style="font-size:12px; font-weight:normal; color:gray;">共 ${suspects.length} 处差异</span>
