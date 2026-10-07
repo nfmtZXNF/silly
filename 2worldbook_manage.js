@@ -272,13 +272,13 @@ window.buildPopupThemeCSS = (selector) => {
       color: #fff !important;
     }
     ${selector} .btn-warning {
-      color: #fcc419 !important;
-      border-color: #fcc419 !important;
-      background: rgba(252,196,25,0.08) !important;
+      color: ${quote} !important;
+      border-color: ${quote} !important;
+      background: rgba(125,125,125,0.08) !important;
     }
     ${selector} .btn-warning:hover {
-      background: #fcc419 !important;
-      color: #212529 !important;
+      background: ${quote} !important;
+      color: ${botMes} !important;
     }
     ${selector} .btn-secondary {
       color: gray !important;
@@ -919,7 +919,7 @@ ${themeOverrideCSS} </style>
   html += `<div style="margin-bottom:10px;">
     <input type="text" id="lulu-qs-search" class="text_pole" placeholder="🔍 检索快照名称..." style="width:100%; box-sizing:border-box; padding:8px; border-radius:6px; font-size:13px; margin-bottom:10px;">
     <div style="display:flex; gap:6px; flex-wrap:wrap;">
-      <button id="lulu-qs-clear-all" class="menu_button interactable lulu-qs-btn-hover" style="flex:1; margin:0; border:1px solid #fcc419; padding:9px; border-radius:6px; background:rgba(252,196,25,0.1); color:#fcc419; font-weight:bold; font-size:12px; display:flex; justify-content:center; align-items:center; gap:6px;"><i class="fa-solid fa-power-off"></i> 一键关闭</button>
+      <button id="lulu-qs-clear-all" class="menu_button interactable lulu-qs-btn-hover" style="flex:1; margin:0; border:1px solid var(--SmartThemeQuoteColor); padding:9px; border-radius:6px; background:rgba(125,125,125,0.08); color:var(--SmartThemeQuoteColor); font-weight:bold; font-size:12px; display:flex; justify-content:center; align-items:center; gap:6px;"><i class="fa-solid fa-power-off"></i> 一键关闭</button>
       <button id="lulu-qs-batch-del" class="menu_button interactable lulu-qs-btn-hover" style="flex:1; margin:0; border:1px solid #ff6b6b; padding:9px; border-radius:6px; background:rgba(255,107,107,0.1); color:#ff6b6b; font-weight:bold; font-size:12px; display:flex; justify-content:center; align-items:center; gap:6px;"><i class="fa-solid fa-trash-can"></i> 批量删除</button>
     </div>
   </div>
@@ -2864,10 +2864,10 @@ $menuBtn.on("click", async () => {
             }
             /* 让这几个按钮的底色跟随主题，不再是刺眼的纯白 */
             dialog.wb-manager-dialog #wb-btn-recycle {
-                background: rgba(252,196,25,0.08) !important;
+                background: rgba(125,125,125,0.08) !important;
             }
             dialog.wb-manager-dialog #wb-btn-transfer {
-                background: rgba(32,201,151,0.08) !important;
+                background: rgba(125,125,125,0.08) !important;
             }
             dialog.wb-manager-dialog .wb-transfer-selall,
             dialog.wb-manager-dialog .wb-transfer-deselall {
@@ -2894,14 +2894,14 @@ $menuBtn.on("click", async () => {
             .btn-danger { color: #ff6b6b !important; border-color: #ff6b6b !important; background: rgba(255, 107, 107, 0.05) !important; }
             .btn-danger:hover { background: #ff6b6b !important; color: #fff !important; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
 
-            .btn-warning { color: #fcc419 !important; border-color: #fcc419 !important; background: rgba(252, 196, 25, 0.08) !important; }
-            .btn-warning:hover { background: #fcc419 !important; color: #212529 !important; }
+            .btn-warning { color: var(--SmartThemeQuoteColor) !important; border-color: var(--SmartThemeQuoteColor) !important; background: rgba(125, 125, 125, 0.05) !important; }
+            .btn-warning:hover { background: var(--SmartThemeQuoteColor) !important; color: #fff !important; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
 
             .btn-secondary { color: gray !important; border-color: rgba(150,150,150,0.5) !important; background: rgba(150,150,150,0.15) !important; }
             .btn-secondary:hover { background: gray !important; color: #fff !important; }
 
-            .btn-info { color: #339af0 !important; border-color: rgba(51,154,240,0.5) !important; background: rgba(51,154,240,0.15) !important; }
-            .btn-info:hover { background: #339af0 !important; color: #fff !important; }
+            .btn-info { color: var(--SmartThemeQuoteColor) !important; border-color: var(--SmartThemeQuoteColor) !important; background: rgba(125, 125, 125, 0.05) !important; }
+            .btn-info:hover { background: var(--SmartThemeQuoteColor) !important; color: #fff !important; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
 
             #dsnap-container { display: flex; min-height: 50vh; max-height: 65vh; border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px; padding: 10px; background: var(--SmartThemeBotMesColor); overflow: hidden; }
             #dsnap-wb-list-wrapper { flex: 0 0 40%; max-width: 380px; display: flex; flex-direction: column; border-right: 2px solid var(--SmartThemeBorderColor); padding-right: 10px; overflow: hidden;}
@@ -3668,14 +3668,14 @@ $menuBtn.on("click", async () => {
                         <div id="wb-main-ctrl-toggle" class="lulu-mobile-only-toggle">
                             <i class="fa-solid fa-chevron-down"></i> 展开更多操作
                         </div>
-                        <button id="wb-btn-recycle" class="menu_button interactable wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px; color:#fcc419; border-color:#fcc419; background:rgba(252,196,25,0.08);" title="查看最近删除的世界书，可以还原哦"><i class="fa-solid fa-trash-arrow-up"></i> 回收站</button>
-                        <button id="wb-btn-transfer" class="menu_button interactable wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px; color:#20c997; border-color:#20c997; background:rgba(32,201,151,0.08);" title="在两本世界书之间复制搬运条目"><i class="fa-solid fa-truck-ramp-box"></i> 搬运条目</button>                        
+                        <button id="wb-btn-recycle" class="menu_button interactable wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px; color:var(--SmartThemeQuoteColor); border-color:var(--SmartThemeQuoteColor); background:rgba(125,125,125,0.08);" title="查看最近删除的世界书，可以还原哦"><i class="fa-solid fa-trash-arrow-up"></i> 回收站</button>
+                        <button id="wb-btn-transfer" class="menu_button interactable wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px; color:var(--SmartThemeQuoteColor); border-color:var(--SmartThemeQuoteColor); background:rgba(125,125,125,0.08);" title="在两本世界书之间复制搬运条目"><i class="fa-solid fa-truck-ramp-box"></i> 搬运条目</button>                        
                         <button id="wb-btn-force-scan" class="menu_button interactable wb-nowrap-btn btn-primary" style="margin: 0; padding: 6px 12px; font-size: 12px;" title="在面板外部修改了其他没加载卡片的绑定状态？点这里重新翻一遍记忆哦！"><i class="fa-solid fa-rotate-right"></i> 深度重扫</button>
                         <button id="wb-btn-batch-toggle" class="menu_button interactable wb-nowrap-btn btn-warning" style="margin: 0; padding: 6px 12px; font-size: 12px;"><i class="fa-solid fa-layer-group"></i> 批量操作模式</button>
                         <button id="wb-btn-select-all" class="menu_button interactable wb-nowrap-btn btn-success" style="margin: 0; padding: 6px 12px; font-size: 12px;"><i class="fa-solid fa-check-double"></i> 全选当前项</button>
-                        <button id="wb-btn-deselect-all" class="menu_button interactable wb-nowrap-btn btn-danger" style="margin: 0; padding: 6px 12px; font-size: 12px;"><i class="fa-regular fa-square"></i> 撤销当前全选</button>
+                        <button id="wb-btn-deselect-all" class="menu_button interactable wb-nowrap-btn btn-primary" style="margin: 0; padding: 6px 12px; font-size: 12px;"><i class="fa-regular fa-square"></i> 撤销当前全选</button>
                         <button id="wb-btn-create-wb" class="menu_button interactable btn-success wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px; border:none;"><i class="fa-solid fa-plus"></i> 新建</button>
-                        <button type="button" id="wb-btn-import-wb" class="menu_button interactable btn-success wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px; border:none; background: rgba(32, 201, 151, 0.15) !important; color: #20c997 !important; border: 1px solid rgba(32, 201, 151, 0.5) !important;"><i class="fa-solid fa-file-import"></i> 批量导入</button>
+                        <button type="button" id="wb-btn-import-wb" class="menu_button interactable btn-primary wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px; border:none;"><i class="fa-solid fa-file-import"></i> 批量导入</button>
                     </div>
                 </div>
 
@@ -3692,7 +3692,7 @@ $menuBtn.on("click", async () => {
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap: wrap; gap: 10px;">
                         <span style="color: var(--SmartThemeQuoteColor); font-weight: bold; font-size: 13px; margin-top: 4px;"><i class="fa-solid fa-check-double"></i> 选中的世界书 (<span id="wb-batch-count">0</span>)：</span>
                         <div style="display:flex; gap: 8px; flex-wrap: wrap;">
-                             <button class="menu_button interactable btn-warning wb-nowrap-btn" id="wb-btn-batch-group" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px; background: rgba(252, 196, 25, 0.15); color: #fcc419;"><i class="fa-solid fa-folder-tree"></i> 批量分组</button>
+                             <button class="menu_button interactable btn-warning wb-nowrap-btn" id="wb-btn-batch-group" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-folder-tree"></i> 批量分组</button>
                              <button class="menu_button interactable btn-secondary wb-nowrap-btn" id="wb-btn-batch-ungroup" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-folder-minus"></i> 批量移出分类</button>
                              <button class="menu_button interactable btn-primary wb-nowrap-btn" id="wb-btn-batch-export" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-file-export"></i> 批量打包导出</button>
                              <button class="menu_button interactable btn-danger wb-nowrap-btn" id="wb-btn-confirm-delete" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-burst"></i> 确认永久删除</button>
@@ -3715,7 +3715,7 @@ $menuBtn.on("click", async () => {
 
             <div id="wb-char-view" style="display: none; flex-direction: column; height: 100%;">
                 <div class="wb-btn-group" style="margin-top: 0;">
-                    <div class="wb-action-btn wb-nowrap-btn" id="wb-btn-open-assoc" style="color: #c92a2a; border-color: #c92a2a; background: rgba(201,42,42,0.05);"><i class="fa-solid fa-id-card-clip"></i> 管理绑定世界书</div>
+                    <div class="wb-action-btn wb-nowrap-btn" id="wb-btn-open-assoc" style="color: var(--SmartThemeQuoteColor); border-color: var(--SmartThemeQuoteColor); background: rgba(125,125,125,0.05);"><i class="fa-solid fa-id-card-clip"></i> 管理绑定世界书</div>
                     <div class="wb-action-btn wb-nowrap-btn btn-primary" id="wb-btn-save-char-snap"><i class="fa-solid fa-camera-retro"></i> 保存当前配置为专属组合</div>
                     <div class="wb-action-btn wb-nowrap-btn btn-warning" id="wb-btn-rescue-embedded"><i class="fa-solid fa-stethoscope"></i> 卡内世界书体检/救援</div>
                     <div class="wb-action-btn wb-nowrap-btn btn-info" id="wb-btn-batch-scan-pollution"><i class="fa-solid fa-clock-rotate-left"></i> 卡内原版 · 全库对照</div>
@@ -3904,8 +3904,8 @@ $menuBtn.on("click", async () => {
                             <div class="wb-action-btn wb-nowrap-btn wb-entry-foldable" id="wb-btn-entry-all" style="padding: 6px;"><i class="fa-solid fa-check-double"></i> 启用全部</div>
                             <div class="wb-action-btn wb-nowrap-btn wb-entry-foldable" id="wb-btn-entry-none" style="padding: 6px;"><i class="fa-regular fa-square"></i> 关闭全部</div>
                             <div class="wb-action-btn wb-nowrap-btn btn-success wb-entry-foldable" id="wb-btn-entry-add" style="padding: 6px; border:none;"><i class="fa-solid fa-plus"></i> 新建条目</div>
-                            <div class="wb-action-btn wb-nowrap-btn btn-danger wb-entry-foldable" id="wb-btn-entry-batch" style="padding: 6px; border:none;"><i class="fa-solid fa-layer-group"></i> 批量操作</div>
-                            <div class="wb-action-btn wb-nowrap-btn wb-entry-foldable" id="wb-btn-entry-replace" style="padding: 6px; color:#339af0; border-color:#339af0; background:rgba(51,154,240,0.1);"><i class="fa-solid fa-magnifying-glass-arrow-right"></i> 查找替换</div>
+                            <div class="wb-action-btn wb-nowrap-btn btn-primary wb-entry-foldable" id="wb-btn-entry-batch" style="padding: 6px; border:none;"><i class="fa-solid fa-layer-group"></i> 批量操作</div>
+                            <div class="wb-action-btn wb-nowrap-btn wb-entry-foldable" id="wb-btn-entry-replace" style="padding: 6px; color:var(--SmartThemeQuoteColor); border-color:var(--SmartThemeQuoteColor); background:rgba(125,125,125,0.08);"><i class="fa-solid fa-magnifying-glass-arrow-right"></i> 查找替换</div>
                             <div class="wb-action-btn wb-nowrap-btn btn-primary wb-entry-foldable" id="wb-btn-entry-snapshot" style="padding: 6px;"><i class="fa-solid fa-camera-retro"></i> 存为快照</div>
                             <div class="wb-action-btn wb-nowrap-btn btn-primary wb-entry-foldable" id="wb-btn-entry-apply-snap" style="padding: 6px;"><i class="fa-solid fa-clapperboard"></i> 应用快照</div>
                         </div>
@@ -14116,7 +14116,7 @@ $menuBtn.on("click", async () => {
   // ---- 里面：单本书启用总 Token 按钮 ----
   $ui.find("#wb-btn-entry-replace").before(
     $(
-      '<div class="wb-action-btn wb-nowrap-btn" id="wb-btn-calc-tune-tk" style="padding: 6px; color: #339af0; border-color: #339af0; background: rgba(51, 154, 240, 0.1);"><i class="fa-solid fa-coins"></i> 计算本书启用 Token</div>',
+      '<div class="wb-action-btn wb-nowrap-btn" id="wb-btn-calc-tune-tk" style="padding: 6px; color: var(--SmartThemeQuoteColor); border-color: var(--SmartThemeQuoteColor); background: rgba(125,125,125,0.08);"><i class="fa-solid fa-coins"></i> 计算本书启用 Token</div>',
     ).on("click", async function () {
       const $btn = $(this);
       $btn.html('<i class="fa-solid fa-spinner fa-spin"></i> 算盘敲击中...');
