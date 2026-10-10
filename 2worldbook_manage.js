@@ -2755,6 +2755,23 @@ const saveBindingCache = (cacheObj) => {
     { type: "global" },
   );
 };
+// ✨ 已扫描角色名单：记录哪些角色卡的绑定已经进过缓存
+// 开面板时只补扫名单之外的新卡片，不用每次全量重扫
+const loadScannedAvatarList = () => {
+  let vars = luluGetGlobalVars();
+  return Array.isArray(vars.lulu_wb_scanned_avatars)
+    ? vars.lulu_wb_scanned_avatars
+    : null;
+};
+const saveScannedAvatarList = (arr) => {
+  luluUpdateGlobalVars(
+    (v) => {
+      v.lulu_wb_scanned_avatars = arr;
+      return v;
+    },
+    { type: "global" },
+  );
+};
 
 $menuBtn.on("click", async () => {
   $("#options").hide();
@@ -5416,8 +5433,13 @@ $menuBtn.on("click", async () => {
         typeof getWorldbookNames === "function" ? getWorldbookNames() : [];
       allWbNames.forEach((wb) => (wb2Chars[wb] = []));
       const existingCache = loadBindingCache();
+      // ✨ 老版本缓存没有“已扫描名单”，升级后第一次先补一次全量扫描把名单建起来
+      const scannedAvatars = loadScannedAvatarList();
       const needHeavyScan =
-        forceScan || !existingCache || Object.keys(existingCache).length === 0;
+        forceScan ||
+        !existingCache ||
+        Object.keys(existingCache).length === 0 ||
+        !scannedAvatars;
       if (!needHeavyScan) {
         for (let wb of allWbNames) {
           wb2Chars[wb] = existingCache[wb] || [];
@@ -5480,108 +5502,85 @@ $menuBtn.on("click", async () => {
           }
         });
       }
-      if (needHeavyScan) {
-        const allCharsData =
-          window.characters ||
-          (typeof SillyTavern !== "undefined" ? SillyTavern.characters : []) ||
-          [];
-        let combinedData = [...allCharsData];
-        const totalChars = combinedData.length;
-        $ui
-          .find("#wb-loading-text")
-          .html("发现大量角色数据，正在执行重型深度扫描...");
-        $sub.text(`0 / ${totalChars}`).show();
-        const charMap = new Map();
-        const batchSize = 10;
-        for (let i = 0; i < totalChars; i += batchSize) {
-          const chunk = combinedData.slice(i, i + batchSize);
-          await Promise.all(
-            chunk.map(async (charItem) => {
-              if (!charItem) return;
-              try {
-                const avatar = charItem.avatar;
-                if (!avatar) return;
-                if (avatar === currentAvatar) return;
-                let charData = charItem;
-                if (charItem.shallow) {
-                  try {
-                    charData = await $.ajax({
-                      url: "/api/characters/get",
-                      type: "POST",
-                      contentType: "application/json",
-                      data: JSON.stringify({ avatar_url: avatar }),
-                    });
-                  } catch (e) {}
-                }
-                const curCharName =
-                  charData.name || charItem.name || "未知名称";
-                const checkList = new Set();
+      // ✨ 抽出共用逻辑：扫描【单张角色卡】的世界书绑定，全量重扫和增量补扫都靠它
+      const scanOneCharBindings = async (charItem, charMap) => {
+        if (!charItem) return;
+        try {
+          const avatar = charItem.avatar;
+          if (!avatar) return;
+          if (avatar === currentAvatar) return;
+          let charData = charItem;
+          if (charItem.shallow) {
+            try {
+              charData = await $.ajax({
+                url: "/api/characters/get",
+                type: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({ avatar_url: avatar }),
+              });
+            } catch (e) {}
+          }
+          const curCharName = charData.name || charItem.name || "未知名称";
+          const checkList = new Set();
+          try {
+            if (typeof getCharWorldbookNames === "function") {
+              const cb = getCharWorldbookNames(curCharName);
+              if (cb) {
+                if (cb.primary) checkList.add(cb.primary);
+                if (Array.isArray(cb.additional))
+                  cb.additional.forEach((w) => checkList.add(w));
+              }
+            }
+          } catch (e) {}
+          const dataFields = charData.data || charData;
+          if (dataFields.extensions?.world)
+            checkList.add(dataFields.extensions.world);
+          if (dataFields.world) checkList.add(dataFields.world);
+          if (dataFields.world_info) checkList.add(dataFields.world_info);
+          if (dataFields.lorebook) checkList.add(dataFields.lorebook);
+          if (
+            dataFields.character_book &&
+            typeof dataFields.character_book.name === "string"
+          ) {
+            checkList.add(dataFields.character_book.name);
+          } else if (typeof dataFields.character_book === "string") {
+            checkList.add(dataFields.character_book);
+          }
+          if (dataFields.worldbook) checkList.add(dataFields.worldbook);
+          if (Array.isArray(dataFields.extensions?.worldbooks))
+            dataFields.extensions.worldbooks.forEach((w) => checkList.add(w));
+          if (Array.isArray(charData.extensions?.worldbooks))
+            charData.extensions.worldbooks.forEach((w) => checkList.add(w));
+          checkList.forEach((wbRaw) => {
+            let wbArr = [];
+            if (typeof wbRaw === "string") {
+              if (wbRaw.startsWith("[") && wbRaw.endsWith("]")) {
                 try {
-                  if (typeof getCharWorldbookNames === "function") {
-                    const cb = getCharWorldbookNames(curCharName);
-                    if (cb) {
-                      if (cb.primary) checkList.add(cb.primary);
-                      if (Array.isArray(cb.additional))
-                        cb.additional.forEach((w) => checkList.add(w));
-                    }
-                  }
-                } catch (e) {}
-                const dataFields = charData.data || charData;
-                if (dataFields.extensions?.world)
-                  checkList.add(dataFields.extensions.world);
-                if (dataFields.world) checkList.add(dataFields.world);
-                if (dataFields.world_info) checkList.add(dataFields.world_info);
-                if (dataFields.lorebook) checkList.add(dataFields.lorebook);
-                if (
-                  dataFields.character_book &&
-                  typeof dataFields.character_book.name === "string"
-                ) {
-                  checkList.add(dataFields.character_book.name);
-                } else if (typeof dataFields.character_book === "string") {
-                  checkList.add(dataFields.character_book);
+                  wbArr = JSON.parse(wbRaw);
+                } catch (e) {
+                  wbArr = [wbRaw];
                 }
-                if (dataFields.worldbook) checkList.add(dataFields.worldbook);
-                if (Array.isArray(dataFields.extensions?.worldbooks))
-                  dataFields.extensions.worldbooks.forEach((w) =>
-                    checkList.add(w),
-                  );
-                if (Array.isArray(charData.extensions?.worldbooks))
-                  charData.extensions.worldbooks.forEach((w) =>
-                    checkList.add(w),
-                  );
-                checkList.forEach((wbRaw) => {
-                  let wbArr = [];
-                  if (typeof wbRaw === "string") {
-                    if (wbRaw.startsWith("[") && wbRaw.endsWith("]")) {
-                      try {
-                        wbArr = JSON.parse(wbRaw);
-                      } catch (e) {
-                        wbArr = [wbRaw];
-                      }
-                    } else wbArr = [wbRaw];
-                  } else wbArr = [wbRaw];
-                  wbArr.forEach((wbName) => {
-                    if (wbName && typeof wbName === "string") {
-                      if (!wb2Chars[wbName]) wb2Chars[wbName] = [];
-                      if (!wb2Chars[wbName].some((c) => c.avatar === avatar))
-                        wb2Chars[wbName].push({
-                          name: curCharName,
-                          avatar: avatar,
-                        });
-                    }
+              } else wbArr = [wbRaw];
+            } else wbArr = [wbRaw];
+            wbArr.forEach((wbName) => {
+              if (wbName && typeof wbName === "string") {
+                if (!wb2Chars[wbName]) wb2Chars[wbName] = [];
+                if (!wb2Chars[wbName].some((c) => c.avatar === avatar))
+                  wb2Chars[wbName].push({
+                    name: curCharName,
+                    avatar: avatar,
                   });
-                });
-                const safeCharObj = { name: curCharName, avatar: avatar };
-                charMap.set(avatar, safeCharObj);
-                const avatarBase = avatar.replace(/\.(png|webp|jpeg)$/i, "");
-                if (avatar !== avatarBase) charMap.set(avatarBase, safeCharObj);
-              } catch (e) {}
-            }),
-          );
-          $sub.text(`${Math.min(i + batchSize, totalChars)} / ${totalChars}`);
-          // ✨ 每一批扫完，让出主线程，避免面板卡成PPT
-          await new Promise((resolve) => setTimeout(resolve, 0));
-        }
+              }
+            });
+          });
+          const safeCharObj = { name: curCharName, avatar: avatar };
+          charMap.set(avatar, safeCharObj);
+          const avatarBase = avatar.replace(/\.(png|webp|jpeg)$/i, "");
+          if (avatar !== avatarBase) charMap.set(avatarBase, safeCharObj);
+        } catch (e) {}
+      };
+      // ✨ 抽出共用逻辑：把 charLore 里登记的额外世界书绑定合并进来
+      const applyCharLoreExtraBooks = (charMap) => {
         try {
           let charLoreArray = [];
           if (
@@ -5623,6 +5622,88 @@ $menuBtn.on("click", async () => {
             });
           }
         } catch (e) {}
+      };
+      const allCharsData =
+        window.characters ||
+        (typeof SillyTavern !== "undefined" ? SillyTavern.characters : []) ||
+        [];
+      const avatarBaseOf = (a) =>
+        String(a || "").replace(/\.(png|webp|jpeg)$/i, "");
+      if (needHeavyScan) {
+        let combinedData = [...allCharsData];
+        const totalChars = combinedData.length;
+        $ui
+          .find("#wb-loading-text")
+          .html("发现大量角色数据，正在执行重型深度扫描...");
+        $sub.text(`0 / ${totalChars}`).show();
+        const charMap = new Map();
+        const batchSize = 10;
+        for (let i = 0; i < totalChars; i += batchSize) {
+          const chunk = combinedData.slice(i, i + batchSize);
+          await Promise.all(
+            chunk.map((charItem) => scanOneCharBindings(charItem, charMap)),
+          );
+          $sub.text(`${Math.min(i + batchSize, totalChars)} / ${totalChars}`);
+          // ✨ 每一批扫完，让出主线程，避免面板卡成PPT
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+        applyCharLoreExtraBooks(charMap);
+        saveScannedAvatarList(
+          combinedData.filter((c) => c && c.avatar).map((c) => c.avatar),
+        );
+      } else if (allCharsData.length > 0) {
+        // ===== ✨ 增量同步：不重复全扫，只处理“新增/删除”的角色卡 =====
+        const scannedSet = new Set(scannedAvatars || []);
+        const aliveAvatars = new Set();
+        allCharsData.forEach((c) => {
+          if (c && c.avatar) {
+            aliveAvatars.add(c.avatar);
+            aliveAvatars.add(avatarBaseOf(c.avatar));
+          }
+        });
+        // 1) 清掉已从酒馆删除的角色卡残留绑定（👤用户绑定由上方 persona 逻辑每轮重建，跳过）
+        Object.keys(wb2Chars).forEach((wb) => {
+          wb2Chars[wb] = wb2Chars[wb].filter(
+            (c) =>
+              !c.avatar ||
+              c.name.startsWith("👤用户: ") ||
+              aliveAvatars.has(c.avatar) ||
+              aliveAvatars.has(avatarBaseOf(c.avatar)),
+          );
+        });
+        // 2) 只补扫名单里没有的新角色卡（当前打开的卡走上方实时覆盖逻辑，跳过）
+        const newChars = allCharsData.filter(
+          (c) =>
+            c &&
+            c.avatar &&
+            !scannedSet.has(c.avatar) &&
+            c.avatar !== currentAvatar,
+        );
+        if (newChars.length > 0) {
+          $ui
+            .find("#wb-loading-text")
+            .html(
+              `✨ 发现 ${newChars.length} 张新角色卡，正在补充扫描它们的世界书绑定...`,
+            );
+          $sub.text(`0 / ${newChars.length}`).show();
+          const charMap = new Map();
+          const batchSize = 10;
+          for (let i = 0; i < newChars.length; i += batchSize) {
+            const chunk = newChars.slice(i, i + batchSize);
+            await Promise.all(
+              chunk.map((charItem) => scanOneCharBindings(charItem, charMap)),
+            );
+            $sub.text(
+              `${Math.min(i + batchSize, newChars.length)} / ${newChars.length}`,
+            );
+            // ✨ 每一批扫完，让出主线程，避免面板卡成PPT
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          }
+          applyCharLoreExtraBooks(charMap);
+        }
+        saveScannedAvatarList(
+          allCharsData.filter((c) => c && c.avatar).map((c) => c.avatar),
+        );
       }
       globalBindingMapCache = wb2Chars;
       saveBindingCache(wb2Chars);
