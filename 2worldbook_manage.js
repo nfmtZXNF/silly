@@ -14320,19 +14320,23 @@ $menuBtn.on("click", async () => {
     if (!isDirty && tuneDetailIndex !== -1) {
       const e = tuneEntries[tuneDetailIndex];
       if (e) {
-        const currentName = $ui.find("#wb-det-name").val() || "";
-        const currentContent = $ui.find("#wb-det-content").val() || "";
-        const currentKeys = $ui
-          .find("#wb-det-keys")
-          .val()
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean)
-          .join(",");
+        // ✨ 两边统一规范化后再比：textarea 会把内容里的 \r\n 洗成 \n，
+        //    不洗直接比的话，含 CRLF 的条目只是打开看了一眼也会误报"未保存"
+        const normText = (v) => String(v ?? "").replace(/\r\n?/g, "\n");
+        const normKeys = (arr) =>
+          (Array.isArray(arr) ? arr : [])
+            .map((s) => String(s).trim())
+            .filter(Boolean)
+            .join(",");
+        const currentName = normText($ui.find("#wb-det-name").val());
+        const currentContent = normText($ui.find("#wb-det-content").val());
+        const currentKeys = normKeys(
+          ($ui.find("#wb-det-keys").val() || "").split(","),
+        );
 
-        const originalName = e.name || "";
-        const originalContent = e.content || "";
-        const originalKeys = (e.strategy?.keys || []).join(",");
+        const originalName = normText(e.name);
+        const originalContent = normText(e.content);
+        const originalKeys = normKeys(e.strategy?.keys);
 
         if (
           currentName !== originalName ||
