@@ -578,6 +578,297 @@ const sortCharSnapshotNames = (charName, names) => {
 };
 // ========== 【功能8：快照排序】工具函数 结束 ==========
 
+// ========== 【功能9：角色快照绑定聊天 & 原地更新】工具函数 开始 ==========
+const LULU_CHAT_SNAP_BIND_KEY = "lulu_bound_char_snapshot";
+// 读取当前聊天绑定的角色快照（存 chat_metadata，天然跟随单个聊天存档）
+const luluGetChatSnapBinding = () => {
+  try {
+    const ctx =
+      typeof SillyTavern !== "undefined"
+        ? SillyTavern.getContext()
+        : typeof getContext === "function"
+          ? getContext()
+          : {};
+    const meta =
+      ctx.chatMetadata ||
+      (typeof chat_metadata !== "undefined" ? chat_metadata : null);
+    if (!meta) return null;
+    const b = meta[LULU_CHAT_SNAP_BIND_KEY];
+    if (!b || typeof b !== "object" || !b.snapName) return null;
+    return { charName: b.charName || "", snapName: b.snapName };
+  } catch (e) {
+    return null;
+  }
+};
+// 写入/清除当前聊天的快照绑定（snapName 传 null 即解绑）
+const luluSetChatSnapBinding = async (charName, snapName) => {
+  const ctx =
+    typeof SillyTavern !== "undefined"
+      ? SillyTavern.getContext()
+      : typeof getContext === "function"
+        ? getContext()
+        : {};
+  const meta =
+    ctx.chatMetadata ||
+    (typeof chat_metadata !== "undefined" ? chat_metadata : null);
+  if (!meta) throw new Error("当前没有打开任何聊天，无法绑定哦~");
+  if (snapName) meta[LULU_CHAT_SNAP_BIND_KEY] = { charName, snapName };
+  else delete meta[LULU_CHAT_SNAP_BIND_KEY];
+  if (typeof ctx.saveMetadata === "function") await ctx.saveMetadata();
+  else if (typeof saveMetadata === "function") await saveMetadata();
+};
+// 安全读取当前角色名（未开聊天/群聊时可能是 null 或群名）
+const luluGetCurrentCharNameSafe = () => {
+  try {
+    if (typeof getCurrentCharacterName === "function")
+      return getCurrentCharacterName();
+    if (typeof SillyTavern !== "undefined")
+      return SillyTavern.getContext().name2;
+  } catch (e) {}
+  return null;
+};
+// 读取当前角色绑定的所有世界书名
+const luluGetCharBoundBookNames = () => {
+  let obj = { primary: null, additional: [] };
+  try {
+    if (typeof getCharWorldbookNames === "function")
+      obj = getCharWorldbookNames("current") || obj;
+  } catch (e) {}
+  const list = [];
+  if (obj.primary) list.push(obj.primary);
+  if (obj.additional) list.push(...obj.additional);
+  return list;
+};
+// 抓取当前绑定书的启用条目状态（角色快照数据格式：{ 书名: [uid...] }）
+const luluCaptureCharSnapData = async (boundBooks) => {
+  const data = {};
+  for (const wb of boundBooks) {
+    let entries;
+    try {
+      entries = await getWorldbook(wb);
+    } catch (e) {
+      throw new Error(
+        `读取世界书【${wb}】失败（${e.message}）。这本书可能已被删除或改名，但还绑在角色身上，请先去「分配卡片/用户档案」页面解绑它再试~`,
+      );
+    }
+    if (!Array.isArray(entries)) {
+      throw new Error(
+        `世界书【${wb}】读取结果异常，它可能已被删除或改名，但还绑在角色身上，请先去「分配卡片/用户档案」页面解绑它再试~`,
+      );
+    }
+    data[wb] = entries.filter((e) => e.enabled).map((e) => e.uid);
+  }
+  return data;
+};
+// 把角色快照数据应用到当前绑定书上，返回 { ok, missing, failed }
+const luluApplyCharSnapData = async (snapData, boundBooks) => {
+  const snapWbNames = Object.keys(snapData);
+  const missing = snapWbNames.filter((wb) => !boundBooks.includes(wb));
+  if (missing.length === snapWbNames.length)
+    return { ok: false, missing, failed: [] };
+  const failed = [];
+  for (const wb of boundBooks) {
+    let entries;
+    try {
+      entries = await getWorldbook(wb);
+    } catch (e) {
+      failed.push(wb);
+      continue;
+    }
+    if (!Array.isArray(entries)) {
+      failed.push(wb);
+      continue;
+    }
+    let changed = false;
+    const targetUIDs = snapData[wb] || [];
+    entries.forEach((entry) => {
+      const should = targetUIDs.includes(entry.uid);
+      if (entry.enabled !== should) {
+        entry.enabled = should;
+        changed = true;
+      }
+    });
+    if (changed) {
+      try {
+        await replaceWorldbook(wb, entries);
+      } catch (e) {
+        failed.push(wb);
+      }
+    }
+  }
+  return { ok: true, missing, failed };
+};
+// 判断角色快照当前是否正生效
+const luluIsCharSnapActiveNow = async (snapData, boundBooks) => {
+  const snapWbNames = Object.keys(snapData);
+  for (const wb of snapWbNames) {
+    if (!boundBooks.includes(wb)) return false;
+  }
+  for (const wb of boundBooks) {
+    let entries;
+    try {
+      entries = await getWorldbook(wb);
+    } catch (e) {
+      return false;
+    }
+    if (!Array.isArray(entries)) return false;
+    const enabledUIDs = entries
+      .filter((e) => e.enabled)
+      .map((e) => e.uid)
+      .sort();
+    const targetUIDs = [...(snapData[wb] || [])].sort();
+    if (
+      enabledUIDs.length !== targetUIDs.length ||
+      !enabledUIDs.every((v, idx) => v === targetUIDs[idx])
+    )
+      return false;
+  }
+  return true;
+};
+// 进入聊天时：自动应用本聊天绑定的角色快照
+const luluAutoApplyBoundChatSnapshot = async () => {
+  try {
+    const binding = luluGetChatSnapBinding();
+    if (!binding) return;
+    const charName = luluGetCurrentCharNameSafe();
+    if (!charName || charName !== binding.charName) return;
+    let charSnaps = luluGetGlobalVars().wb_char_snapshots;
+    if (typeof charSnaps === "string") {
+      try {
+        charSnaps = JSON.parse(charSnaps);
+      } catch (e) {
+        charSnaps = {};
+      }
+    }
+    if (!charSnaps || typeof charSnaps !== "object" || Array.isArray(charSnaps))
+      charSnaps = {};
+    const snapData =
+      charSnaps[charName] && charSnaps[charName][binding.snapName];
+    if (!snapData) {
+      // 绑定的快照已经被删了 → 自动解绑，免得每次进聊天都扑空
+      await luluSetChatSnapBinding(charName, null);
+      if (typeof toastr !== "undefined")
+        toastr.warning(
+          `本聊天绑定的角色快照【${binding.snapName}】已经不存在啦，已自动解绑~`,
+        );
+      return;
+    }
+    const boundBooks = luluGetCharBoundBookNames();
+    if (boundBooks.length === 0) return;
+    // 已经生效就安静跳过，不刷屏也不重复写书
+    if (await luluIsCharSnapActiveNow(snapData, boundBooks)) return;
+    const { ok, missing, failed } = await luluApplyCharSnapData(
+      snapData,
+      boundBooks,
+    );
+    if (typeof toastr !== "undefined") {
+      if (ok) {
+        toastr.success(
+          `🔗 已自动应用本聊天绑定的角色快照【${binding.snapName}】~`,
+        );
+        if (missing.length > 0)
+          toastr.warning(
+            `快照里的 [${missing.join(", ")}] 当前没绑定在角色身上，这几本无法复原~`,
+          );
+        if (failed.length > 0)
+          toastr.warning(
+            `世界书 [${failed.join(", ")}] 读取/写入失败（可能已被删除但还绑在角色身上），这几本未能复原~`,
+          );
+      } else {
+        toastr.error(
+          `本聊天绑定的快照【${binding.snapName}】应用失败：当前角色没有绑定快照里的任何世界书(＞﹏＜)`,
+        );
+      }
+    }
+  } catch (e) {
+    console.error("Lulu 快照自动应用出错", e);
+  }
+};
+// 原地更新角色快照：用当前条目状态覆盖旧快照（可顺便改名）
+const luluUpdateCharSnapshotFlow = async (charName, oldName, onDone) => {
+  try {
+    const boundBooks = luluGetCharBoundBookNames();
+    if (boundBooks.length === 0)
+      return toastr.warning("当前角色没有绑定任何世界书，无法更新快照哦~");
+    const inputName = await SillyTavern.callGenericPopup(
+      `将把角色当前世界书的条目开关状态保存进这个快照。<br>保持原名 = 直接覆盖更新；改成新名字 = 用当前状态另存并移除旧快照。`,
+      SillyTavern.POPUP_TYPE.INPUT,
+      oldName,
+    );
+    if (!inputName || !inputName.trim()) return;
+    const newName = inputName.trim();
+    const newSnapData = await luluCaptureCharSnapData(boundBooks);
+    let charSnaps = luluGetGlobalVars().wb_char_snapshots;
+    if (typeof charSnaps === "string") {
+      try {
+        charSnaps = JSON.parse(charSnaps);
+      } catch (e) {
+        charSnaps = {};
+      }
+    }
+    if (!charSnaps || typeof charSnaps !== "object" || Array.isArray(charSnaps))
+      charSnaps = {};
+    const mySnaps = charSnaps[charName] || {};
+    if (newName !== oldName && mySnaps[newName]) {
+      const overRes = await SillyTavern.callGenericPopup(
+        `名字【${newName}】已经被别的快照占用了哦！要用当前状态把它也覆盖掉吗？`,
+        SillyTavern.POPUP_TYPE.CONFIRM,
+      );
+      if (overRes !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+    }
+    luluUpdateGlobalVars(
+      (v) => {
+        if (typeof v.wb_char_snapshots === "string") {
+          try {
+            v.wb_char_snapshots = JSON.parse(v.wb_char_snapshots);
+          } catch (e) {
+            v.wb_char_snapshots = {};
+          }
+        }
+        if (
+          !v.wb_char_snapshots ||
+          typeof v.wb_char_snapshots !== "object" ||
+          Array.isArray(v.wb_char_snapshots)
+        )
+          v.wb_char_snapshots = {};
+        if (!v.wb_char_snapshots[charName]) v.wb_char_snapshots[charName] = {};
+        if (newName !== oldName) delete v.wb_char_snapshots[charName][oldName];
+        v.wb_char_snapshots[charName][newName] = newSnapData;
+        return v;
+      },
+      { type: "global" },
+    );
+    // 本聊天若绑定的是旧名 → 绑定跟着新名走
+    const binding = luluGetChatSnapBinding();
+    if (
+      binding &&
+      binding.charName === charName &&
+      binding.snapName === oldName &&
+      newName !== oldName
+    ) {
+      try {
+        await luluSetChatSnapBinding(charName, newName);
+      } catch (e) {}
+    }
+    toastr.success(
+      newName === oldName
+        ? `✨ 快照【${newName}】已用当前状态更新覆盖！`
+        : `✨ 已把当前状态存为【${newName}】，旧快照【${oldName}】已移除~`,
+    );
+    // 刷新列表单独兜底：就算刷新出岔子，也不谎报"更新失败"（快照其实已存好）
+    if (typeof onDone === "function") {
+      try {
+        await onDone();
+      } catch (e2) {
+        console.error("Lulu 更新快照后刷新列表失败", e2);
+      }
+    }
+  } catch (e) {
+    toastr.error("更新快照失败：" + (e && e.message ? e.message : e));
+  }
+};
+// ========== 【功能9：角色快照绑定聊天 & 原地更新】工具函数 结束 ==========
+
 const formatPositionBadge = (pos) => {
   if (!pos) return "📍未知位置 | 🔢100";
   const posMap = {
@@ -844,7 +1135,9 @@ window.luluOpenQuickSnapshotView = async () => {
   #lulu-quick-snap-modal .lulu-qs-move-up,
   #lulu-quick-snap-modal .lulu-qs-move-down,
   #lulu-quick-snap-modal .lulu-qs-char-move-up,
-  #lulu-quick-snap-modal .lulu-qs-char-move-down {
+  #lulu-quick-snap-modal .lulu-qs-char-move-down,
+  #lulu-quick-snap-modal .lulu-qs-char-update,
+  #lulu-quick-snap-modal .lulu-qs-char-bind {
     width: 34px !important;
     min-width: 34px !important;
     height: 34px !important;
@@ -958,6 +1251,7 @@ ${themeOverrideCSS} </style>
   // ===== 当前角色快照区（默认隐藏，onOpen 时动态填充）=====
   html += `<div id="lulu-qs-char-section" style="display:none;">
     <div id="lulu-qs-char-header" style="font-size:13px; color:var(--SmartThemeQuoteColor); font-weight:bold; margin-bottom:6px; padding:8px 10px; background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:6px; display:flex; align-items:center; gap:6px;"></div>
+    <div id="lulu-qs-char-bind-info" style="font-size:11px; margin-bottom:8px; display:none; line-height:1.5;"></div>
     <input type="text" id="lulu-qs-char-search" class="text_pole" placeholder="🔍 检索角色快照名称..." style="width:100%; box-sizing:border-box; padding:8px; border-radius:6px; font-size:13px; margin-bottom:8px;">
     <div style="display:flex; gap:6px; margin-bottom:10px;">
       <button id="lulu-qs-char-batch-del" class="menu_button interactable lulu-qs-btn-hover" style="flex:1; margin:0; border:1px solid #ff6b6b; padding:9px; border-radius:6px; background:rgba(255,107,107,0.1); color:#ff6b6b; font-weight:bold; font-size:12px; display:flex; justify-content:center; align-items:center; gap:6px;"><i class="fa-solid fa-trash-can"></i> 批量删除</button>
@@ -1085,6 +1379,7 @@ ${themeOverrideCSS} </style>
             $header.html(
               '<i class="fa-solid fa-circle-info" style="color:#fcc419;"></i> 未打开角色聊天',
             );
+            $dlg.find("#lulu-qs-char-bind-info").hide();
             $list.html(
               '<div style="color:gray; text-align:center; padding:30px; background:var(--SmartThemeBotMesColor); border-radius:8px; border:1px dashed var(--SmartThemeBorderColor); line-height:1.6;">当前没有打开任何角色的聊天哦~<br>进入聊天后，这里就会显示该角色的专属快照啦 (๑>؂<๑)</div>',
             );
@@ -1094,6 +1389,30 @@ ${themeOverrideCSS} </style>
           $header.html(
             `<i class="fa-solid fa-user-astronaut"></i> 当前角色：${charName}`,
           );
+
+          // ✨ 本聊天的快照绑定状态提示
+          const qsBinding =
+            typeof luluGetChatSnapBinding === "function"
+              ? luluGetChatSnapBinding()
+              : null;
+          const qsBoundName =
+            qsBinding && qsBinding.charName === charName
+              ? qsBinding.snapName
+              : null;
+          const $qsBindInfo = $dlg.find("#lulu-qs-char-bind-info");
+          if (qsBoundName) {
+            $qsBindInfo
+              .show()
+              .html(
+                `<span style="color:#4dabf7; font-weight:bold;"><i class="fa-solid fa-link"></i> 本聊天已绑定【${qsBoundName}】，进入本聊天时会自动应用它</span>`,
+              );
+          } else {
+            $qsBindInfo
+              .show()
+              .html(
+                `<span style="color:gray;"><i class="fa-solid fa-link-slash"></i> 本聊天未绑定快照，点每行的 <i class="fa-solid fa-link"></i> 即可绑定</span>`,
+              );
+          }
 
           const allSnaps = qsGetCharSnaps();
           const mySnaps = allSnaps[charName] || {};
@@ -1157,11 +1476,16 @@ ${themeOverrideCSS} </style>
                   <div style="font-weight:bold; font-size:15px; color:var(--SmartThemeBodyColor); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><i class="fa-solid fa-camera-retro" style="color:var(--SmartThemeQuoteColor);"></i> ${name}</div>
                   <div style="font-size:11px; color:gray; margin-top:6px;">涉及 ${bookCount} 本书 · 共开启 ${totalEntries} 项</div>
                   <div class="lulu-qs-char-badge" style="display:none; margin-top:6px; font-size:11px; color:#51cf66; font-weight:bold;"><i class="fa-solid fa-circle-check"></i> 当前生效中</div>
+                  ${qsBoundName === name ? `<div style="margin-top:4px; font-size:11px; color:#4dabf7; font-weight:bold;"><i class="fa-solid fa-link"></i> 已绑定本聊天</div>` : ""}
                 </div>
                 <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
                   <div style="display:flex; flex-direction:column; gap:2px;">
                     <button class="menu_button interactable lulu-qs-char-move-up" data-rawname="${encodeURIComponent(name)}" style="margin:0; padding:2px 8px; min-width:unset; font-size:11px; line-height:1;" title="上移"><i class="fa-solid fa-chevron-up"></i></button>
                     <button class="menu_button interactable lulu-qs-char-move-down" data-rawname="${encodeURIComponent(name)}" style="margin:0; padding:2px 8px; min-width:unset; font-size:11px; line-height:1;" title="下移"><i class="fa-solid fa-chevron-down"></i></button>
+                  </div>
+                  <div style="display:flex; flex-direction:column; gap:2px;">
+                    <button class="menu_button interactable lulu-qs-char-update" style="margin:0; padding:2px 8px; min-width:unset; font-size:11px; line-height:1;" title="用当前条目状态覆盖/更新此快照"><i class="fa-solid fa-rotate"></i></button>
+                    <button class="menu_button interactable lulu-qs-char-bind ${qsBoundName === name ? "btn-success" : ""}" style="margin:0; padding:2px 8px; min-width:unset; font-size:11px; line-height:1;" title="${qsBoundName === name ? "已绑定到本聊天，点击解除绑定" : "把这个快照绑定到本聊天，进入本聊天时自动应用"}"><i class="fa-solid ${qsBoundName === name ? "fa-link-slash" : "fa-link"}"></i></button>
                   </div>
                   <button class="menu_button interactable btn-primary lulu-qs-btn-hover lulu-qs-char-apply" style="margin:0; border:none; border-radius:6px; font-size:13px; font-weight:bold; padding:8px 14px; flex-shrink:0; display:inline-flex; align-items:center; gap:6px; white-space:nowrap;">运行 <i class="fa-solid fa-play"></i></button>
                 </div>
@@ -1205,6 +1529,38 @@ ${themeOverrideCSS} </style>
             $item.find(".lulu-qs-char-move-down").on("click", function (e) {
               e.stopPropagation();
               moveCharSnap(1, name);
+            });
+            // ✨ 用当前条目状态原地更新此快照（可顺便改名）
+            $item.find(".lulu-qs-char-update").on("click", async function (e) {
+              e.stopPropagation();
+              await luluUpdateCharSnapshotFlow(
+                charName,
+                name,
+                renderCharSnapList,
+              );
+            });
+            // ✨ 绑定/解绑到当前聊天
+            $item.find(".lulu-qs-char-bind").on("click", async function (e) {
+              e.stopPropagation();
+              try {
+                if (qsBoundName === name) {
+                  const unRes = await SillyTavern.callGenericPopup(
+                    `确认解除本聊天对快照【${name}】的绑定吗？<br>解除后进入本聊天就不会再自动应用它啦。`,
+                    SillyTavern.POPUP_TYPE.CONFIRM,
+                  );
+                  if (unRes !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+                  await luluSetChatSnapBinding(charName, null);
+                  toastr.success("已解除本聊天的快照绑定~");
+                } else {
+                  await luluSetChatSnapBinding(charName, name);
+                  toastr.success(
+                    `🔗 已把快照【${name}】绑定到本聊天！以后进入本聊天会自动应用它~`,
+                  );
+                }
+                await renderCharSnapList();
+              } catch (err) {
+                toastr.error("绑定操作失败：" + err.message);
+              }
             });
 
             $list.append($item);
@@ -1323,6 +1679,20 @@ ${themeOverrideCSS} </style>
               },
               { type: "global" },
             );
+            // ✨ 被删的如果包含本聊天绑定的快照 → 顺带解绑
+            const qsBdAfterDel =
+              typeof luluGetChatSnapBinding === "function"
+                ? luluGetChatSnapBinding()
+                : null;
+            if (
+              qsBdAfterDel &&
+              qsBdAfterDel.charName === charName &&
+              del.includes(qsBdAfterDel.snapName)
+            ) {
+              try {
+                await luluSetChatSnapBinding(charName, null);
+              } catch (e) {}
+            }
             toastr.success(`已删除 ${del.length} 个角色快照~`);
             await renderCharSnapList();
           });
@@ -3749,6 +4119,7 @@ $menuBtn.on("click", async () => {
                      </div>
                 </div>
                 <div style="font-size: 12px; color: gray; margin-bottom: 10px; margin-top: 6px;">* 保存为专属快照后，只需点选“应用该组合”，就能完美复原绑定在此角色身上所有世界书当时的开关状态。</div>
+                <div id="wb-char-snap-bind-info" style="font-size: 12px; margin-bottom: 10px; display:none;"></div>
                 <div id="wb-char-snap-container" class="wb-snapshot-list scrollableInnerFull"></div>
             </div>
 
@@ -8041,6 +8412,7 @@ $menuBtn.on("click", async () => {
       $sCont.html(
         '<div style="color:gray; padding:10px;">暂无可用的角色快照呢~</div>',
       );
+      $ui.find("#wb-char-snap-bind-info").hide();
       return;
     }
     let charBooksObj = { primary: null, additional: [] };
@@ -8077,6 +8449,26 @@ $menuBtn.on("click", async () => {
       });
     }
     const mySnaps = charSnaps[charName] || {};
+    // ✨ 本聊天的快照绑定状态提示
+    const chatSnapBinding = luluGetChatSnapBinding();
+    const boundSnapName =
+      chatSnapBinding && chatSnapBinding.charName === charName
+        ? chatSnapBinding.snapName
+        : null;
+    const $bindInfo = $ui.find("#wb-char-snap-bind-info");
+    if (boundSnapName) {
+      $bindInfo
+        .show()
+        .html(
+          `<span style="color:#4dabf7; font-weight:bold;"><i class="fa-solid fa-link"></i> 本聊天已绑定快照【${boundSnapName}】，进入本聊天时会自动应用它~</span>`,
+        );
+    } else {
+      $bindInfo
+        .show()
+        .html(
+          `<span style="color:gray;"><i class="fa-solid fa-link-slash"></i> 本聊天还没绑定快照~ 点快照右边的 <i class="fa-solid fa-link"></i> 按钮即可绑定，以后进入本聊天就会自动应用啦。</span>`,
+        );
+    }
     if (Object.keys(mySnaps).length === 0) {
       $sCont.html(
         '<div style="color:gray; padding:10px; text-align:center;">这名角色还没有存过专属搭配组合呢，快点上方按钮留个纪念吧~</div>',
@@ -8141,7 +8533,7 @@ $menuBtn.on("click", async () => {
         // ---- 角色快照拖拽排序结束 ----
 
         $item.append(
-          `<div style="flex:1; min-width: 150px;"><div style="font-weight:bold;font-size:13px;"><i class="fa-solid fa-grip-vertical lulu-char-snap-drag-handle" style="cursor:grab; color:gray; margin-right:6px;" title="按住拖拽排序"></i><i class="fa-solid fa-camera-retro" style="color:var(--SmartThemeQuoteColor);"></i> ${snapName}</div>
+          `<div style="flex:1; min-width: 150px;"><div style="font-weight:bold;font-size:13px;"><i class="fa-solid fa-grip-vertical lulu-char-snap-drag-handle" style="cursor:grab; color:gray; margin-right:6px;" title="按住拖拽排序"></i><i class="fa-solid fa-camera-retro" style="color:var(--SmartThemeQuoteColor);"></i> ${snapName}${boundSnapName === snapName ? `<span style="font-size:11px; color:#4dabf7; font-weight:bold; margin-left:8px; white-space:nowrap;"><i class="fa-solid fa-link"></i> 已绑定本聊天</span>` : ""}</div>
 <div style="font-size:12px;color:gray;">牵涉 ${includedBooks} 本世界书，共开启 ${totalEntries} 项条目</div></div>`,
         );
         const $act = $(
@@ -8166,6 +8558,46 @@ $menuBtn.on("click", async () => {
           $(
             '<button class="menu_button interactable wb-nowrap-btn btn-primary" style="margin:0; padding:6px 8px;" title="下移"><i class="fa-solid fa-arrow-down"></i></button>',
           ).on("click", () => moveCharSnapshot(1)),
+        );
+
+        // ✨ 绑定/解绑到当前聊天
+        const isBoundToThisChat = boundSnapName === snapName;
+        $act.append(
+          $(
+            `<button class="menu_button interactable wb-nowrap-btn ${isBoundToThisChat ? "btn-success" : "btn-primary"}" style="margin:0; padding:6px 8px;" title="${isBoundToThisChat ? "已绑定到本聊天，点击解除绑定" : "把这个快照绑定到本聊天，进入本聊天时自动应用"}"><i class="fa-solid ${isBoundToThisChat ? "fa-link-slash" : "fa-link"}"></i></button>`,
+          ).on("click", async () => {
+            try {
+              if (isBoundToThisChat) {
+                const unRes = await SillyTavern.callGenericPopup(
+                  `确认解除本聊天对快照【${snapName}】的绑定吗？<br>解除后进入本聊天就不会再自动应用它啦。`,
+                  SillyTavern.POPUP_TYPE.CONFIRM,
+                );
+                if (unRes !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+                await luluSetChatSnapBinding(charName, null);
+                toastr.success("已解除本聊天的快照绑定~");
+              } else {
+                await luluSetChatSnapBinding(charName, snapName);
+                toastr.success(
+                  `🔗 已把快照【${snapName}】绑定到本聊天！以后进入本聊天会自动应用它~`,
+                );
+              }
+              renderCharView();
+            } catch (e) {
+              toastr.error("绑定操作失败：" + e.message);
+            }
+          }),
+        );
+        // ✨ 用当前条目状态原地更新此快照（可顺便改名）
+        $act.append(
+          $(
+            '<button class="menu_button interactable wb-nowrap-btn btn-primary" style="margin:0; padding:6px 8px;" title="用当前条目状态覆盖/更新此快照"><i class="fa-solid fa-rotate"></i></button>',
+          ).on("click", async () => {
+            await luluUpdateCharSnapshotFlow(
+              charName,
+              snapName,
+              renderCharView,
+            );
+          }),
         );
 
         $act.append(
@@ -8232,6 +8664,12 @@ $menuBtn.on("click", async () => {
                 },
                 { type: "global" },
               );
+              // ✨ 被删的如果是本聊天绑定的快照 → 顺带解绑
+              if (boundSnapName === snapName) {
+                try {
+                  await luluSetChatSnapBinding(charName, null);
+                } catch (e) {}
+              }
               renderCharView();
             }
           }),
@@ -8798,6 +9236,17 @@ $menuBtn.on("click", async () => {
       },
       { type: "global" },
     );
+    // ✨ 被删的如果包含本聊天绑定的快照 → 顺带解绑
+    const bdAfterDel = luluGetChatSnapBinding();
+    if (
+      bdAfterDel &&
+      bdAfterDel.charName === charName &&
+      toDelete.includes(bdAfterDel.snapName)
+    ) {
+      try {
+        await luluSetChatSnapBinding(charName, null);
+      } catch (e) {}
+    }
     toastr.success(`已删除 ${toDelete.length} 个角色快照~`);
     renderCharView();
   });
@@ -15825,6 +16274,13 @@ $menuBtn.on("click", async () => {
         clearTimeout(autoCheckTimer);
         autoCheckTimer = setTimeout(luluAutoCheckCurrentChar, 800);
       };
+      // ✨ 角色快照绑定聊天：进入聊天时自动应用绑定的快照（独立防抖，互不影响）
+      let snapApplyTimer = null;
+      const delayedSnapApply = () => {
+        clearTimeout(snapApplyTimer);
+        snapApplyTimer = setTimeout(luluAutoApplyBoundChatSnapshot, 800);
+      };
+      if (et.CHAT_CHANGED) es.on(et.CHAT_CHANGED, delayedSnapApply);
 
       if (et.CHAT_CHANGED) es.on(et.CHAT_CHANGED, delayedCheck);
       if (et.CHARACTER_PAGE_LOADED)
