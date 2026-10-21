@@ -1091,11 +1091,13 @@ window.luluOpenQuickSnapshotView = async () => {
     overflow-y: auto !important;
   }
 
+  /* ✨ 手机端条目改成上下两行：第一行名字占满全宽，第二行按钮靠右一字排开，
+     不再让按钮把名字挤成一小块（与 PC 端的宽松观感对齐） */
   #lulu-quick-snap-modal .lulu-qs-item {
     display: flex !important;
-    flex-direction: row !important;
+    flex-direction: column !important;
     flex-wrap: nowrap !important;
-    align-items: center !important;
+    align-items: stretch !important;
     justify-content: space-between !important;
     gap: 8px !important;
     padding: 10px 8px !important;
@@ -1105,7 +1107,7 @@ window.luluOpenQuickSnapshotView = async () => {
   #lulu-quick-snap-modal .lulu-qs-item > div:first-child {
     flex: 1 1 auto !important;
     min-width: 0 !important;
-    width: auto !important;
+    width: 100% !important;
   }
 
   #lulu-quick-snap-modal .lulu-qs-item > div:first-child > div:first-child {
@@ -1118,7 +1120,7 @@ window.luluOpenQuickSnapshotView = async () => {
 
   #lulu-quick-snap-modal .lulu-qs-item > div:last-child {
     flex: 0 0 auto !important;
-    width: auto !important;
+    width: 100% !important;
     display: flex !important;
     flex-direction: row !important;
     align-items: center !important;
@@ -6275,6 +6277,96 @@ $menuBtn.on("click", async () => {
     renderTransferList(side);
   };
 
+  // ✨ 性能：搬运台单条目的"展开正文区"构建，抽出来给单条展开/折叠复用
+  const buildTransferDetail = (entry, strategy) => {
+    const keysLine =
+      strategy.type === "selective" && (strategy.keys || []).length > 0
+        ? `<div style="font-size:11px; color:var(--SmartThemeQuoteColor); margin-bottom:6px;">🔑 ${(strategy.keys || []).join(", ")}</div>`
+        : "";
+    return $(
+      `<div class="wb-transfer-detail" style="padding:0 8px 8px 8px; border-top:1px dashed rgba(125,125,125,0.3); margin-top:2px; padding-top:8px;">${keysLine}<div style="font-size:12px; line-height:1.5; color:var(--SmartThemeBodyColor); white-space:pre-wrap; word-break:break-word; max-height:200px; overflow-y:auto;">${String(entry.content).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div></div>`,
+    );
+  };
+
+  // ✨ 性能：构建搬运台的单个条目卡片（供分帧渲染逐条调用）
+  const buildTransferItem = (side, entry, realIdx) => {
+    const st = transferState[side];
+    const isSel = st.selected.has(realIdx);
+    const isExpanded = st.expanded && st.expanded.has(realIdx);
+    const isEn = entry.enabled;
+    const strategy = entry.strategy || { type: "constant", keys: [] };
+    const posBadge = formatPositionBadge(entry.position);
+    const stratBadge =
+      strategy.type === "selective"
+        ? '<span class="badge-green">匹配</span>'
+        : '<span class="badge-blue">常驻</span>';
+
+    const $item = $(
+      `<div style="border-left:3px solid ${isEn ? "var(--okGreen, #51cf66)" : "gray"}; background:${isSel ? "rgba(81,207,102,0.1)" : "var(--SmartThemeBlurTintColor)"}; border-radius:4px; opacity:${isEn ? "1" : "0.6"}; transition:0.15s;"></div>`,
+    );
+
+    // 顶部行：复选框 + 可点击展开的主体
+    const $topRow = $(
+      `<div style="display:flex; align-items:flex-start; gap:8px; padding:8px;"></div>`,
+    );
+    const $chk = $(
+      `<input type="checkbox" style="transform:scale(1.1); margin-top:2px; flex-shrink:0; cursor:pointer;">`,
+    ).prop("checked", isSel);
+    $chk.on("click", function (e) {
+      e.stopPropagation(); // 勾选时不触发展开
+    });
+    $chk.on("change", function () {
+      $(this).is(":checked")
+        ? st.selected.add(realIdx)
+        : st.selected.delete(realIdx);
+      $item.css(
+        "background",
+        $(this).is(":checked")
+          ? "rgba(81,207,102,0.1)"
+          : "var(--SmartThemeBlurTintColor)",
+      );
+      updateTransferCount();
+    });
+
+    const expandIcon = entry.content
+      ? `<i class="fa-solid fa-chevron-${isExpanded ? "up" : "down"}" style="margin-left:6px; font-size:11px; color:gray;"></i>`
+      : "";
+    const $body = $(
+      `<div style="flex:1; min-width:0; cursor:pointer;">
+        <div style="font-weight:bold; font-size:13px; word-break:break-all; margin-bottom:3px; display:flex; align-items:center; justify-content:space-between; gap:4px;"><span>${entry.name || "(未命名条目)"}</span>${expandIcon}</div>
+        <div style="display:flex; gap:4px; flex-wrap:wrap; align-items:center; font-size:11px;">
+          <span class="${isEn ? "badge-green" : "badge-grey"}">${isEn ? "已启" : "关闭"}</span>
+          ${stratBadge}
+          <span class="dsnap-entry-pos">${posBadge}</span>
+        </div>
+      </div>`,
+    );
+    // ✨ 性能：展开/折叠只动当前这一条，不再整列重建
+    $body.on("click", () => {
+      if (!entry.content) return;
+      if (!st.expanded) st.expanded = new Set();
+      const $icon = $body.find(".fa-chevron-up, .fa-chevron-down");
+      if (st.expanded.has(realIdx)) {
+        st.expanded.delete(realIdx);
+        $item.children(".wb-transfer-detail").remove();
+        $icon.removeClass("fa-chevron-up").addClass("fa-chevron-down");
+      } else {
+        st.expanded.add(realIdx);
+        $item.append(buildTransferDetail(entry, strategy));
+        $icon.removeClass("fa-chevron-down").addClass("fa-chevron-up");
+      }
+    });
+
+    $topRow.append($chk, $body);
+    $item.append($topRow);
+
+    // 展开的正文区
+    if (isExpanded && entry.content) {
+      $item.append(buildTransferDetail(entry, strategy));
+    }
+    return $item;
+  };
+
   // 渲染某一侧的条目列表
   const renderTransferList = (side) => {
     const $list = $ui.find(`.wb-transfer-list[data-side="${side}"]`).empty();
@@ -6290,100 +6382,44 @@ $menuBtn.on("click", async () => {
       );
       return;
     }
-
-    const filtered = st.entries.filter((e) => {
-      const s =
-        `${e.name || ""} ${(e.strategy?.keys || []).join(",")} ${e.content || ""}`.toLowerCase();
-      return !kw || s.includes(kw);
-    });
-
-    if (filtered.length === 0) {
+    if (st.entries.length === 0) {
       $list.html(
-        `<div style="text-align:center; color:gray; padding:20px;">${st.entries.length === 0 ? "这本书是空的呢" : "没有匹配的条目"}</div>`,
+        '<div style="text-align:center; color:gray; padding:20px;">这本书是空的呢</div>',
       );
       return;
     }
 
-    filtered.forEach((entry) => {
-      const realIdx = st.entries.indexOf(entry);
-      const isSel = st.selected.has(realIdx);
-      const isExpanded = st.expanded && st.expanded.has(realIdx);
-      const isEn = entry.enabled;
-      const strategy = entry.strategy || { type: "constant", keys: [] };
-      const posBadge = formatPositionBadge(entry.position);
-      const stratBadge =
-        strategy.type === "selective"
-          ? '<span class="badge-green">匹配</span>'
-          : '<span class="badge-blue">常驻</span>';
-
-      const $item = $(
-        `<div style="border-left:3px solid ${isEn ? "var(--okGreen, #51cf66)" : "gray"}; background:${isSel ? "rgba(81,207,102,0.1)" : "var(--SmartThemeBlurTintColor)"}; border-radius:4px; opacity:${isEn ? "1" : "0.6"}; transition:0.15s;"></div>`,
-      );
-
-      // 顶部行：复选框 + 可点击展开的主体
-      const $topRow = $(
-        `<div style="display:flex; align-items:flex-start; gap:8px; padding:8px;"></div>`,
-      );
-      const $chk = $(
-        `<input type="checkbox" style="transform:scale(1.1); margin-top:2px; flex-shrink:0; cursor:pointer;">`,
-      ).prop("checked", isSel);
-      $chk.on("click", function (e) {
-        e.stopPropagation(); // 勾选时不触发展开
-      });
-      $chk.on("change", function () {
-        $(this).is(":checked")
-          ? st.selected.add(realIdx)
-          : st.selected.delete(realIdx);
-        $item.css(
-          "background",
-          $(this).is(":checked")
-            ? "rgba(81,207,102,0.1)"
-            : "var(--SmartThemeBlurTintColor)",
-        );
-        updateTransferCount();
-      });
-
-      const expandIcon = entry.content
-        ? `<i class="fa-solid fa-chevron-${isExpanded ? "up" : "down"}" style="margin-left:6px; font-size:11px; color:gray;"></i>`
-        : "";
-      const $body = $(
-        `<div style="flex:1; min-width:0; cursor:pointer;">
-          <div style="font-weight:bold; font-size:13px; word-break:break-all; margin-bottom:3px; display:flex; align-items:center; justify-content:space-between; gap:4px;"><span>${entry.name || "(未命名条目)"}</span>${expandIcon}</div>
-          <div style="display:flex; gap:4px; flex-wrap:wrap; align-items:center; font-size:11px;">
-            <span class="${isEn ? "badge-green" : "badge-grey"}">${isEn ? "已启" : "关闭"}</span>
-            ${stratBadge}
-            <span class="dsnap-entry-pos">${posBadge}</span>
-          </div>
-        </div>`,
-      );
-      // 点主体区域 → 展开/折叠正文
-      $body.on("click", () => {
-        if (!entry.content) return;
-        if (!st.expanded) st.expanded = new Set();
-        st.expanded.has(realIdx)
-          ? st.expanded.delete(realIdx)
-          : st.expanded.add(realIdx);
-        renderTransferList(side);
-      });
-
-      $topRow.append($chk, $body);
-      $item.append($topRow);
-
-      // 展开的正文区
-      if (isExpanded && entry.content) {
-        const keysLine =
-          strategy.type === "selective" && (strategy.keys || []).length > 0
-            ? `<div style="font-size:11px; color:var(--SmartThemeQuoteColor); margin-bottom:6px;">🔑 ${(strategy.keys || []).join(", ")}</div>`
-            : "";
-        $item.append(
-          $(
-            `<div style="padding:0 8px 8px 8px; border-top:1px dashed rgba(125,125,125,0.3); margin-top:2px; padding-top:8px;">${keysLine}<div style="font-size:12px; line-height:1.5; color:var(--SmartThemeBodyColor); white-space:pre-wrap; word-break:break-word; max-height:200px; overflow-y:auto;">${String(entry.content).replace(/</g, "<").replace(/>/g, ">")}</div></div>`,
-          ),
+    // ✨ 性能：分帧渲染 + 序号守卫。原来几百个条目一次性同步构建，
+    // 还在循环里逐个 indexOf（O(n²)），直接堵死主线程（滚动/点击全卡住）；
+    // 现在每帧只构建一批，新渲染触发时没画完的旧任务自动作废
+    const mySeq = (st.renderSeq = (st.renderSeq || 0) + 1);
+    const CHUNK = 80;
+    let idx = 0;
+    let rendered = 0;
+    const renderChunk = () => {
+      if (st.renderSeq !== mySeq) return; // 已被更新的渲染取代，放弃本次
+      const frag = document.createDocumentFragment();
+      const end = Math.min(idx + CHUNK, st.entries.length);
+      for (; idx < end; idx++) {
+        const entry = st.entries[idx];
+        if (kw) {
+          const s =
+            `${entry.name || ""} ${(entry.strategy?.keys || []).join(",")} ${entry.content || ""}`.toLowerCase();
+          if (!s.includes(kw)) continue;
+        }
+        rendered++;
+        frag.appendChild(buildTransferItem(side, entry, idx)[0]);
+      }
+      $list.append(frag);
+      if (idx < st.entries.length) {
+        requestAnimationFrame(renderChunk);
+      } else if (rendered === 0) {
+        $list.html(
+          '<div style="text-align:center; color:gray; padding:20px;">没有匹配的条目</div>',
         );
       }
-
-      $list.append($item);
-    });
+    };
+    renderChunk();
   };
 
   // 更新中间按钮上的选中数提示
@@ -6423,9 +6459,12 @@ $menuBtn.on("click", async () => {
       $ui.find(".wb-transfer-wbdrop").hide();
     }
   });
-  // 条目搜索
+  // 条目搜索（✨ 性能：250ms 防抖，不再每个击键都整列重建）
+  const transferSearchTimers = { A: null, B: null };
   $ui.find(".wb-transfer-search").on("input", function () {
-    renderTransferList($(this).attr("data-side"));
+    const side = $(this).attr("data-side");
+    clearTimeout(transferSearchTimers[side]);
+    transferSearchTimers[side] = setTimeout(() => renderTransferList(side), 250);
   });
 
   $ui.find(".wb-transfer-selall").on("click", function () {
@@ -10349,6 +10388,28 @@ $menuBtn.on("click", async () => {
 
   // ✨ 渲染序号：每次 renderData 递增，深度搜索等异步操作完成后先对序号，过期就直接丢弃
   let __luluRenderSeq = 0;
+  // ✨ 性能：深度搜索正文缓存。同一本书 15 秒内不重复拉全文，
+  // 连续打字时不再每个击键都把全库逐本 fetch 一遍（缓存随面板关闭自然销毁）
+  const deepScanCache = new Map(); // wbName -> { t: 时间戳, hay: 全条目拼接的小写文本 }
+  const DEEPSCAN_CACHE_TTL = 15000;
+
+  // ✨ 性能：批量模式的"已选计数+标签条"刷新抽成小函数，
+  // 勾选单本书时只刷它，不再整表重画
+  const updateWbBatchBar = () => {
+    $ui.find("#wb-batch-count").text(batchSelected.size);
+    const $batchList = $ui.find("#wb-batch-selected-list").empty();
+    if (batchSelected.size > 0)
+      batchSelected.forEach((wb) =>
+        $batchList.append(
+          `<span style="background:rgba(255,107,107,0.2);color:#ff6b6b;padding:3px 6px;border-radius:4px;font-size:12px;white-space:nowrap;border:1px solid #ff6b6b;"><i class="fa-solid fa-xmark"></i> ${wb}</span>`,
+        ),
+      );
+    else
+      $batchList.html(
+        '<span style="color:gray; font-size:12px;">暂未选中</span>',
+      );
+  };
+
   const renderData = async (highlightName = null) => {
     const myRenderSeq = ++__luluRenderSeq;
     const keyword = $ui.find("#wb-search-input").val().toLowerCase();
@@ -10378,6 +10439,10 @@ $menuBtn.on("click", async () => {
 
     const allWbs = getWorldbookNames();
     const activeWbs = getGlobalWorldbookNames();
+    // ✨ 性能：排序比较器/过滤/每张卡片都要查"是否已启用"，先落成 Set，避免数组 includes 的反复线性扫描
+    const activeWbsSet = new Set(activeWbs);
+    // ✨ 性能：跳过对照名单在每张卡片模板里要查 3 次（每次都读 localStorage+JSON.parse），一次读好
+    const scanSkipSet = new Set(getScanSkipList());
     let snapshots = luluGetGlobalVars().wb_snapshots;
     if (typeof snapshots === "string") {
       try {
@@ -10400,8 +10465,8 @@ $menuBtn.on("click", async () => {
       for (let wb of allWbs) {
         const bindings = globalBindingMapCache[wb] || [];
         if (showUnboundOnly && bindings.length > 0) continue;
-        if (stateFilter === "enabled" && !activeWbs.includes(wb)) continue;
-        if (stateFilter === "disabled" && activeWbs.includes(wb)) continue;
+        if (stateFilter === "enabled" && !activeWbsSet.has(wb)) continue;
+        if (stateFilter === "disabled" && activeWbsSet.has(wb)) continue;
         if (
           currentSelCat === "unassigned" &&
           Object.values(wCatSettings).some(
@@ -10424,15 +10489,28 @@ $menuBtn.on("click", async () => {
         else needDeepScan.push(wb);
       }
       // 第二遍：候选书并行翻正文（原来是逐本串行 await，书多时要等很久）
+      // ✨ 性能：正文走 15 秒缓存，连续打字不再逐本重复 fetch；顺手清掉过期项防止越攒越多
+      const now = Date.now();
+      deepScanCache.forEach((v, k) => {
+        if (now - v.t > DEEPSCAN_CACHE_TTL) deepScanCache.delete(k);
+      });
       const scanResults = await Promise.all(
         needDeepScan.map(async (wb) => {
           try {
-            const entries = await getWorldbook(wb);
-            for (let e of entries) {
-              let eStr =
-                `${e.name || ""} ${(e.strategy?.keys || []).join(" ")} ${e.content || ""}`.toLowerCase();
-              if (eStr.includes(keyword)) return true;
+            const hit = deepScanCache.get(wb);
+            let hay =
+              hit && now - hit.t <= DEEPSCAN_CACHE_TTL ? hit.hay : null;
+            if (hay === null) {
+              const entries = await getWorldbook(wb);
+              hay = entries
+                .map(
+                  (e) =>
+                    `${e.name || ""} ${(e.strategy?.keys || []).join(" ")} ${e.content || ""}`.toLowerCase(),
+                )
+                .join("\n");
+              deepScanCache.set(wb, { t: now, hay });
             }
+            return hay.includes(keyword);
           } catch (err) {}
           return false;
         }),
@@ -10457,8 +10535,8 @@ $menuBtn.on("click", async () => {
           return false;
         if (showUnboundOnly && bindings.length > 0) return false;
         if (showLockedOnly && !isWbLocked(wb)) return false;
-        if (stateFilter === "enabled" && !activeWbs.includes(wb)) return false;
-        if (stateFilter === "disabled" && activeWbs.includes(wb)) return false;
+        if (stateFilter === "enabled" && !activeWbsSet.has(wb)) return false;
+        if (stateFilter === "disabled" && activeWbsSet.has(wb)) return false;
         if (currentSelCat === "unassigned") {
           const isAssigned = Object.values(wCatSettings).some(
             (list) => Array.isArray(list) && list.includes(wb),
@@ -10475,8 +10553,8 @@ $menuBtn.on("click", async () => {
     currentVisibleWbs = filteredWbs.sort((a, b) => {
       if (sortMode === "az") return luluZhCompare(a, b);
       if (sortMode === "za") return luluZhCompare(b, a);
-      const aA = activeWbs.includes(a),
-        bA = activeWbs.includes(b);
+      const aA = activeWbsSet.has(a),
+        bA = activeWbsSet.has(b);
       if (aA === bA) return luluZhCompare(a, b);
       return aA ? -1 : 1;
     });
@@ -10484,18 +10562,7 @@ $menuBtn.on("click", async () => {
     const $wbContainer = $ui.find("#wb-container").empty();
     const wbFragment = document.createDocumentFragment();
 
-    $ui.find("#wb-batch-count").text(batchSelected.size);
-    const $batchList = $ui.find("#wb-batch-selected-list").empty();
-    if (batchSelected.size > 0)
-      batchSelected.forEach((wb) =>
-        $batchList.append(
-          `<span style="background:rgba(255,107,107,0.2);color:#ff6b6b;padding:3px 6px;border-radius:4px;font-size:12px;white-space:nowrap;border:1px solid #ff6b6b;"><i class="fa-solid fa-xmark"></i> ${wb}</span>`,
-        ),
-      );
-    else
-      $batchList.html(
-        '<span style="color:gray; font-size:12px;">暂未选中</span>',
-      );
+    updateWbBatchBar();
 
     currentVisibleWbs.forEach((wb) => {
       const bindings = globalBindingMapCache[wb] || [];
@@ -10503,7 +10570,7 @@ $menuBtn.on("click", async () => {
         (k) => Array.isArray(wCatSettings[k]) && wCatSettings[k].includes(wb),
       );
 
-      const isActiveWb = activeWbs.includes(wb);
+      const isActiveWb = activeWbsSet.has(wb);
       const wrapperClass = isActiveWb
         ? "wb-item-wrapper wb-global-active"
         : "wb-item-wrapper";
@@ -10524,10 +10591,11 @@ $menuBtn.on("click", async () => {
         ).prop("checked", batchSelected.has(wb));
         $titleArea.on("click", (e) => {
           e.preventDefault();
-          batchSelected.has(wb)
-            ? batchSelected.delete(wb)
-            : batchSelected.add(wb);
-          renderData();
+          // ✨ 性能：勾选单本书只更新勾选状态和批量条，不再整表重画
+          const nowChecked = !batchSelected.has(wb);
+          nowChecked ? batchSelected.add(wb) : batchSelected.delete(wb);
+          $chk.prop("checked", nowChecked);
+          updateWbBatchBar();
         });
       } else {
         $chk = $(
@@ -10610,11 +10678,42 @@ $menuBtn.on("click", async () => {
             e.stopPropagation();
             let d = getCategories();
             if (!d["🌟默认收藏夹"]) d["🌟默认收藏夹"] = [];
-            isDefFav
-              ? (d["🌟默认收藏夹"] = d["🌟默认收藏夹"].filter((x) => x !== wb))
-              : d["🌟默认收藏夹"].push(wb);
+            // ✨ 以存储里的真实状态为准（局部更新后闭包里的 isDefFav 会过时）
+            const nowFav = !d["🌟默认收藏夹"].includes(wb);
+            nowFav
+              ? d["🌟默认收藏夹"].push(wb)
+              : (d["🌟默认收藏夹"] = d["🌟默认收藏夹"].filter(
+                  (x) => x !== wb,
+                ));
             saveCategories(d);
-            renderData(wb);
+            // 分类筛选/搜索激活时，这本书可能因此该进该出列表 → 只能整表重画
+            if (currentSelCat !== "all" || keyword) {
+              renderData(wb);
+              return;
+            }
+            // ✨ 性能：否则只更新这颗星和分类标签条，不整表重画
+            $(e.currentTarget)
+              .css("color", nowFav ? "#fcc419" : "inherit")
+              .find("i")
+              .attr("class", `fa-${nowFav ? "solid" : "regular"} fa-star`);
+            $tagRow.find(".wb-cat-tag").remove();
+            Object.keys(d)
+              .filter((k) => Array.isArray(d[k]) && d[k].includes(wb))
+              .forEach((c) => {
+                const disp =
+                  c === "🌟默认收藏夹"
+                    ? "🌟"
+                    : `<i class="fa-solid fa-folder"></i> ${c}`;
+                $tagRow.append(
+                  `<div class="wb-bind-tag wb-cat-tag" style="background: rgba(252, 196, 25, 0.15); border: 1px solid #fcc419; color: #fcc419;" title="当前所在分类: ${c}">${disp}</div>`,
+                );
+              });
+            // 标签条为空时原本不会挂上 DOM，有内容才挂、清空就摘下
+            if ($tagRow.children().length > 0) {
+              if (!$tagRow.parent().length) $bottomBar.append($tagRow);
+            } else {
+              $tagRow.detach();
+            }
           }),
         );
         $actions.append(
@@ -10890,7 +10989,7 @@ $menuBtn.on("click", async () => {
           .append(
             // 🚫 全库对照跳过标记
             $(
-              `<div class="wb-icon-btn hover-yellow" title="${isScanSkipped(wb) ? "已标记跳过全库对照，点击取消" : "标记为跳过全库对照（全库对照扫描时自动忽略）"}" style="display:none!important; color:${isScanSkipped(wb) ? "#fcc419" : "inherit"}"><i class="fa-solid ${isScanSkipped(wb) ? "fa-eye-slash" : "fa-eye"}"></i></div>`,
+              `<div class="wb-icon-btn hover-yellow" title="${scanSkipSet.has(wb) ? "已标记跳过全库对照，点击取消" : "标记为跳过全库对照（全库对照扫描时自动忽略）"}" style="display:none!important; color:${scanSkipSet.has(wb) ? "#fcc419" : "inherit"}"><i class="fa-solid ${scanSkipSet.has(wb) ? "fa-eye-slash" : "fa-eye"}"></i></div>`,
             ).on("click", (e) => {
               e.stopPropagation();
               const nowSkipped = toggleScanSkip(wb);
@@ -10914,7 +11013,32 @@ $menuBtn.on("click", async () => {
                   ? `🔒 [${wb}] 已锁定，之后删除、覆盖导入、重命名都会被拦下哦~`
                   : `🔓 [${wb}] 已解锁。`,
               );
-              renderData(wb);
+              // "只看锁定"筛选激活时，这本书可能因此该进该出列表 → 整表重画
+              if (showLockedOnly) {
+                renderData(wb);
+                return;
+              }
+              // ✨ 性能：否则只更新锁按钮和名字前的金锁图标，不整表重画
+              $(e.currentTarget)
+                .attr(
+                  "title",
+                  nowLocked ? "已锁定，点击解锁" : "锁定此书，防止误删",
+                )
+                .css("color", nowLocked ? "#fcc419" : "inherit")
+                .find("i")
+                .attr(
+                  "class",
+                  `fa-solid ${nowLocked ? "fa-lock" : "fa-lock-open"}`,
+                );
+              const $nameSpan = $titleArea.find(".wb-name-text");
+              if (nowLocked) {
+                if ($nameSpan.find(".fa-lock").length === 0)
+                  $nameSpan.prepend(
+                    '<i class="fa-solid fa-lock" style="margin-right:4px; color:#fcc419;" title="此世界书已锁定，防止误删"></i>',
+                  );
+              } else {
+                $nameSpan.find(".fa-lock").remove();
+              }
             }),
           )
           .append(
@@ -11832,7 +11956,8 @@ $menuBtn.on("click", async () => {
         if (!e.key) e.key = e.strategy?.keys || [];
         if (!e.keys) e.keys = e.strategy?.keys || [];
       });
-      originalTuneEntries = JSON.parse(JSON.stringify(tuneEntries));
+      // ✨ 性能：这里不再提前拍快照——首次渲染后（约百余行下方）会重拍一次作为"未改动"基准，
+      // 原来那一拍是整本书的深拷贝白工，大书打开即卡
     }, `提取内容...`);
     isEntryBatchMode = false;
     entryBatchSelected.clear();
@@ -13182,10 +13307,15 @@ $menuBtn.on("click", async () => {
     const filteredEntries = tuneEntries.filter((entry) => {
       // ✨ 对照表条目是脚本内部数据，不显示在列表里
       if (isLuluMapEntry(entry)) return false;
+      // ✨ 性能：没输关键词就别给每条目拼小写串了
+      if (!keyword) return true;
       const searchStr =
         `${entry.name || ""} ${(entry.strategy?.keys || []).join(",")} ${showPreview ? entry.content || "" : ""}`.toLowerCase();
-      return !keyword || searchStr.includes(keyword);
+      return searchStr.includes(keyword);
     });
+
+    // ✨ 性能：条目→下标的映射只建一次，替代循环里的 tuneEntries.indexOf（O(n²)）
+    const entryIndexMap = new Map(tuneEntries.map((e, i) => [e, i]));
 
     let sortedEntries = [...filteredEntries];
     if (sortMode === "enabled_first")
@@ -13218,7 +13348,7 @@ $menuBtn.on("click", async () => {
       .off("click")
       .on("click", () => {
         sortedEntries.forEach((entry) =>
-          entryBatchSelected.add(tuneEntries.indexOf(entry)),
+          entryBatchSelected.add(entryIndexMap.get(entry)),
         );
         renderEntryList();
       });
@@ -13227,7 +13357,7 @@ $menuBtn.on("click", async () => {
       .off("click")
       .on("click", () => {
         sortedEntries.forEach((entry) =>
-          entryBatchSelected.delete(tuneEntries.indexOf(entry)),
+          entryBatchSelected.delete(entryIndexMap.get(entry)),
         );
         renderEntryList();
       });
@@ -13236,8 +13366,8 @@ $menuBtn.on("click", async () => {
       .off("click")
       .on("click", () => {
         sortedEntries.forEach((entry) => {
-          const idx = tuneEntries.indexOf(entry);
-          if (idx === -1) return;
+          const idx = entryIndexMap.get(entry);
+          if (idx === undefined) return;
           entryBatchSelected.has(idx)
             ? entryBatchSelected.delete(idx)
             : entryBatchSelected.add(idx);
@@ -13463,8 +13593,8 @@ $menuBtn.on("click", async () => {
       $gHeader.find(".wb-group-select-all").on("click", (e) => {
         e.stopPropagation();
         gEntries.forEach((entry) => {
-          const index = tuneEntries.indexOf(entry);
-          if (index !== -1) entryBatchSelected.add(index);
+          const index = entryIndexMap.get(entry);
+          if (index !== undefined) entryBatchSelected.add(index);
         });
         $ui.find("#wb-entry-batch-count").text(entryBatchSelected.size);
         renderEntryList();
@@ -13472,8 +13602,8 @@ $menuBtn.on("click", async () => {
       $gHeader.find(".wb-group-deselect-all").on("click", (e) => {
         e.stopPropagation();
         gEntries.forEach((entry) => {
-          const index = tuneEntries.indexOf(entry);
-          if (index !== -1) entryBatchSelected.delete(index);
+          const index = entryIndexMap.get(entry);
+          if (index !== undefined) entryBatchSelected.delete(index);
         });
         $ui.find("#wb-entry-batch-count").text(entryBatchSelected.size);
         renderEntryList();
@@ -13608,8 +13738,15 @@ $menuBtn.on("click", async () => {
         }
       });
 
+      // ✨ 性能：收起的分组直接不生成条目 DOM（原来只是 display:none，几百个条目照样全部构建，
+      // 进书时默认全组收起 → 等于整本书的 DOM 白建一遍，滚动自然卡）
+      if (isCollapsed && isGroupView) {
+        entryFragment.appendChild($gHeader[0]);
+        entryFragment.appendChild($gContainer[0]);
+        continue;
+      }
       gEntries.forEach((entry) => {
-        const index = tuneEntries.indexOf(entry);
+        const index = entryIndexMap.get(entry);
         const isLockedEntry = isEntryLocked(tuneWbName, entry.uid);
         const strategy = entry.strategy || { type: "constant", keys: [] };
         const keysInfo =
@@ -13668,7 +13805,7 @@ $menuBtn.on("click", async () => {
         }
         let previewHtml = "";
         if (showPreview && entry.content) {
-          previewHtml = `<div class="content-preview">${entry.content.replace(/</g, "<").replace(/>/g, ">")}</div>`;
+          previewHtml = `<div class="content-preview">${String(entry.content).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`;
         }
 
         let groupTagHtml = "";
