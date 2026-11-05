@@ -482,6 +482,48 @@ const getSharedGroupOrder = () =>
   JSON.parse(localStorage.getItem("lulu_wb_native_group_order") || "[]");
 const setSharedGroupOrder = (arr) =>
   localStorage.setItem("lulu_wb_native_group_order", JSON.stringify(arr));
+// ========== 【功能：世界书导入时间记录】工具函数 开始 ==========
+// 酒馆接口拿不到世界书文件的真实创建时间，所以脚本自己记账：
+// 第一次见到某本书就记下当时时间，之后"按导入时间排序"就看这本账
+const LULU_WB_IMPORT_TIME_KEY = "lulu_wb_import_times";
+const getWbImportTimes = () => {
+  try {
+    const obj = JSON.parse(
+      localStorage.getItem(LULU_WB_IMPORT_TIME_KEY) || "{}",
+    );
+    return obj && typeof obj === "object" && !Array.isArray(obj) ? obj : {};
+  } catch (e) {
+    return {};
+  }
+};
+// 拿当前书单对账：新书补记"现在"（同一批按名单顺序错开 1ms，保证次序稳定），已删除的书清掉
+const syncWbImportTimes = (currentNames) => {
+  const names = Array.isArray(currentNames) ? currentNames : [];
+  const times = getWbImportTimes();
+  const now = Date.now();
+  let changed = false;
+  names.forEach((n, i) => {
+    if (times[n] === undefined) {
+      times[n] = now + i;
+      changed = true;
+    }
+  });
+  Object.keys(times).forEach((n) => {
+    if (!names.includes(n)) {
+      delete times[n];
+      changed = true;
+    }
+  });
+  if (changed)
+    localStorage.setItem(LULU_WB_IMPORT_TIME_KEY, JSON.stringify(times));
+  return times;
+};
+// 脚本加载时先记一笔，之后每次渲染面板都会再对账
+try {
+  if (typeof getWorldbookNames === "function")
+    syncWbImportTimes(getWorldbookNames());
+} catch (e) {}
+// ========== 【功能：世界书导入时间记录】工具函数 结束 ==========
 // ========== 【功能8：快照排序】工具函数 开始 ==========
 const getSnapshotOrder = () => {
   let vars = luluGetGlobalVars();
@@ -4041,6 +4083,8 @@ $menuBtn.on("click", async () => {
                             <option value="default">↕ 默认(启用在前)</option>
                             <option value="az">🔤 名称 A-Z</option>
                             <option value="za">🔡 名称 Z-A</option>
+                            <option value="import_desc">📅 导入时间(新→旧)</option>
+                            <option value="import_asc">📅 导入时间(旧→新)</option>
                         </select>
                         <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px; margin: 0; white-space: nowrap;">
     <input type="checkbox" id="wb-filter-unbound" style="accent-color: var(--SmartThemeQuoteColor); transform: scale(1.1);">
@@ -10439,6 +10483,8 @@ $menuBtn.on("click", async () => {
 
     const allWbs = getWorldbookNames();
     const activeWbs = getGlobalWorldbookNames();
+    // 顺便对一下导入时间账：新导入的书此刻补记时间戳
+    const wbImportTimes = syncWbImportTimes(allWbs);
     // ✨ 性能：排序比较器/过滤/每张卡片都要查"是否已启用"，先落成 Set，避免数组 includes 的反复线性扫描
     const activeWbsSet = new Set(activeWbs);
     // ✨ 性能：跳过对照名单在每张卡片模板里要查 3 次（每次都读 localStorage+JSON.parse），一次读好
@@ -10553,6 +10599,12 @@ $menuBtn.on("click", async () => {
     currentVisibleWbs = filteredWbs.sort((a, b) => {
       if (sortMode === "az") return luluZhCompare(a, b);
       if (sortMode === "za") return luluZhCompare(b, a);
+      if (sortMode === "import_desc" || sortMode === "import_asc") {
+        const ta = wbImportTimes[a] || 0;
+        const tb = wbImportTimes[b] || 0;
+        if (ta !== tb) return sortMode === "import_desc" ? tb - ta : ta - tb;
+        return luluZhCompare(a, b);
+      }
       const aA = activeWbsSet.has(a),
         bA = activeWbsSet.has(b);
       if (aA === bA) return luluZhCompare(a, b);
@@ -10653,6 +10705,17 @@ $menuBtn.on("click", async () => {
       $titleArea.append(
         `<span class="wb-name-text" style="${statusStyle}" title="${wb}">${lockIcon}${activeIcon}${wb}</span>`,
       );
+      // 按导入时间排序时，名字旁边带个小时间戳，一眼认出刚导入的书
+      if (sortMode === "import_desc" || sortMode === "import_asc") {
+        const impT = wbImportTimes[wb];
+        if (impT) {
+          const d = new Date(impT);
+          const fmtT = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+          $titleArea.append(
+            `<span style="font-size:11px; color:gray; margin-left:6px; white-space:nowrap; flex-shrink:0;" title="脚本记录到的导入时间">🕒${fmtT}</span>`,
+          );
+        }
+      }
       $header.append($titleArea);
       const $bottomBar = $('<div class="wb-item-bottom"></div>');
       const $topRow = $(
