@@ -2015,26 +2015,19 @@ ${themeOverrideCSS} </style>
               const dataFields = sData.data;
               const allWbNames = getWorldbookNames(),
                 targetWbNames = Object.keys(dataFields);
-              for (const wbName of allWbNames) {
+              // 只处理快照里明确包含的世界书；快照没提到的书一律不动
+              for (const wbName of targetWbNames) {
+                if (!allWbNames.includes(wbName)) continue; // 快照里的书已被删除/改名，跳过
                 let wbEntries = await getWorldbook(wbName),
                   changed = false;
-                if (targetWbNames.includes(wbName)) {
-                  const enabledUIDs = dataFields[wbName];
-                  wbEntries.forEach((entry) => {
-                    const shouldBeEnabled = enabledUIDs.includes(entry.uid);
-                    if (entry.enabled !== shouldBeEnabled) {
-                      entry.enabled = shouldBeEnabled;
-                      changed = true;
-                    }
-                  });
-                } else {
-                  wbEntries.forEach((entry) => {
-                    if (entry.enabled) {
-                      entry.enabled = false;
-                      changed = true;
-                    }
-                  });
-                }
+                const enabledUIDs = dataFields[wbName];
+                wbEntries.forEach((entry) => {
+                  const shouldBeEnabled = enabledUIDs.includes(entry.uid);
+                  if (entry.enabled !== shouldBeEnabled) {
+                    entry.enabled = shouldBeEnabled;
+                    changed = true;
+                  }
+                });
                 if (changed) await replaceWorldbook(wbName, wbEntries);
               }
               await rebindGlobalWorldbooks(targetWbNames);
@@ -11792,31 +11785,26 @@ $menuBtn.on("click", async () => {
     await withLoadingOverlay(async () => {
       const allWbNames = getWorldbookNames(),
         targetWbNames = Object.keys(data);
-      // ✨ 并行读取所有书（原来是逐本串行 await）；写入仍逐本进行，保证顺序安全
-      const allEntries = await Promise.all(
-        allWbNames.map((wbName) => getWorldbook(wbName)),
+      // 只处理快照里明确包含的世界书；快照没提到的书一律不动
+      const targetExisting = targetWbNames.filter((wb) =>
+        allWbNames.includes(wb),
       );
-      for (let i = 0; i < allWbNames.length; i++) {
-        const wbName = allWbNames[i];
+      // ✨ 并行读取所有目标书（原来是逐本串行 await）；写入仍逐本进行，保证顺序安全
+      const allEntries = await Promise.all(
+        targetExisting.map((wbName) => getWorldbook(wbName)),
+      );
+      for (let i = 0; i < targetExisting.length; i++) {
+        const wbName = targetExisting[i];
         const wbEntries = allEntries[i];
         let changed = false;
-        if (targetWbNames.includes(wbName)) {
-          const enabledUIDs = data[wbName];
-          wbEntries.forEach((entry) => {
-            const shouldBeEnabled = enabledUIDs.includes(entry.uid);
-            if (entry.enabled !== shouldBeEnabled) {
-              entry.enabled = shouldBeEnabled;
-              changed = true;
-            }
-          });
-        } else {
-          wbEntries.forEach((entry) => {
-            if (entry.enabled) {
-              entry.enabled = false;
-              changed = true;
-            }
-          });
-        }
+        const enabledUIDs = data[wbName];
+        wbEntries.forEach((entry) => {
+          const shouldBeEnabled = enabledUIDs.includes(entry.uid);
+          if (entry.enabled !== shouldBeEnabled) {
+            entry.enabled = shouldBeEnabled;
+            changed = true;
+          }
+        });
         if (changed) await replaceWorldbook(wbName, wbEntries);
       }
       await rebindGlobalWorldbooks(targetWbNames);
