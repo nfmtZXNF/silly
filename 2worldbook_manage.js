@@ -3,6 +3,104 @@ try {
 } catch (e) {}
 $("#option_lulu_wb_manager").remove();
 
+// ========== 【卸载清理】脚本被禁用/更新/重载时，所在 iframe 会触发 pagehide：趁机把注入页面的痕迹全部清掉 ==========
+// 登记处：定时器 id、事件解绑函数在各资源创建时登记进来；DOM 选择器静态列举（移除不存在的元素无害）
+const luluWbCleanupRegistry = {
+  intervals: [], // setInterval 的 id
+  eventCleanups: [], // 事件解绑函数
+};
+// 注入到页面的元素（含样式表），卸载时统一移除
+const LULU_WB_INJECTED_SELECTORS = [
+  "#option_lulu_wb_manager", // 左下角菜单按钮
+  "#lulu-wb-floating-btn", // 悬浮球
+  "#lulu-wb-floating-style", // 悬浮球样式
+  "#lulu-drag-line-style", // 原生分组拖拽样式
+  "#lulu-sticky-note-window", // 便签小窗
+  "#lulu-theme-override-style", // 面板主题覆盖样式
+  "#lulu-sticky-theme-style", // 便签主题样式
+  "#lulu-sticky-structure-style", // 便签结构样式
+  "#lulu-wb-tail-style", // 文件末尾追加的全局样式
+];
+// 挂在 window 上的全局函数/标志，卸载时一并摘掉，防止残留引用指向已销毁的 iframe
+const LULU_WB_WINDOW_PROPS = [
+  "luluGetExtractedMap",
+  "luluMarkExtracted",
+  "luluGetExtractedName",
+  "buildPopupThemeCSS",
+  "luluOpenQuickSnapshotView",
+  "luluWbInitTabType",
+  "luluStartNativeWbSync",
+  "luluNativeSyncAutostartTimer",
+  "lulu_native_sync_interval",
+  "lulu_native_cleaned",
+  "lulu_auto_detect_inited",
+  "__luluFloatRedock",
+  "__luluFloatResizeBound",
+];
+const luluWbCleanup = () => {
+  if (window.__luluWbCleaned) return;
+  window.__luluWbCleaned = true;
+  // 1) 停掉所有还在跑的定时器（原生分组轮询、自动启动轮询等）
+  try {
+    if (window.lulu_native_sync_interval)
+      clearInterval(window.lulu_native_sync_interval);
+    if (window.luluNativeSyncAutostartTimer)
+      clearInterval(window.luluNativeSyncAutostartTimer);
+    luluWbCleanupRegistry.intervals.forEach((id) => clearInterval(id));
+  } catch (e) {}
+  // 2) 解绑挂在酒馆事件总线上的监听（聊天切换自动检测等）
+  luluWbCleanupRegistry.eventCleanups.forEach((fn) => {
+    try {
+      fn();
+    } catch (e) {}
+  });
+  // 3) 移除注入的所有界面元素（菜单按钮、悬浮球、便签窗、样式表）
+  try {
+    LULU_WB_INJECTED_SELECTORS.forEach((sel) => $(sel).remove());
+  } catch (e) {}
+  // 4) 还开着的弹窗（主面板/极速快照/救援/扫描等）一并关掉
+  try {
+    $(
+      "dialog.wb-manager-dialog, dialog.lulu-qs-dialog, dialog:has(#lulu-rescue-dialog), dialog:has(#lulu-scan-dialog-inner), dialog:has(#lulu-scan-char-select-dialog)",
+    ).each(function () {
+      try {
+        this.close();
+      } catch (e) {}
+      $(this).remove();
+    });
+  } catch (e) {}
+  // 4.5) 脚本按钮也清掉（部分助手版本禁用时会自己收，这里兜底）
+  try {
+    replaceScriptButtons([]);
+  } catch (e) {}
+  // 5) 原生世界书列表恢复原样：移除分组表头、还原条目顺序与样式
+  try {
+    $(".lulu-native-group-header").remove();
+    const $entries = $(".world_entry[uid]");
+    if ($entries.length) {
+      $entries.first().parent().css({ display: "", "flex-direction": "" });
+      $entries
+        .css({ order: "", display: "", margin: "" })
+        .removeClass("lulu-folded-hide");
+    }
+  } catch (e) {}
+  // 6) 摘掉挂在 window 上的全局函数与标志，避免残留引用报错
+  LULU_WB_WINDOW_PROPS.forEach((k) => {
+    try {
+      delete window[k];
+    } catch (e) {
+      window[k] = undefined;
+    }
+  });
+  try {
+    console.log(
+      "Lù-chan: 脚本已关闭，注入的界面元素已清理干净，不用再刷新页面啦~",
+    );
+  } catch (e) {}
+};
+window.__luluWbCleaned = false;
+$(window).on("pagehide beforeunload unload", luluWbCleanup);
+
 const $menuBtn = $("<a>", {
   id: "option_lulu_wb_manager",
   class: "interactable",
@@ -65,7 +163,13 @@ const luluInvalidateGlobalVars = () => {
 };
 const luluUpdateGlobalVars = (updater, options) => {
   const result = updateVariablesWith(updater, options || { type: "global" });
-  luluInvalidateGlobalVars();
+  // ✨【性能】同步 updater 的返回值就是最新变量表，直接拿来当缓存，
+  //    不再把缓存置空（否则下次读取又要深拷贝整棵变量树，快照多的时候很疼）
+  if (result && typeof result.then === "function") {
+    __luluGlobalVarsCache = null;
+  } else {
+    __luluGlobalVarsCache = result;
+  }
   return result;
 };
 
@@ -2650,6 +2754,9 @@ window.luluStartNativeWbSync = function () {
   const luluNativeSyncTick = async (force = false) => {
     if (isRendering && !force) return;
     if (document.hidden) return;
+    // ✨【性能】管理面板打开期间，原生页面被模态弹窗完全遮挡，
+    //    此刻做分组同步纯属白干（用户看不见），面板关掉后指纹比对自然会补一次同步
+    if (!force && $("dialog.wb-manager-dialog[open]").length > 0) return;
     const isNativeMagicEnabled =
       localStorage.getItem("lulu_wb_native_magic_enabled") !== "false";
 
@@ -3123,6 +3230,8 @@ window.luluStartNativeWbSync = function () {
     () => luluNativeSyncTick(),
     2000, // ✨ 2 秒轮询 + 点按立即重排：实测最流畅的组合（MutationObserver 版已弃用，刷屏时反而拖慢页面）
   );
+  // 登记到卸载清理处：脚本被禁用时这个轮询要跟着停
+  luluWbCleanupRegistry.intervals.push(window.lulu_native_sync_interval);
 };
 
 // 等酒馆的关键函数加载好之后，再自动启动（防止脚本跑太早报错）
@@ -3141,6 +3250,7 @@ window.luluNativeSyncAutostartTimer = setInterval(() => {
     }
   }
 }, 1000);
+luluWbCleanupRegistry.intervals.push(window.luluNativeSyncAutostartTimer);
 // 60 秒兜底：如果酒馆函数一直没加载好，就停止检测，避免无意义空转
 setTimeout(() => {
   if (window.luluNativeSyncAutostartTimer) {
@@ -3183,6 +3293,13 @@ const saveScannedAvatarList = (arr) => {
 $menuBtn.on("click", async () => {
   $("#options").hide();
   luluInvalidateGlobalVars(); // 开面板时丢弃缓存，防止其它脚本写入的数据过期
+  // ✨【性能】先用本地缓存预填绑定表：第一次渲染就能画出正确的绑定标记，
+  //    不用干等深扫结束后再全量重画一次（深扫结果没变时也会跳过二次渲染）
+  try {
+    const __cachedBind = loadBindingCache();
+    if (__cachedBind && Object.keys(__cachedBind).length > 0)
+      globalBindingMapCache = __cachedBind;
+  } catch (e) {}
   // 📌 便签小窗还开着时，不重复开面板，改为闪烁提醒小窗位置
   if ($("#lulu-sticky-note-window").length) {
     const $sn = $("#lulu-sticky-note-window");
@@ -3241,7 +3358,9 @@ $menuBtn.on("click", async () => {
             .wb-list-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; align-content: start; max-height: 55vh; overflow-y: auto; background: var(--SmartThemeBlurTintColor); border-radius: 8px; border: 1px solid var(--SmartThemeBorderColor); padding: 10px; position: relative; }
             .wb-snapshot-list { display: flex; flex-direction: column; gap: 8px; max-height: 35vh; overflow-y: auto; background: var(--SmartThemeBlurTintColor); border-radius: 8px; border: 1px solid var(--SmartThemeBorderColor); padding: 10px; }
 
-            .wb-item-wrapper { display: flex; flex-direction: column; background: var(--SmartThemeBotMesColor); border-radius: 6px; border: 1px solid var(--SmartThemeBorderColor); border-left: 3px solid rgba(125,125,125,0.35); transition: 0.2s; overflow: hidden; padding: 10px; gap: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+            .wb-item-wrapper { display: flex; flex-direction: column; background: var(--SmartThemeBotMesColor); border-radius: 6px; border: 1px solid var(--SmartThemeBorderColor); border-left: 3px solid rgba(125,125,125,0.35); transition: 0.2s; overflow: hidden; padding: 10px; gap: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); content-visibility: auto; contain-intrinsic-size: auto 92px; }
+            /* ✨【性能】书多的时候滚动更顺：屏幕外的卡片浏览器直接跳过布局和绘制，
+               滚到附近才渲染；92px 是屏外卡片的预估高度（auto 会在渲染过一次后记住真实高度） */
             .wb-item-wrapper:hover { border-color: var(--SmartThemeQuoteColor); box-shadow: 0 4px 8px rgba(0,0,0,0.18); transform: translateY(-1px); z-index: 10; }
 
             .wb-item-header { display: flex; justify-content: flex-start; align-items: flex-start; gap: 8px; width: 100%; overflow: hidden; }
@@ -4121,7 +4240,7 @@ $menuBtn.on("click", async () => {
                              <button class="menu_button interactable btn-warning wb-nowrap-btn" id="wb-btn-batch-group" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-folder-tree"></i> 批量分组</button>
                              <button class="menu_button interactable btn-secondary wb-nowrap-btn" id="wb-btn-batch-ungroup" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-folder-minus"></i> 批量移出分类</button>
                              <button class="menu_button interactable btn-primary wb-nowrap-btn" id="wb-btn-batch-export" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-file-export"></i> 批量打包导出</button>
-                             <button class="menu_button interactable btn-danger wb-nowrap-btn" id="wb-btn-confirm-delete" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-burst"></i> 确认永久删除</button>
+                             <button class="menu_button interactable btn-danger wb-nowrap-btn" id="wb-btn-confirm-delete" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-trash-can"></i> 确认删除</button>
                              <button class="menu_button interactable btn-warning wb-nowrap-btn" id="wb-btn-batch-lock" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-lock"></i> 批量锁定</button>
                              <button class="menu_button interactable btn-info wb-nowrap-btn" id="wb-btn-batch-skip" style="margin: 0; border: none; font-size: 13px; padding: 6px 14px;"><i class="fa-solid fa-eye-slash"></i> 批量跳过对照</button>
                         </div>
@@ -5581,33 +5700,51 @@ $menuBtn.on("click", async () => {
   // 删书前调用：把整本书打包丢进回收站
   const moveWbToRecycle = async (wbName) => {
     try {
-      let entries = [];
-      try {
-        entries = await getWorldbook(wbName);
-      } catch (e) {
-        entries = [];
-      }
-      // 顺便记住它所在的分类和UI分组，还原时一起恢复
-      const cats = getCategories();
-      const myCats = Object.keys(cats).filter(
-        (k) => Array.isArray(cats[k]) && cats[k].includes(wbName),
-      );
-      const uiGroups = getWbUiGroups()[wbName] || {};
-
+      const pack = await packWbForRecycle(wbName);
       let bin = getRecycleBin();
       // 同名的旧记录先去掉，避免重复
       bin = bin.filter((item) => item.name !== wbName);
-      bin.unshift({
-        name: wbName,
-        entries: entries,
-        cats: myCats,
-        uiGroups: uiGroups,
-        deletedAt: Date.now(),
-      });
+      bin.unshift(pack);
       if (bin.length > RECYCLE_MAX) bin = bin.slice(0, RECYCLE_MAX);
       saveRecycleBin(bin);
     } catch (e) {
       console.error("Lulu 回收站打包失败:", e);
+    }
+  };
+  // ✨ 只把书的资料读出来打包（不写回收站），供批量删除并发调用
+  const packWbForRecycle = async (wbName) => {
+    let entries = [];
+    try {
+      entries = await getWorldbook(wbName);
+    } catch (e) {
+      entries = [];
+    }
+    // 顺便记住它所在的分类和UI分组，还原时一起恢复
+    const cats = getCategories();
+    const myCats = Object.keys(cats).filter(
+      (k) => Array.isArray(cats[k]) && cats[k].includes(wbName),
+    );
+    const uiGroups = getWbUiGroups()[wbName] || {};
+    return {
+      name: wbName,
+      entries: entries,
+      cats: myCats,
+      uiGroups: uiGroups,
+      deletedAt: Date.now(),
+    };
+  };
+  // ✨ 把若干打包好的记录一次性合并进回收站（只读写一次，避免并发互相覆盖）
+  const mergePacksIntoRecycleBin = (packs) => {
+    if (!packs || packs.length === 0) return;
+    try {
+      let bin = getRecycleBin();
+      const names = new Set(packs.map((p) => p.name));
+      bin = bin.filter((item) => !names.has(item.name));
+      bin = [...packs, ...bin];
+      if (bin.length > RECYCLE_MAX) bin = bin.slice(0, RECYCLE_MAX);
+      saveRecycleBin(bin);
+    } catch (e) {
+      console.error("Lulu 回收站合并失败:", e);
     }
   };
 
@@ -5823,6 +5960,11 @@ $menuBtn.on("click", async () => {
     const $overlay = $ui.find("#wb-loading-overlay"),
       $sub = $ui.find("#wb-loading-sub"),
       $sec = $ui.find("#wb-loading-secondary-text");
+    // ✨【性能】扫描前给绑定缓存/已扫名单拍快照：扫完比对，
+    //    没变化就不写变量（省一次全量序列化写回）、不二次全量渲染
+    const __bindingsBefore = luluStableStringify(loadBindingCache() || {});
+    const __scannedBefore = luluStableStringify(loadScannedAvatarList() || []);
+    let __bindingsChanged = false;
     if (isFastSync) {
       $ui
         .find("#wb-loading-text")
@@ -6058,9 +6200,12 @@ $menuBtn.on("click", async () => {
           await new Promise((resolve) => setTimeout(resolve, 0));
         }
         applyCharLoreExtraBooks(charMap);
-        saveScannedAvatarList(
-          combinedData.filter((c) => c && c.avatar).map((c) => c.avatar),
-        );
+        // ✨【性能】名单真的变了才写回变量，没变就省一次全量写
+        const __scannedAfterHeavy = combinedData
+          .filter((c) => c && c.avatar)
+          .map((c) => c.avatar);
+        if (luluStableStringify(__scannedAfterHeavy) !== __scannedBefore)
+          saveScannedAvatarList(__scannedAfterHeavy);
       } else if (allCharsData.length > 0) {
         // ===== ✨ 增量同步：不重复全扫，只处理“新增/删除”的角色卡 =====
         const scannedSet = new Set(scannedAvatars || []);
@@ -6111,18 +6256,25 @@ $menuBtn.on("click", async () => {
           }
           applyCharLoreExtraBooks(charMap);
         }
-        saveScannedAvatarList(
-          allCharsData.filter((c) => c && c.avatar).map((c) => c.avatar),
-        );
+        // ✨【性能】名单真的变了才写回变量，没变就省一次全量写
+        const __scannedAfterIncr = allCharsData
+          .filter((c) => c && c.avatar)
+          .map((c) => c.avatar);
+        if (luluStableStringify(__scannedAfterIncr) !== __scannedBefore)
+          saveScannedAvatarList(__scannedAfterIncr);
       }
       globalBindingMapCache = wb2Chars;
-      saveBindingCache(wb2Chars);
+      // ✨【性能】绑定数据真的变了才写回变量 + 之后重渲染；
+      //    没变（最常见：再次打开面板）就安静跳过，省一次全量变量序列化写回
+      __bindingsChanged = luluStableStringify(wb2Chars) !== __bindingsBefore;
+      if (__bindingsChanged) saveBindingCache(wb2Chars);
     } catch (error) {
       console.error(error);
       if (typeof toastr !== "undefined") toastr.error("读取中断");
     } finally {
       $overlay.fadeOut("slow");
-      if ($ui.find("#wb-main-view").is(":visible")) renderData();
+      if (__bindingsChanged && $ui.find("#wb-main-view").is(":visible"))
+        renderData();
       if ($ui.find("#wb-char-view").is(":visible")) renderCharView();
     }
   };
@@ -6501,7 +6653,10 @@ $menuBtn.on("click", async () => {
   $ui.find(".wb-transfer-search").on("input", function () {
     const side = $(this).attr("data-side");
     clearTimeout(transferSearchTimers[side]);
-    transferSearchTimers[side] = setTimeout(() => renderTransferList(side), 250);
+    transferSearchTimers[side] = setTimeout(
+      () => renderTransferList(side),
+      250,
+    );
   });
 
   $ui.find(".wb-transfer-selall").on("click", function () {
@@ -8247,38 +8402,104 @@ $menuBtn.on("click", async () => {
 
     if (
       (await SillyTavern.callGenericPopup(
-        `确认永久销毁这 ${deletableList.length} 本世界书？${lockedInSelection.length > 0 ? `<br><span style="color:#fcc419;">（另有 ${lockedInSelection.length} 本已锁定，将自动跳过）</span>` : ""}`,
+        `确认删除这 ${deletableList.length} 本世界书吗？删除后会先进入回收站，误删可恢复~${lockedInSelection.length > 0 ? `<br><span style="color:#fcc419;">（另有 ${lockedInSelection.length} 本已锁定，将自动跳过）</span>` : ""}`,
         SillyTavern.POPUP_TYPE.CONFIRM,
       )) === SillyTavern.POPUP_RESULT.AFFIRMATIVE
     ) {
-      await withLoadingOverlay(async () => {
-        const c = loadBindingCache() || {};
-        for (let wb of deletableList) {
-          await moveWbToRecycle(wb);
-          await deleteWorldbook(wb);
-          delete globalBindingMapCache[wb];
-          delete c[wb];
-          let cData = getCategories();
-          Object.keys(cData).forEach((k) => {
-            cData[k] = cData[k].filter((n) => n !== wb);
+      // ✨【性能】并发删除（同时最多 4 本）+ 实时进度条：
+      //    原来逐本串行 await（读回收站→删书→读写分类），50 本就是 150 次排队；
+      //    现在并发跑，回收站/分类/绑定缓存全部删完后各写一次
+      const total = deletableList.length;
+      let doneCount = 0;
+      const failedList = [];
+      const succeedList = [];
+      const recyclePacks = [];
+      const $overlay = $ui.find("#wb-loading-overlay");
+      const $text = $ui.find("#wb-loading-text");
+      const $sub = $ui.find("#wb-loading-sub");
+      const $sec = $ui.find("#wb-loading-secondary-text");
+      const $barWrap = $(
+        '<div style="width:240px; height:10px; border-radius:5px; background:rgba(125,125,125,0.25); margin-top:14px; overflow:hidden; border:1px solid var(--SmartThemeBorderColor);"><div style="height:100%; width:0%; background:var(--SmartThemeQuoteColor); border-radius:5px; transition:width 0.2s ease-out;"></div></div>',
+      );
+      $text.html(
+        '<i class="fa-solid fa-trash-can" style="color:#ff6b6b;"></i> 正在删除世界书...',
+      );
+      $sub.text(`0 / ${total}`).show();
+      $sec.hide();
+      $sub.after($barWrap);
+      $overlay.fadeIn("fast");
+      const updateDelProgress = () => {
+        $sub.text(`${doneCount} / ${total}`);
+        $barWrap
+          .find("div")
+          .css("width", `${Math.round((doneCount / total) * 100)}%`);
+      };
+      try {
+        // 并发池：queue.shift() 是同步原子操作，多个 worker 抢任务不会重复
+        const queue = [...deletableList];
+        const workers = Array.from(
+          { length: Math.min(4, queue.length) },
+          async () => {
+            while (queue.length > 0) {
+              const wb = queue.shift();
+              try {
+                const pack = await packWbForRecycle(wb);
+                recyclePacks.push(pack);
+                await deleteWorldbook(wb);
+                delete globalBindingMapCache[wb];
+                succeedList.push(wb);
+              } catch (err) {
+                console.error(`Lulu 删除 [${wb}] 失败:`, err);
+                failedList.push(wb);
+              } finally {
+                doneCount++;
+                updateDelProgress();
+              }
+            }
+          },
+        );
+        await Promise.all(workers);
+        // ✨ 全部删完后：回收站/绑定缓存/分类各只读写一次（原来每本都读写一遍）
+        mergePacksIntoRecycleBin(recyclePacks);
+        const c = loadBindingCache();
+        if (c) {
+          let cacheChanged = false;
+          succeedList.forEach((wb) => {
+            if (c[wb]) {
+              delete c[wb];
+              cacheChanged = true;
+            }
           });
-          saveCategories(cData);
+          if (cacheChanged) saveBindingCache(c);
         }
-        saveBindingCache(c);
+        const deletedSet = new Set(succeedList);
+        let cData = getCategories();
+        Object.keys(cData).forEach((k) => {
+          cData[k] = cData[k].filter((n) => !deletedSet.has(n));
+        });
+        saveCategories(cData);
         batchSelected.clear();
         renderData();
-      }, `删除中...`);
+      } finally {
+        $barWrap.remove();
+        $overlay.fadeOut("slow");
+      }
 
+      if (failedList.length > 0) {
+        toastr.error(
+          `有 ${failedList.length} 本删除失败：${failedList.join("、")}，稍后可再试~`,
+        );
+      }
       // 删完后，如果有被跳过的锁定书，弹窗提醒
       if (lockedInSelection.length > 0) {
         await SillyTavern.callGenericPopup(
-          `✅ 已删除 ${deletableList.length} 本世界书。<br><br>🔒 以下 ${lockedInSelection.length} 本因为处于<strong style="color:#fcc419;">锁定状态</strong>被自动跳过、安然无恙：<br><br>${lockedInSelection.map((n) => `<div style="padding:2px 0;"><i class="fa-solid fa-lock" style="color:#fcc419; margin-right:4px;"></i>${n}</div>`).join("")}`,
+          `✅ 已删除 ${succeedList.length} 本世界书。<br><br>🔒 以下 ${lockedInSelection.length} 本因为处于<strong style="color:#fcc419;">锁定状态</strong>被自动跳过、安然无恙：<br><br>${lockedInSelection.map((n) => `<div style="padding:2px 0;"><i class="fa-solid fa-lock" style="color:#fcc419; margin-right:4px;"></i>${n}</div>`).join("")}`,
           SillyTavern.POPUP_TYPE.TEXT,
           "",
           { okButton: "知道啦" },
         );
-      } else {
-        toastr.success(`已删除 ${deletableList.length} 本世界书~`);
+      } else if (failedList.length === 0) {
+        toastr.success(`已删除 ${succeedList.length} 本世界书~`);
       }
     }
   });
@@ -10452,6 +10673,8 @@ $menuBtn.on("click", async () => {
     const keyword = $ui.find("#wb-search-input").val().toLowerCase();
     const showUnboundOnly = $ui.find("#wb-filter-unbound").is(":checked");
     const showLockedOnly = $ui.find("#wb-filter-locked").is(":checked");
+    // ✨【性能】锁定名单先落成 Set：几百本书逐本 isWbLocked（数组 includes）是 O(n²)
+    const lockedSet = new Set(getLockedWbs());
     const stateFilter = $ui.find("#wb-filter-state").val();
     const sortMode = $ui.find("#wb-sort-select").val();
     const isDeepSearch = $ui.find("#wb-deep-search-toggle").is(":checked");
@@ -10537,14 +10760,12 @@ $menuBtn.on("click", async () => {
         needDeepScan.map(async (wb) => {
           try {
             const hit = deepScanCache.get(wb);
-            let hay =
-              hit && now - hit.t <= DEEPSCAN_CACHE_TTL ? hit.hay : null;
+            let hay = hit && now - hit.t <= DEEPSCAN_CACHE_TTL ? hit.hay : null;
             if (hay === null) {
               const entries = await getWorldbook(wb);
               hay = entries
-                .map(
-                  (e) =>
-                    `${e.name || ""} ${(e.strategy?.keys || []).join(" ")} ${e.content || ""}`.toLowerCase(),
+                .map((e) =>
+                  `${e.name || ""} ${(e.strategy?.keys || []).join(" ")} ${e.content || ""}`.toLowerCase(),
                 )
                 .join("\n");
               deepScanCache.set(wb, { t: now, hay });
@@ -10573,7 +10794,7 @@ $menuBtn.on("click", async () => {
         )
           return false;
         if (showUnboundOnly && bindings.length > 0) return false;
-        if (showLockedOnly && !isWbLocked(wb)) return false;
+        if (showLockedOnly && !lockedSet.has(wb)) return false;
         if (stateFilter === "enabled" && !activeWbsSet.has(wb)) return false;
         if (stateFilter === "disabled" && activeWbsSet.has(wb)) return false;
         if (currentSelCat === "unassigned") {
@@ -10689,8 +10910,8 @@ $menuBtn.on("click", async () => {
       const activeIcon = isActiveWb
         ? `<i class="fa-solid fa-circle-check" style="margin-right:4px;"></i>`
         : "";
-      // 🔒 锁定标记：被锁的书在名字前显示一把金锁
-      const lockedNow = isWbLocked(wb);
+      // 🔒 锁定标记：被锁的书在名字前显示一把金锁（lockedSet：本次渲染统一查一次）
+      const lockedNow = lockedSet.has(wb);
       const lockIcon = lockedNow
         ? `<i class="fa-solid fa-lock" style="margin-right:4px; color:#fcc419;" title="此世界书已锁定，防止误删"></i>`
         : "";
@@ -10738,9 +10959,7 @@ $menuBtn.on("click", async () => {
             const nowFav = !d["🌟默认收藏夹"].includes(wb);
             nowFav
               ? d["🌟默认收藏夹"].push(wb)
-              : (d["🌟默认收藏夹"] = d["🌟默认收藏夹"].filter(
-                  (x) => x !== wb,
-                ));
+              : (d["🌟默认收藏夹"] = d["🌟默认收藏夹"].filter((x) => x !== wb));
             saveCategories(d);
             // 分类筛选/搜索激活时，这本书可能因此该进该出列表 → 只能整表重画
             if (currentSelCat !== "all" || keyword) {
@@ -15414,560 +15633,8 @@ $menuBtn.on("click", async () => {
     });
   await popup.show();
 
-  (function initLuLuNativeWbSyncV7() {
-    if (window.lulu_native_sync_interval)
-      clearInterval(window.lulu_native_sync_interval);
-
-    // ✨ 判断某个分组当前是"全开""全关"还是"混合"状态
-    const luluGetGroupState = (grpName) => {
-      const $switches = $(`.world_entry[data-lulu-grp="${grpName}"]`).find(
-        ".killSwitch",
-      );
-      if ($switches.length === 0) return "empty";
-      let onCount = 0;
-      $switches.each(function () {
-        if ($(this).hasClass("fa-toggle-on")) onCount++;
-      });
-      if (onCount === 0) return "off"; // 全关
-      if (onCount === $switches.length) return "on"; // 全开
-      return "mixed"; // 混合
-    };
-
-    // ✨ 一键开关某个原生分组内所有条目
-    const luluToggleGroupEntries = (grpName, enable) => {
-      const $switches = $(`.world_entry[data-lulu-grp="${grpName}"]`).find(
-        ".killSwitch",
-      );
-      if ($switches.length === 0) {
-        if (typeof toastr !== "undefined")
-          toastr.info("这个分组里好像没有可操作的条目呢~");
-        return;
-      }
-      let count = 0;
-      $switches.each(function () {
-        const isOn = $(this).hasClass("fa-toggle-on");
-        // 只有当前状态和目标状态不一致时，才点击切换
-        if (isOn !== enable) {
-          this.click();
-          count++;
-        }
-      });
-      if (typeof toastr !== "undefined") {
-        toastr.success(
-          enable
-            ? `已开启分组「${grpName}」内 ${count} 个条目！`
-            : `已关闭分组「${grpName}」内 ${count} 个条目！`,
-        );
-      }
-      // 点完后刷新一下按钮图标显示
-      luluUpdateGroupSwitchIcon(grpName);
-    };
-
-    // ✨ 根据分组状态，更新表头那个一键开关图标的样子
-    const luluUpdateGroupSwitchIcon = (grpName) => {
-      const $btn = $(
-        `.lulu-native-group-header[data-groupname="${grpName}"] .lulu-grp-toggle`,
-      );
-      if (!$btn.length) return;
-      const state = luluGetGroupState(grpName);
-      if (state === "on") {
-        // 全开 → 显示"开"图标，绿色，点击会全关
-        $btn
-          .removeClass("fa-toggle-off")
-          .addClass("fa-toggle-on")
-          .css("color", "#51cf66")
-          .attr("data-next", "off")
-          .attr("title", "本组已全开，点击一键全关");
-      } else {
-        // 全关或混合 → 显示"关"图标，灰色，点击会全开
-        $btn
-          .removeClass("fa-toggle-on")
-          .addClass("fa-toggle-off")
-          .css("color", "gray")
-          .attr("data-next", "on")
-          .attr(
-            "title",
-            state === "mixed"
-              ? "本组部分开启，点击一键全开"
-              : "本组已全关，点击一键全开",
-          );
-      }
-    };
-    let groupFoldState = JSON.parse(
-      localStorage.getItem("lulu_wb_native_fold_state") || "{}",
-    );
-    const saveFoldState = () =>
-      localStorage.setItem(
-        "lulu_wb_native_fold_state",
-        JSON.stringify(groupFoldState),
-      );
-    let currentActiveWbName = null;
-    let cachedWbEntries = [];
-    let isFetching = false;
-    let isRendering = false;
-    let luluLastSyncFingerprint = "";
-    window.lulu_native_sync_interval = setInterval(async () => {
-      if (isRendering) return;
-      if (document.hidden) return;
-      const isNativeMagicEnabled =
-        localStorage.getItem("lulu_wb_native_magic_enabled") !== "false";
-
-      // 【性能优化】原生分类已关闭且已清理完时，直接休息，连选择器都不跑
-      //    这样在聊天消息很多的大DOM页面上，可以减少后台空转开销
-      if (!isNativeMagicEnabled && window.lulu_native_cleaned) return;
-
-      // ✨ 只选真实条目（带 uid 属性的）：排除酒馆页面底部常驻的隐藏条目模板，不然计数永远多 1
-      const $entries = $(".world_entry[uid]");
-      if ($entries.length === 0) return;
-      const $container = $entries.first().parent();
-      if (!$container.length) return;
-      if (!$container.is(":visible")) return;
-      // ✨ 内容指纹：状态没变就直接跳过（注意：指纹要等画完了才记录，不能在这里就记）
-      let luluCurrentFp = null;
-      if (isNativeMagicEnabled) {
-        const _wbName =
-          $(".move_entry_button").first().attr("data-current-world") || "";
-        const _order = localStorage.getItem("lulu_wb_native_group_order") || "";
-        const _fold = localStorage.getItem("lulu_wb_native_fold_state") || "";
-        const _headerCount = $container.children(
-          ".lulu-native-group-header",
-        ).length;
-        luluCurrentFp = `${_wbName}|${$entries.length}|${_order}|${_fold}|${_headerCount}`;
-        if (luluCurrentFp === luluLastSyncFingerprint) return;
-      }
-      if (!isNativeMagicEnabled) {
-        // ✨【性能优化】只清理一次，不再每轮反复检查样式
-        if ($container.css("display") === "flex") {
-          $container.css({ display: "", "flex-direction": "" });
-          $(".lulu-native-group-header").remove();
-          $entries.css({ order: "", display: "", margin: "" });
-        }
-        window.lulu_native_cleaned = true;
-        return;
-      }
-
-      // ✨ 原生分组开启时，重置清理标记（这样以后关闭时还能再清理一次）
-      window.lulu_native_cleaned = false;
-      if (isFetching) return;
-      if (
-        $container.css("display") !== "flex" ||
-        $container.css("flex-direction") !== "column"
-      ) {
-        $container.css({ display: "flex", "flex-direction": "column" });
-      }
-      const $moveBtn = $(".move_entry_button").first();
-      let visibleWbName = $moveBtn.attr("data-current-world");
-      if (!visibleWbName) {
-        visibleWbName =
-          $("#world_info_select").val() ||
-          $(".world_info_select").first().val() ||
-          "";
-      }
-      if (!visibleWbName) return;
-
-      if (currentActiveWbName !== visibleWbName) {
-        isFetching = true;
-        try {
-          const rawData = await getWorldbook(visibleWbName);
-          if (Array.isArray(rawData)) {
-            cachedWbEntries = rawData;
-            currentActiveWbName = visibleWbName;
-          } else if (rawData && typeof rawData === "object") {
-            // 兼容某些版本返回 { entries: [...] } 或 { entries: { ... } }
-            const maybeEntries = rawData.entries || rawData.data?.entries;
-            const arr = Array.isArray(maybeEntries)
-              ? maybeEntries
-              : maybeEntries
-                ? Object.values(maybeEntries)
-                : [];
-            if (arr.length > 0) {
-              cachedWbEntries = arr;
-              currentActiveWbName = visibleWbName;
-            }
-          }
-        } catch (err) {
-          console.warn("Lulu 原生同步：读取世界书失败", err);
-        } finally {
-          isFetching = false;
-        }
-      }
-      if (!cachedWbEntries || cachedWbEntries.length === 0) return;
-      if (currentActiveWbName !== visibleWbName) return;
-
-      const entryByName = new Map();
-      const entryByUid = new Map();
-      for (const e of cachedWbEntries) {
-        const title = e.name || e.comment || "";
-        if (title && !entryByName.has(title)) entryByName.set(title, e);
-        const uid = e.uid !== undefined && e.uid !== null ? e.uid : e.id;
-        if (uid !== undefined && uid !== null) {
-          entryByUid.set(String(uid), e);
-          const uidNum = Number(uid);
-          if (!Number.isNaN(uidNum)) entryByUid.set(String(uidNum), e);
-        }
-      }
-
-      const luluPrefixMap = readGroupMapFromEntries(cachedWbEntries);
-
-      const groupCounts = {};
-      $entries.each(function (index) {
-        const $entry = $(this);
-
-        let entryTitle =
-          $entry.find('textarea[name="comment"]').val()?.trim() || "";
-        if (!entryTitle) {
-          entryTitle = $entry.find('input[name="comment"]').val()?.trim() || "";
-        }
-        if (!entryTitle) {
-          entryTitle =
-            $entry.find('textarea, input[type="text"]').first().val()?.trim() ||
-            "";
-        }
-        if (!entryTitle) {
-          entryTitle = (
-            $entry.attr("data-comment") ||
-            $entry.attr("title") ||
-            ""
-          ).trim();
-        }
-
-        // 对照表条目直接隐藏
-        if (entryTitle.indexOf(LULU_MAP_ENTRY_TAG) === 0) {
-          $entry.css("display", "none");
-          $entry.attr("data-lulu-grp", "__LULU_MAP__");
-          return true;
-        }
-
-        let myGroup = "📁 未分类条目";
-
-        let domUid = null;
-        const rawUidAttr =
-          $entry.attr("uid") ||
-          $entry.attr("data-uid") ||
-          $entry.attr("data-entry-uid") ||
-          $entry.data("uid") ||
-          $entry.data("id");
-        if (
-          rawUidAttr !== undefined &&
-          rawUidAttr !== null &&
-          rawUidAttr !== ""
-        ) {
-          const parsed = parseInt(rawUidAttr, 10);
-          if (!isNaN(parsed)) domUid = parsed;
-        }
-        if (domUid === null) {
-          const attrs = $entry[0].attributes;
-          for (const attr of attrs) {
-            if (/uid/i.test(attr.name)) {
-              const parsed = parseInt(attr.value, 10);
-              if (!isNaN(parsed)) {
-                domUid = parsed;
-                break;
-              }
-            }
-          }
-        }
-
-        let foundEntry = null;
-        if (domUid !== null) {
-          foundEntry = entryByUid.get(String(domUid)) || entryByUid.get(domUid);
-        }
-        if (!foundEntry && entryTitle) {
-          foundEntry = entryByName.get(entryTitle);
-        }
-
-        if (foundEntry) {
-          // 1) 先读全局分组缓存 / extensions.lulu_group
-          let uiGrpName = getEntryUiGroup(
-            currentActiveWbName,
-            foundEntry.uid,
-            foundEntry,
-          );
-
-          // 2) 如果没有，再像脚本面板一样，用【前缀】+ 世界书对照表解析
-          if ((!uiGrpName || uiGrpName.trim() === "") && foundEntry.name) {
-            const prefixMatch = (foundEntry.name || "").match(/^【(.*?)】/);
-            if (prefixMatch && prefixMatch[1]) {
-              const rawPrefix = prefixMatch[1].trim();
-              if (luluPrefixMap && luluPrefixMap[rawPrefix]) {
-                uiGrpName = luluPrefixMap[rawPrefix];
-              }
-            }
-          }
-
-          if (uiGrpName && uiGrpName.trim() !== "") myGroup = uiGrpName.trim();
-        }
-
-        if (!groupCounts[myGroup]) groupCounts[myGroup] = 0;
-        groupCounts[myGroup]++;
-        $entry.attr("data-lulu-grp", myGroup);
-        $entry.attr("data-lulu-native-index", index);
-      });
-
-      let luluGroupOrder = JSON.parse(
-        localStorage.getItem("lulu_wb_native_group_order") || "[]",
-      );
-      let currentGroups = Object.keys(groupCounts).filter(
-        (g) => g !== "📁 未分类条目",
-      );
-      let orderChanged = false;
-      currentGroups.forEach((g) => {
-        if (!luluGroupOrder.includes(g)) {
-          luluGroupOrder.push(g);
-          orderChanged = true;
-        }
-      });
-      if (orderChanged)
-        localStorage.setItem(
-          "lulu_wb_native_group_order",
-          JSON.stringify(luluGroupOrder),
-        );
-      const sortedGroupNames = Object.keys(groupCounts).sort((a, b) => {
-        if (a === "📁 未分类条目") return 1;
-        if (b === "📁 未分类条目") return -1;
-        let idxA = luluGroupOrder.indexOf(a);
-        let idxB = luluGroupOrder.indexOf(b);
-        if (idxA === -1) idxA = 9999;
-        if (idxB === -1) idxB = 9999;
-        return idxA - idxB;
-      });
-      sortedGroupNames.forEach((gName, gIndex) => {
-        const baseOrder = (gIndex + 1) * 10000;
-        let $header = $container.children(
-          `.lulu-native-group-header[data-groupname="${gName}"]`,
-        );
-        const isFolded = groupFoldState[gName] === true;
-        const isDraggable = gName !== "📁 未分类条目";
-        if ($header.length === 0) {
-          const dragIconHtml = isDraggable
-            ? `<i class="fa-solid fa-hand-paper lulu-drag-handle" style="cursor:grab; font-size:13px; color:gray; padding-right:8px; display:inline-flex; align-items:center;" title="按住拖拽排序分类"></i>`
-            : "";
-          const sortButtonsHtml = !isDraggable
-            ? ""
-            : `<div style="display:flex; gap: 6px; margin-right: 15px;" class="lulu-sort-btns"><i class="fa-solid fa-arrow-up lulu-move-up" title="将此分类上移" style="padding:4px; font-size:13px; color:gray; transition:0.2s; cursor:pointer;"></i><i class="fa-solid fa-arrow-down lulu-move-down" title="将此分类下移" style="padding:4px; font-size:13px; color:gray; transition:0.2s; cursor:pointer;"></i></div>`;
-          $header = $(
-            `<div class="lulu-native-group-header" data-groupname="${gName}" draggable="${isDraggable ? "true" : "false"}" style="background: var(--SmartThemeBlurTintColor, rgba(0,0,0,0.15)); padding:10px 14px; margin: 10px 0 6px 0; border-radius:6px; font-weight:bold; color:var(--SmartThemeQuoteColor, #70a1ff); border:1px solid var(--SmartThemeBorderColor, gray); display:flex; justify-content:space-between; align-items:center; user-select:none; transition: 0.2s; flex-shrink: 0; align-content: center; gap: 6px; flex-wrap: wrap;"><span style="display:flex; align-items:center; min-width:0;">${dragIconHtml}<span class="lulu-click-fold" style="display:flex; align-items:center; cursor:pointer; min-width:0;"><i class="fa-solid ${isFolded ? "fa-chevron-right" : "fa-chevron-down"} lulu-fold-icon" style="margin-right:8px; width: 16px; text-align:center; flex-shrink:0;"></i><span style="font-size: 15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" class="lulu-g-title">${gName}</span><span style="font-size: 11px; font-weight: normal; color: gray; margin-left: 6px; flex-shrink:0;" class="lulu-g-count">(${groupCounts[gName]}项)</span></span></span><span style="display:flex; align-items:center; gap:6px; flex-shrink:0;">${sortButtonsHtml}<i class="fa-solid fa-toggle-off lulu-grp-toggle" title="一键开关本组所有条目" data-next="on" style="padding:5px; font-size:15px; color:gray; cursor:pointer; transition:0.2s;"></i></span></div>`,
-          );
-          $header.hover(
-            function () {
-              $(this).css(
-                "background",
-                "var(--SmartThemeBotMesColor, rgba(125,125,125,0.3))",
-              );
-            },
-            function () {
-              $(this).css(
-                "background",
-                "var(--SmartThemeBlurTintColor, rgba(0,0,0,0.15))",
-              );
-            },
-          );
-          $header.find(".lulu-move-up, .lulu-move-down").hover(
-            function () {
-              $(this).css("color", "var(--SmartThemeQuoteColor)");
-              $(this).css("transform", "scale(1.2)");
-            },
-            function () {
-              $(this).css("color", "gray");
-              $(this).css("transform", "scale(1)");
-            },
-          );
-          $header
-            .find(".lulu-click-fold")
-            .off("click.luluFold")
-            .on("click.luluFold", function (e) {
-              e.stopPropagation();
-              if ($(this).data("lulu-click-locked")) return;
-              $(this).data("lulu-click-locked", true);
-              setTimeout(() => $(this).data("lulu-click-locked", false), 250);
-              const grp = $header.attr("data-groupname");
-              const isNowFolded = !groupFoldState[grp];
-              groupFoldState[grp] = isNowFolded;
-              saveFoldState();
-              const $icon = $(this).find(".lulu-fold-icon");
-              if (isNowFolded)
-                $icon
-                  .removeClass("fa-chevron-down")
-                  .addClass("fa-chevron-right");
-              else
-                $icon
-                  .removeClass("fa-chevron-right")
-                  .addClass("fa-chevron-down");
-              $container
-                .children(`.world_entry[data-lulu-grp="${grp}"]`)
-                .each(function () {
-                  if (isNowFolded) {
-                    $(this).addClass("lulu-folded-hide");
-                  } else {
-                    $(this).removeClass("lulu-folded-hide");
-                    $(this).css({ display: "", margin: "" });
-                  }
-                });
-            });
-          if (isDraggable) {
-            $header.off("dragstart").on("dragstart", function (e) {
-              e.originalEvent.dataTransfer.setData("text/plain", gName);
-              $(this).addClass("lulu-drag-ghost");
-            });
-            $header.on("dragend", function () {
-              $(this).removeClass("lulu-drag-ghost");
-              $(".lulu-drag-over-top, .lulu-drag-over-bottom").removeClass(
-                "lulu-drag-over-top lulu-drag-over-bottom",
-              );
-            });
-            $header.on("dragover", function (e) {
-              e.preventDefault();
-              const rect = this.getBoundingClientRect();
-              const isBottomHalf =
-                e.originalEvent.clientY > rect.top + rect.height / 2;
-              if (isBottomHalf) {
-                $(this)
-                  .removeClass("lulu-drag-over-top")
-                  .addClass("lulu-drag-over-bottom");
-              } else {
-                $(this)
-                  .removeClass("lulu-drag-over-bottom")
-                  .addClass("lulu-drag-over-top");
-              }
-            });
-            $header.on("dragleave", function () {
-              $(this).removeClass("lulu-drag-over-top lulu-drag-over-bottom");
-            });
-            $header.on("drop", function (e) {
-              e.preventDefault();
-              $(this).removeClass("lulu-drag-over-top lulu-drag-over-bottom");
-              const draggedGrp =
-                e.originalEvent.dataTransfer.getData("text/plain");
-              const targetGrp = $(this).attr("data-groupname");
-              if (
-                draggedGrp &&
-                draggedGrp !== targetGrp &&
-                draggedGrp !== "📁 未分类条目" &&
-                targetGrp !== "📁 未分类条目"
-              ) {
-                let order = JSON.parse(
-                  localStorage.getItem("lulu_wb_native_group_order") || "[]",
-                );
-                const fromIdx = order.indexOf(draggedGrp);
-                if (fromIdx > -1) {
-                  const rect = this.getBoundingClientRect();
-                  const isBottomHalf =
-                    e.originalEvent.clientY > rect.top + rect.height / 2;
-                  order.splice(fromIdx, 1);
-                  let newToIdx = order.indexOf(targetGrp);
-                  if (isBottomHalf) newToIdx++;
-                  order.splice(newToIdx, 0, draggedGrp);
-                  localStorage.setItem(
-                    "lulu_wb_native_group_order",
-                    JSON.stringify(order),
-                  );
-                }
-              }
-            });
-          }
-          $header
-            .find(".lulu-move-up")
-            .off("click")
-            .on("click", function (e) {
-              e.stopPropagation();
-              const idx = luluGroupOrder.indexOf(gName);
-              if (idx > 0) {
-                [luluGroupOrder[idx - 1], luluGroupOrder[idx]] = [
-                  luluGroupOrder[idx],
-                  luluGroupOrder[idx - 1],
-                ];
-                localStorage.setItem(
-                  "lulu_wb_native_group_order",
-                  JSON.stringify(luluGroupOrder),
-                );
-              }
-            });
-          $header
-            .find(".lulu-move-down")
-            .off("click")
-            .on("click", function (e) {
-              e.stopPropagation();
-              const idx = luluGroupOrder.indexOf(gName);
-              if (idx !== -1 && idx < luluGroupOrder.length - 1) {
-                [luluGroupOrder[idx + 1], luluGroupOrder[idx]] = [
-                  luluGroupOrder[idx],
-                  luluGroupOrder[idx + 1],
-                ];
-                localStorage.setItem(
-                  "lulu_wb_native_group_order",
-                  JSON.stringify(luluGroupOrder),
-                );
-              }
-            });
-
-          // ✨ 单个一键开关：根据当前状态智能全开/全关
-          $header
-            .find(".lulu-grp-toggle")
-            .off("click")
-            .on("click", function (e) {
-              e.stopPropagation();
-              const grp = $header.attr("data-groupname");
-              const next = $(this).attr("data-next"); // "on" 或 "off"
-              luluToggleGroupEntries(grp, next === "on");
-            });
-
-          $container.append($header);
-        } else {
-          $header.find(".lulu-g-count").text(`(${groupCounts[gName]}项)`);
-          const $icon = $header.find(".lulu-fold-icon");
-          if (isFolded)
-            $icon.removeClass("fa-chevron-down").addClass("fa-chevron-right");
-          else
-            $icon.removeClass("fa-chevron-right").addClass("fa-chevron-down");
-        }
-        // ✨ 每轮同步都更新一下这个分组的一键开关图标
-        luluUpdateGroupSwitchIcon(gName);
-        $header.css("order", baseOrder);
-        // ✨ 关键修复：每次循环都实时读取最新折叠状态，而不是用创建表头时的旧变量
-        const isFoldedNow = groupFoldState[gName] === true;
-        // 顺便同步一下图标，保证图标和实际状态一致
-        const $iconSync = $header.find(".lulu-fold-icon");
-        if (isFoldedNow)
-          $iconSync.removeClass("fa-chevron-down").addClass("fa-chevron-right");
-        else
-          $iconSync.removeClass("fa-chevron-right").addClass("fa-chevron-down");
-        $container
-          .children(`.world_entry[data-lulu-grp="${gName}"]`)
-          .each(function () {
-            const nativeIdx = parseInt(
-              $(this).attr("data-lulu-native-index") || 0,
-            );
-            const targetOrder = baseOrder + 1 + nativeIdx;
-            const $this = $(this);
-            // ✨【性能优化】用 data 属性缓存 order，避免每次读取样式强制重排
-            if (parseInt($this.attr("data-lulu-order") || "") !== targetOrder) {
-              $this.attr("data-lulu-order", targetOrder);
-              $this.css("order", targetOrder);
-            }
-            if (isFoldedNow) {
-              if (!$this.hasClass("lulu-folded-hide"))
-                $this.addClass("lulu-folded-hide");
-            } else {
-              if ($this.hasClass("lulu-folded-hide")) {
-                $this.removeClass("lulu-folded-hide");
-                $this.css({ display: "", margin: "" });
-              }
-            }
-          });
-      });
-
-      $container.children(".lulu-native-group-header").each(function () {
-        const gName = $(this).attr("data-groupname");
-        if (!groupCounts[gName]) $(this).remove();
-      });
-      // ✨ 走到这里说明这一轮真的把分组画完了，现在才记录指纹
-      if (luluCurrentFp !== null) luluLastSyncFingerprint = luluCurrentFp;
-      isRendering = true;
-      setTimeout(() => {
-        isRendering = false;
-      }, 150);
-    }, 2000);
-  })();
+  // （原 initLuLuNativeWbSyncV7 重复轮询已删除：顶层 luluStartNativeWbSync 常驻即可，
+  //  面板关闭后无需重建一份功能更弱的旧版，省得两份代码各跑各的）
 });
 // ========== 【自动拦截】导入/点进角色卡时，检测内嵌世界书污染 开始 ==========
 (function luluAutoDetectEmbeddedPollution() {
@@ -16473,22 +16140,36 @@ $menuBtn.on("click", async () => {
       if (et.CHAT_CHANGED) es.on(et.CHAT_CHANGED, delayedCheck);
       if (et.CHARACTER_PAGE_LOADED)
         es.on(et.CHARACTER_PAGE_LOADED, delayedCheck);
-      if (et.CHARACTER_EDITED)
-        es.on(et.CHARACTER_EDITED, () => {
-          // 这张卡被编辑过 → 清掉它的会话缓存，允许重新检测一次
-          try {
-            const c2 =
-              typeof SillyTavern !== "undefined"
-                ? SillyTavern.getContext()
-                : null;
-            const av =
-              c2 && c2.characters && c2.characterId != null
-                ? c2.characters[c2.characterId]?.avatar
-                : null;
-            if (av) luluAutoCheckedAvatars.delete(av);
-          } catch (e) {}
-          delayedCheck();
-        });
+      const charEditedHandler = () => {
+        // 这张卡被编辑过 → 清掉它的会话缓存，允许重新检测一次
+        try {
+          const c2 =
+            typeof SillyTavern !== "undefined"
+              ? SillyTavern.getContext()
+              : null;
+          const av =
+            c2 && c2.characters && c2.characterId != null
+              ? c2.characters[c2.characterId]?.avatar
+              : null;
+          if (av) luluAutoCheckedAvatars.delete(av);
+        } catch (e) {}
+        delayedCheck();
+      };
+      if (et.CHARACTER_EDITED) es.on(et.CHARACTER_EDITED, charEditedHandler);
+      // ✨ 登记解绑函数：脚本被禁用/卸载时，把这些监听从酒馆事件总线上摘下来
+      luluWbCleanupRegistry.eventCleanups.push(() => {
+        try {
+          clearTimeout(autoCheckTimer);
+          clearTimeout(snapApplyTimer);
+        } catch (e) {}
+        try {
+          if (et.CHAT_CHANGED) es.off(et.CHAT_CHANGED, delayedSnapApply);
+          if (et.CHAT_CHANGED) es.off(et.CHAT_CHANGED, delayedCheck);
+          if (et.CHARACTER_PAGE_LOADED)
+            es.off(et.CHARACTER_PAGE_LOADED, delayedCheck);
+          if (et.CHARACTER_EDITED) es.off(et.CHARACTER_EDITED, charEditedHandler);
+        } catch (e) {}
+      });
 
       console.log("Lù-chan: 世界书污染自动检测已挂载~（永久记忆版）");
     } catch (e) {
@@ -16498,7 +16179,7 @@ $menuBtn.on("click", async () => {
 
   luluBindAutoDetectEvents();
   $("head").append(`
-<style>
+<style id="lulu-wb-tail-style">
     /* 修复手机端弹窗内容被右侧边框遮挡的问题 */
     dialog.wb-manager-dialog *,
     dialog:has(#lulu-quick-snap-modal) *,
