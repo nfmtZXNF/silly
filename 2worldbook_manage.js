@@ -549,8 +549,13 @@ const syncMapEntryIntoEntries = (entries, prefixMapUsed) => {
 let isEntryBatchMode = false;
 let entryBatchSelected = new Set();
 
-if ($("#lulu-drag-line-style").length === 0) {
-  $("head").append(`
+// ✨ 全局一次性委托：快照控制台等地方的条目预览，点击即展开完整内容，再点收起
+$(document).on("click", ".dsnap-entry-preview", function (e) {
+  e.stopPropagation();
+  $(this).toggleClass("lulu-expanded");
+});
+
+if ($("#lulu-drag-line-style").length === 0) {  $("head").append(`
         <style id="lulu-drag-line-style">
             .lulu-drag-over-top {
                 box-shadow: 0 -3px 0 0 #51cf66 !important;
@@ -784,6 +789,37 @@ const luluGetCharBoundBookNames = () => {
   if (obj.primary) list.push(obj.primary);
   if (obj.additional) list.push(...obj.additional);
   return list;
+};
+// ✨【修复】安全改绑角色世界书：角色身上可能残留"已被删除/改名"的失效书，
+// 直接把这些旧名字传给 rebindCharWorldbooks 会触发"未找到以下世界书"报错，导致解绑/绑定全部卡死。
+// 这里先把不存在的书从目标配置里过滤掉再提交，顺带把角色卡上的失效绑定清干净。
+const luluRebindCharWorldbooksSafe = async (target, config) => {
+  let primary = config ? config.primary : null;
+  let additional = config && Array.isArray(config.additional) ? [...config.additional] : [];
+  let dropped = [];
+  try {
+    if (typeof getWorldbookNames === "function") {
+      const existing = new Set(getWorldbookNames());
+      if (primary && !existing.has(primary)) {
+        dropped.push(primary);
+        primary = null;
+      }
+      const kept = [];
+      additional.forEach((wb) => {
+        if (existing.has(wb)) kept.push(wb);
+        else dropped.push(wb);
+      });
+      additional = kept;
+    }
+  } catch (e) {}
+  if (typeof rebindCharWorldbooks === "function") {
+    await rebindCharWorldbooks(target, { primary, additional });
+  }
+  if (dropped.length > 0 && typeof toastr !== "undefined") {
+    toastr.warning(
+      `角色身上还挂着 [${dropped.join(", ")}] 这些已经不存在的世界书，已顺手帮你清理掉啦~`,
+    );
+  }
 };
 // 抓取当前绑定书的启用条目状态（角色快照数据格式：{ 书名: [uid...] }）
 const luluCaptureCharSnapData = async (boundBooks) => {
@@ -1347,7 +1383,7 @@ ${themeOverrideCSS} </style>
 }
 </style>`;
 
-  let html = `${customCss}<div id="lulu-quick-snap-modal" style="padding:10px; font-family:sans-serif; min-width:320px; max-width:550px;"><h3 style="margin-top:0; color:var(--SmartThemeQuoteColor); border-bottom:2px solid var(--SmartThemeBorderColor); padding-bottom:10px; font-size: 16px; display:flex; align-items:center; justify-content:space-between; gap:8px;"><span><i class="fa-solid fa-bolt" style="color:#fcc419;"></i> 极速快照控制台</span><span id="lulu-qs-status-text" style="color:var(--SmartThemeQuoteColor); font-size: 12px; font-weight:normal;">正在检测状态...</span></h3>`;
+  let html = `${customCss}<div id="lulu-quick-snap-modal" style="padding:10px; font-family:sans-serif; min-width:320px; max-width:550px;"><h3 style="margin-top:0; color:var(--SmartThemeQuoteColor); border-bottom:2px solid var(--SmartThemeBorderColor); padding-bottom:10px; font-size: 16px; display:flex; align-items:center; justify-content:space-between; gap:8px;"><span><i class="fa-solid fa-bolt" style="color:#fcc419;"></i> 极速快照控制台</span><span style="display:flex; align-items:center; gap:8px;"><span id="lulu-qs-open-main" class="lulu-qs-btn-hover" style="cursor:pointer; font-size:12px; font-weight:bold; color:var(--SmartThemeQuoteColor); border:1px solid var(--SmartThemeQuoteColor); border-radius:6px; padding:4px 8px; white-space:nowrap;" title="收起本面板并打开全局世界书管理面板"><i class="fa-solid fa-book-journal-whills"></i> 全局管理</span><span id="lulu-qs-status-text" style="color:var(--SmartThemeQuoteColor); font-size: 12px; font-weight:normal;">正在检测状态...</span></span></h3>`;
 
   // 切换标签栏
   html += `<div style="display:flex; gap:6px; margin-bottom:12px;">
@@ -1378,6 +1414,8 @@ ${themeOverrideCSS} </style>
   if (snapEntries.length === 0) {
     html += `<div style="color:gray; text-align:center; padding: 30px; background:var(--SmartThemeBlurTintColor, rgba(0,0,0,0.1)); border-radius:8px; border:1px dashed var(--SmartThemeBorderColor);">存储库目前是空的哦，<br>可以先去主页面的重度面板收纳一些快照进来呀~</div>`;
   } else {
+    const qsEsc = (s) =>
+      String(s).replace(/</g, "&lt;").replace(/>/g, "&gt;");
     snapEntries.forEach(([name, snapData]) => {
       const isDetailed =
         !Array.isArray(snapData) && snapData.type === "detailed";
@@ -1386,11 +1424,15 @@ ${themeOverrideCSS} </style>
         : Array.isArray(snapData)
           ? snapData
           : snapData.wbs;
+      const qsWbsListHtml =
+        wbs && wbs.length
+          ? wbs.map((w) => `<div style="padding:1px 0;">📖 ${qsEsc(w)}</div>`).join("")
+          : '<div style="color:gray;">（空组合）</div>';
       const safeName = btoa(unescape(encodeURIComponent(name))).replace(
         /[^a-zA-Z0-9]/g,
         "",
       );
-      html += `<div class="lulu-qs-item" data-itemname="${safeName}" style="background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:8px; padding:12px; display:flex; justify-content:space-between; align-items:center; gap: 10px;"><div style="flex:1; min-width:0;"><div style="font-weight:bold; font-size:15px; color:var(--SmartThemeBodyColor); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><i class="fa-solid ${isDetailed ? "fa-puzzle-piece" : "fa-camera-retro"}" style="color:var(--SmartThemeQuoteColor);"></i> ${name}</div><div style="font-size:11px; color:gray; margin-top:6px; display:flex; align-items:center; gap:6px;"><span>${isDetailed ? "复合场景" : "基础组合"} | 共涉及 ${wbs.length || 0} 本书</span></div><div class="lulu-qs-badge" data-badgename="${safeName}" style="display:none; margin-top:6px; font-size:11px; color:#51cf66; font-weight:bold;"><i class="fa-solid fa-circle-check"></i> 当前全局生效中</div></div><div style="display:flex; align-items:center; gap:6px; flex-shrink:0;"><div style="display:flex; flex-direction:column; gap:2px;"><button class="menu_button interactable lulu-qs-move-up" data-rawname="${encodeURIComponent(name)}" style="margin:0; padding:2px 8px; min-width:unset; font-size:11px; line-height:1;" title="上移"><i class="fa-solid fa-chevron-up"></i></button><button class="menu_button interactable lulu-qs-move-down" data-rawname="${encodeURIComponent(name)}" style="margin:0; padding:2px 8px; min-width:unset; font-size:11px; line-height:1;" title="下移"><i class="fa-solid fa-chevron-down"></i></button></div><button class="menu_button interactable btn-primary lulu-qs-btn-hover lulu-qs-apply-btn"data-btnname="${safeName}" data-rawname="${encodeURIComponent(name)}" style="margin:0; border:none; border-radius:6px; font-size:13px; font-weight:bold; padding: 8px 14px; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; gap:6px; white-space:nowrap !important; word-break:keep-all;">运行 <i class="fa-solid fa-play"></i></button></div></div>`;
+      html += `<div class="lulu-qs-item" data-itemname="${safeName}" style="background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:8px; padding:12px; display:flex; justify-content:space-between; align-items:center; gap: 10px;"><div style="flex:1; min-width:0;"><div style="font-weight:bold; font-size:15px; color:var(--SmartThemeBodyColor); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><i class="fa-solid ${isDetailed ? "fa-puzzle-piece" : "fa-camera-retro"}" style="color:var(--SmartThemeQuoteColor);"></i> ${name}</div><div class="lulu-qs-wbs-toggle" style="font-size:11px; color:gray; margin-top:6px; display:flex; align-items:center; gap:6px; cursor:pointer;" title="点击展开/收起包含的世界书名单"><i class="fa-solid fa-chevron-right lulu-qs-wbs-arrow" style="font-size:9px;"></i><span>${isDetailed ? "复合场景" : "基础组合"} | 共涉及 ${wbs.length || 0} 本书</span></div><div class="lulu-qs-wbs-list" style="display:none; margin-top:4px; font-size:11px; color:gray; line-height:1.6; word-break:break-all; border-left:2px solid var(--SmartThemeBorderColor); padding-left:8px;">${qsWbsListHtml}</div><div class="lulu-qs-badge" data-badgename="${safeName}" style="display:none; margin-top:6px; font-size:11px; color:#51cf66; font-weight:bold;"><i class="fa-solid fa-circle-check"></i> 当前全局生效中</div></div><div style="display:flex; align-items:center; gap:6px; flex-shrink:0;"><div style="display:flex; flex-direction:column; gap:2px;"><button class="menu_button interactable lulu-qs-move-up" data-rawname="${encodeURIComponent(name)}" style="margin:0; padding:2px 8px; min-width:unset; font-size:11px; line-height:1;" title="上移"><i class="fa-solid fa-chevron-up"></i></button><button class="menu_button interactable lulu-qs-move-down" data-rawname="${encodeURIComponent(name)}" style="margin:0; padding:2px 8px; min-width:unset; font-size:11px; line-height:1;" title="下移"><i class="fa-solid fa-chevron-down"></i></button></div><button class="menu_button interactable btn-primary lulu-qs-btn-hover lulu-qs-apply-btn"data-btnname="${safeName}" data-rawname="${encodeURIComponent(name)}" style="margin:0; border:none; border-radius:6px; font-size:13px; font-weight:bold; padding: 8px 14px; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; gap:6px; white-space:nowrap !important; word-break:keep-all;">运行 <i class="fa-solid fa-play"></i></button></div></div>`;
     });
   }
   html += `</div>`; // 关闭全局列表滚动区
@@ -1622,7 +1664,8 @@ ${themeOverrideCSS} </style>
               `<div class="lulu-qs-item" data-snapname="${encodeURIComponent(name)}" style="background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:8px; padding:12px; display:flex; justify-content:space-between; align-items:center; gap:10px;">
                 <div style="flex:1; min-width:0;">
                   <div style="font-weight:bold; font-size:15px; color:var(--SmartThemeBodyColor); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><i class="fa-solid fa-camera-retro" style="color:var(--SmartThemeQuoteColor);"></i> ${name}</div>
-                  <div style="font-size:11px; color:gray; margin-top:6px;">涉及 ${bookCount} 本书 · 共开启 ${totalEntries} 项</div>
+                  <div class="lulu-qs-char-detail-toggle" style="font-size:11px; color:gray; margin-top:6px; cursor:pointer;" title="点击展开/收起包含的条目名单"><i class="fa-solid fa-chevron-right" style="font-size:9px;"></i> 涉及 ${bookCount} 本书 · 共开启 ${totalEntries} 项</div>
+                  <div class="lulu-qs-char-detail" style="display:none; margin-top:4px; font-size:11px; color:gray; line-height:1.6; word-break:break-all; border-left:2px solid var(--SmartThemeBorderColor); padding-left:8px; max-height:160px; overflow-y:auto;"></div>
                   <div class="lulu-qs-char-badge" style="display:none; margin-top:6px; font-size:11px; color:#51cf66; font-weight:bold;"><i class="fa-solid fa-circle-check"></i> 当前生效中</div>
                   ${qsBoundName === name ? `<div style="margin-top:4px; font-size:11px; color:#4dabf7; font-weight:bold;"><i class="fa-solid fa-link"></i> 已绑定本聊天</div>` : ""}
                 </div>
@@ -1711,6 +1754,46 @@ ${themeOverrideCSS} </style>
               }
             });
 
+            // ✨ 展开/收起：这个快照由哪些书的哪些条目构成（第一次展开时才去读世界书）
+            $item
+              .find(".lulu-qs-char-detail-toggle")
+              .on("click", async function (e) {
+                e.stopPropagation();
+                const $d = $item.find(".lulu-qs-char-detail");
+                const $arrow = $(this).find("i").first();
+                if ($d.is(":visible")) {
+                  $d.slideUp(120);
+                  $arrow.toggleClass("fa-chevron-right fa-chevron-down");
+                  return;
+                }
+                $arrow.toggleClass("fa-chevron-right fa-chevron-down");
+                if ($d.data("loaded")) return $d.slideDown(120);
+                $d
+                  .html('<i class="fa-solid fa-spinner fa-spin"></i> 读取中...')
+                  .slideDown(120);
+                const qsEscH = (s) =>
+                  String(s).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const parts = [];
+                for (const [wb, uids] of Object.entries(snapData)) {
+                  let names = [];
+                  try {
+                    const entries = await getWorldbook(wb);
+                    const uidSet = new Set(Array.isArray(uids) ? uids : []);
+                    names = (entries || [])
+                      .filter((en) => uidSet.has(en.uid))
+                      .map(
+                        (en) => en.name || en.comment || `(UID ${en.uid})`,
+                      );
+                  } catch (e2) {
+                    names = ["（这本书已不存在或读取失败）"];
+                  }
+                  parts.push(
+                    `<div style="margin-bottom:2px;"><span style="color:var(--SmartThemeQuoteColor); font-weight:bold;">📖 ${qsEscH(wb)}</span>：${names.length ? names.map(qsEscH).join("、") : "（无开启条目）"}</div>`,
+                  );
+                }
+                $d.data("loaded", true).html(parts.join(""));
+              });
+
             $list.append($item);
           }
         };
@@ -1779,14 +1862,14 @@ ${themeOverrideCSS} </style>
             listHtml += "</div>";
 
             const $ddlg = $(
-              `<div style="padding:6px; min-width:280px; text-align:left;"><h3 style="margin-top:0; color:#ff6b6b;"><i class="fa-solid fa-trash-can"></i> 批量删除角色快照</h3><div style="display:flex; gap:8px; margin-bottom:10px;"><button id="lulu-qscsdel-all" class="menu_button btn-success" style="margin:0; padding:6px 12px; font-size:12px; border:none; flex:1; white-space:nowrap; display:flex; justify-content:center; align-items:center;">全选</button><button id="lulu-qscsdel-none" class="menu_button btn-secondary" style="margin:0; padding:6px 12px; font-size:12px; flex:1; white-space:nowrap; display:flex; justify-content:center; align-items:center;">全不选</button></div>${listHtml}</div>`,
+              `<div style="padding:6px; min-width:280px; text-align:left;"><h3 style="margin-top:0; color:#ff6b6b;"><i class="fa-solid fa-trash-can"></i> 批量删除角色快照</h3><div style="display:flex; gap:8px; margin-bottom:10px;"><button id="lulu-qscsdel-all" class="menu_button btn-success" style="margin:0; padding:6px 12px; font-size:12px; border:none; flex:1; white-space:nowrap; display:flex; justify-content:center; align-items:center;">全选</button><button id="lulu-qscsdel-none" class="menu_button btn-secondary" style="margin:0; padding:6px 12px; font-size:12px; flex:1; white-space:nowrap; display:flex; justify-content:center; align-items:center;">全不选</button><button id="lulu-qscsdel-invert" class="menu_button btn-info" style="margin:0; padding:6px 12px; font-size:12px; flex:1; white-space:nowrap; display:flex; justify-content:center; align-items:center;" title="勾选的取消、没勾的勾上">反选</button></div>${listHtml}</div>`,
             );
             $ddlg
               .attr("id", "lulu-qscsdel-dialog")
               .prepend(
                 `<style>${window.buildPopupThemeCSS("dialog:has(#lulu-qscsdel-dialog)")}</style>`,
               );
-            // ✨ 补上：全选 / 全不选 按钮的点击事件
+            // ✨ 补上：全选 / 全不选 / 反选 按钮的点击事件
             $ddlg
               .find("#lulu-qscsdel-all")
               .on("click", () =>
@@ -1796,6 +1879,15 @@ ${themeOverrideCSS} </style>
               .find("#lulu-qscsdel-none")
               .on("click", () =>
                 $ddlg.find(".lulu-qscsdel-chk").prop("checked", false),
+              );
+            $ddlg
+              .find("#lulu-qscsdel-invert")
+              .on("click", () =>
+                $ddlg
+                  .find(".lulu-qscsdel-chk")
+                  .each(function () {
+                    $(this).prop("checked", !$(this).is(":checked"));
+                  }),
               );
             const r = await SillyTavern.callGenericPopup(
               $ddlg,
@@ -1860,6 +1952,23 @@ ${themeOverrideCSS} </style>
           renderCharSnapList();
         });
         // ========== 当前角色快照逻辑结束 ==========
+        // ✨ 极速面板 → 全局主面板 一键互切
+        $dlg.find("#lulu-qs-open-main").on("click", () => {
+          $dlg
+            .closest("dialog")
+            .find(".popup-button-ok")
+            .first()
+            .trigger("click");
+          $("#option_lulu_wb_manager").click();
+        });
+        // ✨ 全局快照：点"共涉及 N 本书"展开/收起书单
+        $dlg.on("click", ".lulu-qs-wbs-toggle", function (e) {
+          e.stopPropagation();
+          $(this).next(".lulu-qs-wbs-list").slideToggle(120);
+          $(this)
+            .find(".lulu-qs-wbs-arrow")
+            .toggleClass("fa-chevron-right fa-chevron-down");
+        });
         $dlg.find("#lulu-qs-search").on("input", function () {
           const kw = $(this).val().toLowerCase();
           $dlg.find("#lulu-qs-global-section .lulu-qs-item").each(function () {
@@ -1990,7 +2099,7 @@ ${themeOverrideCSS} </style>
           });
           listHtml += "</div>";
           const $ddlg = $(
-            `<div style="padding:6px; min-width:280px; text-align:left;"><h3 style="margin-top:0; color:#ff6b6b;"><i class="fa-solid fa-trash-can"></i> 批量删除快照</h3><div style="display:flex; gap:8px; margin-bottom:10px;"><button id="lulu-qsdel-all" class="menu_button btn-success" style="margin:0; padding:6px 12px; font-size:12px; border:none; flex:1; white-space:nowrap; display:flex; justify-content:center; align-items:center;">全选</button><button id="lulu-qsdel-none" class="menu_button btn-secondary" style="margin:0; padding:6px 12px; font-size:12px; flex:1; white-space:nowrap; display:flex; justify-content:center; align-items:center;">全不选</button></div>${listHtml}</div>`,
+            `<div style="padding:6px; min-width:280px; text-align:left;"><h3 style="margin-top:0; color:#ff6b6b;"><i class="fa-solid fa-trash-can"></i> 批量删除快照</h3><div style="display:flex; gap:8px; margin-bottom:10px;"><button id="lulu-qsdel-all" class="menu_button btn-success" style="margin:0; padding:6px 12px; font-size:12px; border:none; flex:1; white-space:nowrap; display:flex; justify-content:center; align-items:center;">全选</button><button id="lulu-qsdel-none" class="menu_button btn-secondary" style="margin:0; padding:6px 12px; font-size:12px; flex:1; white-space:nowrap; display:flex; justify-content:center; align-items:center;">全不选</button><button id="lulu-qsdel-invert" class="menu_button btn-info" style="margin:0; padding:6px 12px; font-size:12px; flex:1; white-space:nowrap; display:flex; justify-content:center; align-items:center;" title="勾选的取消、没勾的勾上">反选</button></div>${listHtml}</div>`,
           );
           $ddlg
             .attr("id", "lulu-qsdel-dialog")
@@ -2006,6 +2115,15 @@ ${themeOverrideCSS} </style>
             .find("#lulu-qsdel-none")
             .on("click", () =>
               $ddlg.find(".lulu-qsdel-chk").prop("checked", false),
+            );
+          $ddlg
+            .find("#lulu-qsdel-invert")
+            .on("click", () =>
+              $ddlg
+                .find(".lulu-qsdel-chk")
+                .each(function () {
+                  $(this).prop("checked", !$(this).is(":checked"));
+                }),
             );
           const r = await SillyTavern.callGenericPopup(
             $ddlg,
@@ -3413,7 +3531,8 @@ $menuBtn.on("click", async () => {
                 background: rgba(125,125,125,0.08) !important;
             }
             dialog.wb-manager-dialog .wb-transfer-selall,
-            dialog.wb-manager-dialog .wb-transfer-deselall {
+            dialog.wb-manager-dialog .wb-transfer-deselall,
+            dialog.wb-manager-dialog .wb-transfer-invert {
                 background: var(--SmartThemeBotMesColor) !important;
                 color: var(--SmartThemeBodyColor) !important;
                 border: 1px solid var(--SmartThemeBorderColor) !important;
@@ -3463,7 +3582,8 @@ $menuBtn.on("click", async () => {
             .dsnap-entry-title { font-weight: bold; font-size: 13px; line-height: 1.3; word-break: break-word; }
             .dsnap-entry-meta-row { display: flex; gap: 6px; flex-wrap: nowrap; font-size: 11px; align-items: center; overflow-x: auto; overflow-y: hidden; white-space: nowrap; }
             .dsnap-entry-pos { font-size: 11px; color: var(--SmartThemeBodyColor); background: rgba(125,125,125,0.08); border: 1px solid var(--SmartThemeBorderColor); border-radius: 4px; padding: 2px 6px; display: inline-flex; align-items: center; flex: 0 0 auto; white-space: nowrap; max-width: none; }
-            .dsnap-entry-preview { font-size: 11px; color: gray; line-height: 1.28; margin-top: 2px; border-top: 1px dashed rgba(125,125,125,0.25); padding-top: 4px; max-height: 5.2em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+            .dsnap-entry-preview { font-size: 11px; color: gray; line-height: 1.28; margin-top: 2px; border-top: 1px dashed rgba(125,125,125,0.25); padding-top: 4px; max-height: 5.2em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow-wrap: anywhere; cursor: pointer; }
+            .dsnap-entry-preview.lulu-expanded { max-height: none !important; -webkit-line-clamp: unset !important; display: block !important; overflow: visible !important; white-space: pre-wrap; color: var(--SmartThemeBodyColor); }
 
             .wb-input-dt { width: 100%; box-sizing: border-box; padding: 8px; border-radius: 4px; border: 1px solid var(--SmartThemeBorderColor); background: var(--SmartThemeBlurTintColor); color: var(--SmartThemeBodyColor); transition: 0.2s; font-family: inherit;}
             .wb-input-dt:focus { border-color: var(--SmartThemeQuoteColor); outline: none; }
@@ -3478,7 +3598,10 @@ $menuBtn.on("click", async () => {
             #wb-entry-list-side { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; transition: 0.3s ease; }
             #wb-entry-detail-side { flex: 1; display: none; flex-direction: column; border-left: 2px solid var(--SmartThemeBorderColor); padding-left: 10px; min-width: 0; transition: 0.3s ease; overflow: hidden; }
 
-            .content-preview { font-size: 11px; color: gray; margin-top: 6px; max-height: 3.2em; overflow: hidden; text-overflow: ellipsis; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; border-top: 1px dashed rgba(125,125,125,0.3); padding-top: 4px; }
+            .content-preview { font-size: 11px; color: gray; margin-top: 6px; max-height: 3.2em; overflow: hidden; text-overflow: ellipsis; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; border-top: 1px dashed rgba(125,125,125,0.3); padding-top: 4px; cursor: pointer; transition: 0.15s; }
+            .content-preview:hover { color: var(--SmartThemeBodyColor); }
+            /* 点击预览后完全展开正文，再点一次收起 */
+            .content-preview.lulu-expanded { max-height: none !important; -webkit-line-clamp: unset !important; display: block !important; overflow: visible !important; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--SmartThemeBodyColor); }
 
             /* 条目编辑模式：顶部控制区压缩，把空间优先让给核心编辑区 */
             #wb-manager-panel.wb-entry-focus #wb-top-control-bar { margin-bottom: 3px !important; padding-bottom: 3px !important; gap: 4px !important; }
@@ -3936,7 +4059,7 @@ $menuBtn.on("click", async () => {
                     font-size: 12px !important;
                     margin-bottom: 5px !important;
                 }
-                .wb-transfer-selall, .wb-transfer-deselall {
+                .wb-transfer-selall, .wb-transfer-deselall, .wb-transfer-invert {
                     padding: 4px 6px !important;
                     font-size: 11px !important;
                 }
@@ -4076,6 +4199,7 @@ $menuBtn.on("click", async () => {
                     </label>
                     <button id="wb-theme-quick-toggle" class="menu_button interactable btn-primary" style="margin: 0; padding: 4px 10px; min-width: unset; font-size: 13px; border-radius: 6px; flex-shrink: 0; white-space: nowrap;" title="一键切换深色/浅色护眼模式"><i class="fa-solid fa-circle-half-stroke"></i></button>
                     <button id="wb-theme-toggle-btn" class="menu_button interactable btn-primary" style="margin: 0; padding: 4px 10px; min-width: unset; font-size: 13px; border-radius: 6px; flex-shrink: 0; white-space: nowrap;"><i class="fa-solid fa-palette"></i> 外观设置</button>
+                    <button id="wb-btn-open-quick-snap" class="menu_button interactable btn-primary" style="margin: 0; padding: 4px 10px; min-width: unset; font-size: 13px; border-radius: 6px; flex-shrink: 0; white-space: nowrap;" title="收起本面板并打开极速快照控制台"><i class="fa-solid fa-bolt" style="color:#fcc419;"></i> 极速快照</button>
                     <label style="cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px; margin: 0; white-space: nowrap; background: rgba(125,125,125,0.1); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--SmartThemeBorderColor);" title="开启后，进入/导入角色卡时会自动检测内嵌世界书是否被污染">
                         <input type="checkbox" id="wb-toggle-auto-detect" style="accent-color: #ff922b; transform: scale(1.1);">
                         <span style="font-weight: bold; color: #ff922b;">自动检测污染</span>
@@ -4219,6 +4343,7 @@ $menuBtn.on("click", async () => {
                         <button id="wb-btn-batch-toggle" class="menu_button interactable wb-nowrap-btn btn-warning" style="margin: 0; padding: 6px 12px; font-size: 12px;"><i class="fa-solid fa-layer-group"></i> 批量操作模式</button>
                         <button id="wb-btn-select-all" class="menu_button interactable wb-nowrap-btn btn-success" style="margin: 0; padding: 6px 12px; font-size: 12px;"><i class="fa-solid fa-check-double"></i> 全选当前项</button>
                         <button id="wb-btn-deselect-all" class="menu_button interactable wb-nowrap-btn btn-primary" style="margin: 0; padding: 6px 12px; font-size: 12px;"><i class="fa-regular fa-square"></i> 撤销当前全选</button>
+                        <button id="wb-btn-invert-all" class="menu_button interactable wb-nowrap-btn btn-info" style="margin: 0; padding: 6px 12px; font-size: 12px;" title="当前列表里：勾选的取消、没勾的勾上"><i class="fa-solid fa-retweet"></i> 反选当前项</button>
                         <button id="wb-btn-create-wb" class="menu_button interactable btn-success wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px; border:none;"><i class="fa-solid fa-plus"></i> 新建</button>
                         <button type="button" id="wb-btn-import-wb" class="menu_button interactable btn-primary wb-nowrap-btn" style="margin: 0; padding: 6px 12px; font-size: 12px; border:none;"><i class="fa-solid fa-file-import"></i> 批量导入</button>
                     </div>
@@ -4307,6 +4432,11 @@ $menuBtn.on("click", async () => {
                         <div id="wb-assoc-char-add-area" style="margin-bottom: 15px; display:flex; flex-direction:column; gap:8px;">
                             <input type="text" id="wb-assoc-char-add-search" class="text_pole" placeholder="🔍 检索想绑定的世界书，可多选..." style="max-width:320px; box-sizing: border-box; padding: 8px;">
 <div id="wb-assoc-char-add-list" style="max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; margin: 8px 0; padding: 6px; background: var(--SmartThemeBotMesColor); border: 1px solid var(--SmartThemeBorderColor); border-radius: 6px;"></div>
+<div style="display:flex; gap:6px;">
+  <button id="wb-assoc-char-selall" class="menu_button interactable wb-nowrap-btn" style="margin:0; padding:4px 10px; font-size:11px; flex:1;" title="勾选当前列出的全部"><i class="fa-solid fa-check-double"></i> 全选</button>
+  <button id="wb-assoc-char-deselall" class="menu_button interactable wb-nowrap-btn" style="margin:0; padding:4px 10px; font-size:11px; flex:1;" title="清空勾选"><i class="fa-regular fa-square"></i> 全不选</button>
+  <button id="wb-assoc-char-invert" class="menu_button interactable wb-nowrap-btn" style="margin:0; padding:4px 10px; font-size:11px; flex:1;" title="勾选的取消、没勾的勾上"><i class="fa-solid fa-retweet"></i> 反选</button>
+</div>
 <button id="wb-assoc-char-add-btn" class="menu_button interactable btn-primary wb-nowrap-btn" style="margin:0; padding:8px 12px; border:none; font-size:13px;"><i class="fa-solid fa-plus"></i> 批量绑定给当前角色</button>
                         </div>
 
@@ -4615,6 +4745,7 @@ $menuBtn.on("click", async () => {
                         <div style="display:flex; gap:6px; margin-bottom:6px; flex-shrink:0;">
                             <button class="menu_button interactable wb-nowrap-btn wb-transfer-selall" data-side="A" style="margin:0; padding:4px 8px; font-size:11px; flex:1;"><i class="fa-solid fa-check-double"></i> 全选</button>
                             <button class="menu_button interactable wb-nowrap-btn wb-transfer-deselall" data-side="A" style="margin:0; padding:4px 8px; font-size:11px; flex:1;"><i class="fa-regular fa-square"></i> 取消</button>
+                            <button class="menu_button interactable wb-nowrap-btn wb-transfer-invert" data-side="A" style="margin:0; padding:4px 8px; font-size:11px; flex:1;" title="当前列表里：勾选的取消、没勾的勾上"><i class="fa-solid fa-retweet"></i> 反选</button>
                         </div>
                         <div class="wb-transfer-list scrollableInnerFull" data-side="A" style="flex:1; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:4px;"></div>
                     </div>
@@ -4639,6 +4770,7 @@ $menuBtn.on("click", async () => {
                         <div style="display:flex; gap:6px; margin-bottom:6px; flex-shrink:0;">
                             <button class="menu_button interactable wb-nowrap-btn wb-transfer-selall" data-side="B" style="margin:0; padding:4px 8px; font-size:11px; flex:1;"><i class="fa-solid fa-check-double"></i> 全选</button>
                             <button class="menu_button interactable wb-nowrap-btn wb-transfer-deselall" data-side="B" style="margin:0; padding:4px 8px; font-size:11px; flex:1;"><i class="fa-regular fa-square"></i> 取消</button>
+                            <button class="menu_button interactable wb-nowrap-btn wb-transfer-invert" data-side="B" style="margin:0; padding:4px 8px; font-size:11px; flex:1;" title="当前列表里：勾选的取消、没勾的勾上"><i class="fa-solid fa-retweet"></i> 反选</button>
                         </div>
                         <div class="wb-transfer-list scrollableInnerFull" data-side="B" style="flex:1; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:4px;"></div>
                     </div>
@@ -5209,6 +5341,15 @@ $menuBtn.on("click", async () => {
       toastr.success(`✨ 配方已成功更名为 [${newName}] ！`);
     });
 
+  $ui
+    .find("#wb-btn-open-quick-snap")
+    .off("click")
+    .on("click", () => {
+      // 收起本面板 → 打开极速快照控制台，免去找悬浮球
+      $ui.closest("dialog").find(".popup-button-ok").first().trigger("click");
+      if (typeof window.luluOpenQuickSnapshotView === "function")
+        window.luluOpenQuickSnapshotView();
+    });
   $ui
     .find("#wb-theme-toggle-btn")
     .off("click")
@@ -6286,16 +6427,25 @@ $menuBtn.on("click", async () => {
         return `<div style="color:gray; text-align:center; padding:30px;">回收站空空如也，很干净哦~ ✨</div>`;
       }
       let html =
+        '<div style="display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap;">' +
+        '<button class="menu_button interactable btn-success wb-nowrap-btn lulu-recycle-selall" style="margin:0; padding:6px 12px; font-size:12px; border:none; flex:1; white-space:nowrap; display:flex; justify-content:center; align-items:center;">全选</button>' +
+        '<button class="menu_button interactable btn-secondary wb-nowrap-btn lulu-recycle-selnone" style="margin:0; padding:6px 12px; font-size:12px; flex:1; white-space:nowrap; display:flex; justify-content:center; align-items:center;">全不选</button>' +
+        '<button class="menu_button interactable btn-info wb-nowrap-btn lulu-recycle-invert" style="margin:0; padding:6px 12px; font-size:12px; flex:1; white-space:nowrap; display:flex; justify-content:center; align-items:center;" title="勾选的取消、没勾的勾上"><i class="fa-solid fa-retweet"></i> 反选</button>' +
+        '<button class="menu_button interactable btn-danger wb-nowrap-btn lulu-recycle-purge-sel" style="margin:0; padding:6px 12px; font-size:12px; border:none; flex:1; white-space:nowrap; display:flex; justify-content:center; align-items:center;" title="把勾选的记录从回收站彻底清除，无法再还原"><i class="fa-solid fa-fire"></i> 清除选中</button>' +
+        "</div>" +
         '<div style="display:flex; flex-direction:column; gap:8px; max-height:55vh; overflow-y:auto; padding:4px;">';
       bin.forEach((item, idx) => {
         const timeStr = new Date(item.deletedAt).toLocaleString();
         const entryCount = (item.entries || []).length;
         html += `
           <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:10px; background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeBorderColor); border-radius:6px; flex-wrap:wrap;">
-            <div style="flex:1; min-width:150px;">
+            <label style="display:flex; align-items:center; gap:8px; flex:1; min-width:150px; cursor:pointer;">
+              <input type="checkbox" class="lulu-recycle-chk" data-idx="${idx}" style="accent-color:#ff6b6b; flex-shrink:0; transform:scale(1.1);">
+              <span style="flex:1; min-width:0;">
               <div style="font-weight:bold; font-size:13px;"><i class="fa-solid fa-book-skull" style="color:#fcc419;"></i> ${item.name}</div>
               <div style="font-size:11px; color:gray; margin-top:4px;">含 ${entryCount} 个条目 | 删除于 ${timeStr}</div>
-            </div>
+              </span>
+            </label>
             <div style="display:flex; gap:6px;">
               <button class="menu_button interactable btn-success wb-nowrap-btn lulu-recycle-restore" data-idx="${idx}" style="margin:0; padding:6px 12px; font-size:12px; border:none;"><i class="fa-solid fa-rotate-left"></i> 还原</button>
               <button class="menu_button interactable btn-danger wb-nowrap-btn lulu-recycle-purge" data-idx="${idx}" style="margin:0; padding:6px 10px; font-size:12px; border:none;" title="清除，无法再还原"><i class="fa-solid fa-fire"></i></button>
@@ -6334,6 +6484,52 @@ $menuBtn.on("click", async () => {
     const $dlg = $(dialogHtml);
 
     const bindEvents = () => {
+      $dlg
+        .find(".lulu-recycle-selall")
+        .off("click")
+        .on("click", () =>
+          $dlg.find(".lulu-recycle-chk").prop("checked", true),
+        );
+      $dlg
+        .find(".lulu-recycle-selnone")
+        .off("click")
+        .on("click", () =>
+          $dlg.find(".lulu-recycle-chk").prop("checked", false),
+        );
+      $dlg
+        .find(".lulu-recycle-invert")
+        .off("click")
+        .on("click", () =>
+          $dlg
+            .find(".lulu-recycle-chk")
+            .each(function () {
+              $(this).prop("checked", !$(this).is(":checked"));
+            }),
+        );
+      $dlg
+        .find(".lulu-recycle-purge-sel")
+        .off("click")
+        .on("click", async () => {
+          const idxs = [];
+          $dlg.find(".lulu-recycle-chk:checked").each(function () {
+            idxs.push(parseInt($(this).attr("data-idx")));
+          });
+          if (idxs.length === 0)
+            return toastr.info("先勾选要清除的记录哦~");
+          const res = await SillyTavern.callGenericPopup(
+            `确认把勾选的 <strong style="color:#ff6b6b;">${idxs.length}</strong> 条记录从回收站彻底清除吗？之后就再也找不回来咯！`,
+            SillyTavern.POPUP_TYPE.CONFIRM,
+          );
+          if (res !== SillyTavern.POPUP_RESULT.AFFIRMATIVE) return;
+          const dropSet = new Set(idxs);
+          const curBin = getRecycleBin().filter(
+            (_, i) => !dropSet.has(i),
+          );
+          saveRecycleBin(curBin);
+          $dlg.find("#lulu-recycle-list-wrap").html(renderRecycleList());
+          bindEvents();
+          toastr.info(`已彻底清除 ${idxs.length} 条回收站记录。`);
+        });
       $dlg
         .find(".lulu-recycle-restore")
         .off("click")
@@ -6681,6 +6877,24 @@ $menuBtn.on("click", async () => {
     renderTransferList(side);
     updateTransferCount();
   });
+  $ui.find(".wb-transfer-invert").on("click", function () {
+    const side = $(this).attr("data-side");
+    const st = transferState[side];
+    const kw = $ui
+      .find(`.wb-transfer-search[data-side="${side}"]`)
+      .val()
+      .toLowerCase();
+    const showPreview = $ui.find("#wb-transfer-preview").is(":checked");
+    st.entries.forEach((e, idx) => {
+      const s =
+        `${e.name || ""} ${(e.strategy?.keys || []).join(",")} ${showPreview ? e.content || "" : ""}`.toLowerCase();
+      if (!kw || s.includes(kw)) {
+        st.selected.has(idx) ? st.selected.delete(idx) : st.selected.add(idx);
+      }
+    });
+    renderTransferList(side);
+    updateTransferCount();
+  });
   // ---- Part 2 结束 ----
   // ---- Part 3：执行复制搬运 ----
   const doTransfer = async (fromSide, toSide) => {
@@ -6883,7 +7097,14 @@ $menuBtn.on("click", async () => {
         $luluBackBtn.on("click", () => {
           // 按当前可见的子页面，复用各自原有的返回逻辑
           if ($ui.find("#wb-entry-view").is(":visible")) {
-            $ui.find("#wb-btn-entry-cancel").trigger("click"); // 条目编辑（带未保存提醒）
+            // ✨ 正在编辑某条条目的具体内容（尤其全屏模式下）→ 返回只关掉编辑界面，留在本书的条目列表里
+            if (
+              $ui.find("#wb-entry-split-wrapper").hasClass("is-editing-entry")
+            ) {
+              $ui.find("#wb-btn-det-cancel").trigger("click");
+            } else {
+              $ui.find("#wb-btn-entry-cancel").trigger("click"); // 条目编辑（带未保存提醒）
+            }
           } else if ($ui.find("#wb-assoc-view").is(":visible")) {
             $ui.find("#wb-btn-assoc-cancel").trigger("click"); // 绑定管理
           } else if ($ui.find("#wb-edit-snap-view").is(":visible")) {
@@ -8359,6 +8580,31 @@ $menuBtn.on("click", async () => {
       renderData();
     }
   });
+  $ui.find("#wb-btn-invert-all").on("click", async () => {
+    if (currentVisibleWbs.length === 0) return;
+    if (isBatchMode) {
+      currentVisibleWbs.forEach((wb) => {
+        batchSelected.has(wb)
+          ? batchSelected.delete(wb)
+          : batchSelected.add(wb);
+      });
+      renderData();
+    } else {
+      const currentActive = getGlobalWorldbookNames();
+      const visibleSet = new Set(currentVisibleWbs);
+      const activeSet = new Set(currentActive);
+      // 反选：可见且已启用的去掉，可见但未启用的加上；列表外的书原样不动
+      const next = currentActive.filter((wb) => !visibleSet.has(wb));
+      currentVisibleWbs.forEach((wb) => {
+        if (!activeSet.has(wb)) next.push(wb);
+      });
+      await withLoadingOverlay(
+        async () => await rebindGlobalWorldbooks(next),
+        "应用中...",
+      );
+      renderData();
+    }
+  });
   $ui.find("#wb-btn-clear").on("click", async () => {
     await withLoadingOverlay(async () => {
       await rebindGlobalWorldbooks([]);
@@ -8725,21 +8971,31 @@ $menuBtn.on("click", async () => {
         '<div style="color:gray; font-size:13px; padding:10px; width: 100%;">这名角色目前一本世界书都还没有绑定。请点击上面的管理按钮去绑定吧~</div>',
       );
     } else {
+      const _existingWbs =
+        typeof getWorldbookNames === "function" ? getWorldbookNames() : [];
       cBooks.forEach((wb) => {
         const isPrimary = wb === charBooksObj.primary;
+        const isMissing = !_existingWbs.includes(wb);
         const tagLabelHtml = isPrimary
           ? `<span style="font-size:11px; background:var(--SmartThemeQuoteColor); color:#fff; padding:2px 5px; border-radius:4px; margin-left:4px; margin-bottom:2px;">主</span>`
           : `<span style="font-size:11px; border:1px solid gray; color:gray; background:transparent; padding:1px 4px; border-radius:4px; margin-left:4px; margin-bottom:2px;">附</span>`;
+        const missingTagHtml = isMissing
+          ? `<span style="font-size:11px; background:#ff6b6b; color:#fff; padding:2px 5px; border-radius:4px; margin-left:4px; margin-bottom:2px;" title="这本书已被删除或改名，只剩残留绑定，可以去「管理绑定世界书」里解绑清理">删</span>`
+          : "";
         const $wrapper = $(
-          '<div class="wb-item-wrapper" style="cursor: pointer;"></div>',
+          `<div class="wb-item-wrapper" style="cursor: ${isMissing ? "not-allowed" : "pointer"}; ${isMissing ? "opacity:0.6; border-color:#ff6b6b !important;" : ""}"></div>`,
         );
         const $titleArea = $(
-          `<div class="wb-item-header"><span class="wb-name-text" style="color:var(--SmartThemeQuoteColor); display:flex; align-items:center;">${wb} ${tagLabelHtml}</span></div>`,
+          `<div class="wb-item-header"><span class="wb-name-text" style="color:${isMissing ? "#ff6b6b" : "var(--SmartThemeQuoteColor)"}; display:flex; align-items:center;">${wb} ${tagLabelHtml}${missingTagHtml}</span></div>`,
         );
-        const $bottomArea = $(
-          `<div class="wb-item-bottom" style="justify-content:flex-end;"><div class="wb-bind-tag" style="background:var(--SmartThemeBlurTintColor); border:1px solid var(--SmartThemeBorderColor);"><i class="fa fa-sliders"></i> 点击配置此书条目开关</div></div>`,
-        );
+        const $bottomArea = isMissing
+          ? $(`<div class="wb-item-bottom" style="justify-content:flex-end;"><div class="wb-bind-tag" style="background:rgba(255,107,107,0.08); border:1px solid #ff6b6b; color:#ff6b6b;"><i class="fa-solid fa-link-slash"></i> 书已删除，请到「管理绑定世界书」解绑</div></div>`)
+          : $(`<div class="wb-item-bottom" style="justify-content:flex-end;"><div class="wb-bind-tag" style="background:var(--SmartThemeBlurTintColor); border:1px solid var(--SmartThemeBorderColor);"><i class="fa fa-sliders"></i> 点击配置此书条目开关</div></div>`);
         $wrapper.append($titleArea, $bottomArea).on("click", () => {
+          if (isMissing)
+            return toastr.warning(
+              `【${wb}】已经被删除啦，这里只是个残留绑定，去「管理绑定世界书」里点 × 解绑清理掉它吧~`,
+            );
           openEntryTuneView(wb, "#wb-char-view");
         });
         $bCont.append($wrapper);
@@ -9098,13 +9354,11 @@ $menuBtn.on("click", async () => {
           }
         : { primary: null, additional: [] };
     const swap = (v) => (v === oldName ? newName : v);
-    if (typeof rebindCharWorldbooks === "function") {
-      await rebindCharWorldbooks("current", {
-        primary: swap(cb.primary),
-        additional: (cb.additional || []).map(swap),
-      });
-      await initiateDeepScan(true, false);
-    }
+    await luluRebindCharWorldbooksSafe("current", {
+      primary: swap(cb.primary),
+      additional: (cb.additional || []).map(swap),
+    });
+    await initiateDeepScan(true, false);
   };
   // ✨ 公用：HTML 转义 & 逐行差异高亮（单卡救援 + 全库对照共用）
   const luluEscHtml = (s) =>
@@ -9486,6 +9740,7 @@ $menuBtn.on("click", async () => {
       <div style="display:flex; gap:8px; margin-bottom:10px;">
         <button id="lulu-csnap-del-selall" class="menu_button interactable btn-success wb-nowrap-btn" style="margin:0; padding:6px 12px; font-size:12px; border:none;"><i class="fa-solid fa-check-double"></i> 全选</button>
         <button id="lulu-csnap-del-deselall" class="menu_button interactable btn-secondary wb-nowrap-btn" style="margin:0; padding:6px 12px; font-size:12px;"><i class="fa-regular fa-square"></i> 全不选</button>
+        <button id="lulu-csnap-del-invert" class="menu_button interactable btn-info wb-nowrap-btn" style="margin:0; padding:6px 12px; font-size:12px;" title="勾选的取消、没勾的勾上"><i class="fa-solid fa-retweet"></i> 反选</button>
       </div>
       ${listHtml}
     </div>`;
@@ -9501,6 +9756,11 @@ $menuBtn.on("click", async () => {
     });
     $dlg.find("#lulu-csnap-del-deselall").on("click", () => {
       $dlg.find(".lulu-csnap-del-chk").prop("checked", false);
+    });
+    $dlg.find("#lulu-csnap-del-invert").on("click", () => {
+      $dlg.find(".lulu-csnap-del-chk").each(function () {
+        $(this).prop("checked", !$(this).is(":checked"));
+      });
     });
 
     const res = await SillyTavern.callGenericPopup(
@@ -9959,15 +10219,23 @@ $menuBtn.on("click", async () => {
         } catch (e) {}
         cBooks.forEach((wb) => {
           const isPrimary = wb === charBooksObj.primary;
+          const isMissing = !allAllWbs.includes(wb);
           const tagLabelHtml = isPrimary
             ? `<span style="font-size:11px; background:var(--SmartThemeQuoteColor); color:#fff; padding:2px 5px; border-radius:4px; margin-left:4px; margin-bottom:2px;">主</span>`
             : `<span style="font-size:11px; border:1px solid gray; color:gray; background:transparent; padding:1px 4px; border-radius:4px; margin-left:4px; margin-bottom:2px;">附</span>`;
+          const missingTagHtml = isMissing
+            ? `<span style="font-size:11px; border:1px solid #ff6b6b; color:#ff6b6b; padding:1px 4px; border-radius:4px; margin-left:4px; margin-bottom:2px;" title="这本书已被删除或改名，点右边 × 即可解绑清理">已删除</span>`
+            : "";
           const $item = $(
-            `<div style="display:inline-flex; align-items:center; gap:8px; background:var(--SmartThemeBotMesColor); border:1px solid var(--SmartThemeQuoteColor); padding:6px 12px; border-radius:4px; transition:0.2s;"><span style="font-weight:bold; font-size:13px; color:var(--SmartThemeQuoteColor); cursor:pointer; display:flex; align-items:center;" title="点击编辑内容" class="wb-assoc-entry-edit"><i class="fa-solid fa-robot" style="margin-right: 5px;"></i> ${wb} ${tagLabelHtml}</span><div class="hover-red" style="cursor:pointer; color:gray; margin-left: 4px;" title="解除绑定"><i class="fa-solid fa-xmark"></i></div></div>`,
+            `<div style="display:inline-flex; align-items:center; gap:8px; background:var(--SmartThemeBotMesColor); border:1px solid ${isMissing ? "#ff6b6b" : "var(--SmartThemeQuoteColor)"}; padding:6px 12px; border-radius:4px; transition:0.2s;"><span style="font-weight:bold; font-size:13px; color:${isMissing ? "#ff6b6b" : "var(--SmartThemeQuoteColor)"}; cursor:pointer; display:flex; align-items:center;" title="${isMissing ? "这本书已被删除或改名，无法编辑内容" : "点击编辑内容"}" class="wb-assoc-entry-edit"><i class="fa-solid fa-robot" style="margin-right: 5px;"></i> ${wb} ${tagLabelHtml}${missingTagHtml}</span><div class="hover-red" style="cursor:pointer; color:gray; margin-left: 4px;" title="解除绑定"><i class="fa-solid fa-xmark"></i></div></div>`,
           );
           $item
             .find(".wb-assoc-entry-edit")
-            .on("click", () => openEntryTuneView(wb, "#wb-assoc-view"));
+            .on("click", () =>
+              isMissing
+                ? toastr.warning(`【${wb}】已经被删除啦，点右边 × 解绑清理掉它就好~`)
+                : openEntryTuneView(wb, "#wb-assoc-view"),
+            );
           $item.find(".hover-red").hover(
             function () {
               $(this).css("color", "#ff6b6b");
@@ -9980,13 +10248,11 @@ $menuBtn.on("click", async () => {
             let newAdd = cBooks.filter((b) => b !== wb);
             let primary = newAdd.length > 0 ? newAdd.shift() : null;
             await withLoadingOverlay(async () => {
-              if (typeof rebindCharWorldbooks === "function") {
-                await rebindCharWorldbooks("current", {
-                  primary: primary,
-                  additional: newAdd,
-                });
-                await initiateDeepScan(true, false);
-              }
+              await luluRebindCharWorldbooksSafe("current", {
+                primary: primary,
+                additional: newAdd,
+              });
+              await initiateDeepScan(true, false);
             }, "正在为角色卡解除绑定...");
             renderAssocView();
           });
@@ -10134,6 +10400,7 @@ $menuBtn.on("click", async () => {
         <div style="display:flex; gap:6px; margin-bottom:10px;">
           <button id="lulu-scan-char-selall" class="menu_button interactable btn-success wb-nowrap-btn" style="margin:0; padding:6px 12px; font-size:12px; border:none;">全选当前</button>
           <button id="lulu-scan-char-deselall" class="menu_button interactable btn-secondary wb-nowrap-btn" style="margin:0; padding:6px 12px; font-size:12px;">清空当前</button>
+          <button id="lulu-scan-char-invert" class="menu_button interactable btn-info wb-nowrap-btn" style="margin:0; padding:6px 12px; font-size:12px;" title="当前过滤列表里：勾选的取消、没勾的勾上"><i class="fa-solid fa-retweet"></i> 反选当前</button>
         </div>
         <div id="lulu-scan-char-list" style="max-height:50vh; overflow-y:auto; display:flex; flex-direction:column; gap:6px; padding:4px;"></div>
         <div style="font-size:11px; color:gray; margin-top:8px;">* 勾选后点击"开始扫描"，只检查选中的角色卡</div>
@@ -10209,6 +10476,19 @@ $menuBtn.on("click", async () => {
       const sortMode = $dlg.find("#lulu-scan-char-sort").val();
       const list = getSortedFiltered(kw, sortMode);
       list.forEach((c) => selectedAvatars.delete(c.avatar));
+      renderList(kw, sortMode);
+    });
+
+    // 反选当前（只翻转当前过滤列表中的角色勾选状态）
+    $dlg.find("#lulu-scan-char-invert").on("click", () => {
+      const kw = $dlg.find("#lulu-scan-char-search").val();
+      const sortMode = $dlg.find("#lulu-scan-char-sort").val();
+      const list = getSortedFiltered(kw, sortMode);
+      list.forEach((c) => {
+        selectedAvatars.has(c.avatar)
+          ? selectedAvatars.delete(c.avatar)
+          : selectedAvatars.add(c.avatar);
+      });
       renderList(kw, sortMode);
     });
 
@@ -10412,6 +10692,7 @@ $menuBtn.on("click", async () => {
           <input type="text" id="lulu-scan-search" class="text_pole" placeholder="🔍 搜索角色或书名..." style="flex:1; min-width:0; box-sizing:border-box; padding:7px; font-size:12px; border-radius:4px;">
           <button id="lulu-scan-selall" class="menu_button interactable btn-success wb-nowrap-btn" style="margin:0; padding:7px 12px; font-size:12px; border:none; flex-shrink:0;">全选</button>
           <button id="lulu-scan-deselall" class="menu_button interactable btn-secondary wb-nowrap-btn" style="margin:0; padding:7px 12px; font-size:12px; flex-shrink:0;">清空</button>
+          <button id="lulu-scan-invert" class="menu_button interactable btn-info wb-nowrap-btn" style="margin:0; padding:7px 12px; font-size:12px; flex-shrink:0;" title="当前可见项：勾选的取消、没勾的勾上"><i class="fa-solid fa-retweet"></i> 反选</button>
         </div>
         
         <div id="lulu-scan-list-wrap" style="max-height:50vh; overflow-y:auto; -webkit-overflow-scrolling:touch; padding-right:4px;">${rowsHtml}</div>
@@ -10439,6 +10720,14 @@ $menuBtn.on("click", async () => {
     });
     $dlg.find("#lulu-scan-deselall").on("click", () => {
       $dlg.find(".lulu-scan-row:visible .lulu-scan-chk").prop("checked", false);
+    });
+    $dlg.find("#lulu-scan-invert").on("click", () => {
+      // 只翻转当前搜索可见的项
+      $dlg
+        .find(".lulu-scan-row:visible .lulu-scan-chk")
+        .each(function () {
+          $(this).prop("checked", !$(this).is(":checked"));
+        });
     });
 
     // 简单的逐行差异高亮（用于同名条目正文对比）
@@ -10607,6 +10896,17 @@ $menuBtn.on("click", async () => {
     $ui.find("#wb-assoc-user-add-search").val("");
     renderAssocView();
   });
+  $ui.find("#wb-assoc-char-selall").on("click", () => {
+    $ui.find(".wb-assoc-char-check").prop("checked", true);
+  });
+  $ui.find("#wb-assoc-char-deselall").on("click", () => {
+    $ui.find(".wb-assoc-char-check").prop("checked", false);
+  });
+  $ui.find("#wb-assoc-char-invert").on("click", () => {
+    $ui.find(".wb-assoc-char-check").each(function () {
+      $(this).prop("checked", !$(this).is(":checked"));
+    });
+  });
   $ui.find("#wb-assoc-char-add-btn").on("click", async () => {
     const selectedWbs = [];
     $ui.find(".wb-assoc-char-check:checked").each(function () {
@@ -10626,13 +10926,11 @@ $menuBtn.on("click", async () => {
     const newPrimary = cBooks.shift();
     const newAdd = cBooks;
     await withLoadingOverlay(async () => {
-      if (typeof rebindCharWorldbooks === "function") {
-        await rebindCharWorldbooks("current", {
-          primary: newPrimary,
-          additional: newAdd,
-        });
-        await initiateDeepScan(true, false);
-      }
+      await luluRebindCharWorldbooksSafe("current", {
+        primary: newPrimary,
+        additional: newAdd,
+      });
+      await initiateDeepScan(true, false);
     }, "正在努力为你当前的角色卡绑定世界书...");
     toastr.success(`成功把 [${selectedWbs.join(", ")}] 绑定给角色卡啦！`);
     $ui.find("#wb-assoc-char-add-search").val("");
@@ -11612,6 +11910,7 @@ $menuBtn.on("click", async () => {
       <div style="display:flex; gap:8px; margin-bottom:10px;">
         <button id="lulu-snap-del-selall" class="menu_button interactable btn-success wb-nowrap-btn" style="margin:0; padding:6px 12px; font-size:12px; border:none;"><i class="fa-solid fa-check-double"></i> 全选</button>
         <button id="lulu-snap-del-deselall" class="menu_button interactable btn-secondary wb-nowrap-btn" style="margin:0; padding:6px 12px; font-size:12px;"><i class="fa-regular fa-square"></i> 全不选</button>
+        <button id="lulu-snap-del-invert" class="menu_button interactable btn-info wb-nowrap-btn" style="margin:0; padding:6px 12px; font-size:12px;" title="勾选的取消、没勾的勾上"><i class="fa-solid fa-retweet"></i> 反选</button>
       </div>
       ${listHtml}
     </div>`;
@@ -11627,6 +11926,11 @@ $menuBtn.on("click", async () => {
     });
     $dlg.find("#lulu-snap-del-deselall").on("click", () => {
       $dlg.find(".lulu-snap-del-chk").prop("checked", false);
+    });
+    $dlg.find("#lulu-snap-del-invert").on("click", () => {
+      $dlg.find(".lulu-snap-del-chk").each(function () {
+        $(this).prop("checked", !$(this).is(":checked"));
+      });
     });
 
     const res = await SillyTavern.callGenericPopup(
@@ -11942,7 +12246,7 @@ $menuBtn.on("click", async () => {
           posBadge = formatPositionBadge(entry.position);
         const previewHtml =
           showDsPreview && entry.content
-            ? `<div class="dsnap-entry-preview">${String(entry.content).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`
+            ? `<div class="dsnap-entry-preview" title="点击展开/收起完整内容">${String(entry.content).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`
             : "";
         const $item = $(
           `<div class="dsnap-entry-item" style="border-left: 3px solid ${rawStateColor};"><input type="checkbox" style="transform:scale(1.15); margin-top:2px; flex-shrink:0;"><div class="dsnap-entry-body"><div class="dsnap-entry-title">${entry.name || `(未命名条目)`}</div><div class="dsnap-entry-meta-row"><span class="${entry.enabled ? "badge-green" : "badge-grey"}">${entry.enabled ? "原始已启" : "原始关闭"}</span><span class="badge-blue">${StrategyTxt}</span><span class="dsnap-entry-pos">${posBadge}</span></div>${previewHtml}</div></div>`,
@@ -12435,6 +12739,11 @@ $menuBtn.on("click", async () => {
             扫描到以下带前缀的条目分组，默认全部勾选。<br>
             如果某个前缀其实只是装饰、不想分组，取消勾选即可~
           </div>
+          <div style="display:flex; gap:6px; margin-bottom:10px;">
+            <button id="lulu-prefix-grp-selall" class="menu_button interactable btn-success wb-nowrap-btn" style="margin:0; padding:5px 12px; font-size:12px; border:none; flex:1;">全选</button>
+            <button id="lulu-prefix-grp-deselall" class="menu_button interactable btn-secondary wb-nowrap-btn" style="margin:0; padding:5px 12px; font-size:12px; flex:1;">全不选</button>
+            <button id="lulu-prefix-grp-invert" class="menu_button interactable btn-info wb-nowrap-btn" style="margin:0; padding:5px 12px; font-size:12px; flex:1;" title="勾选的取消、没勾的勾上"><i class="fa-solid fa-retweet"></i> 反选</button>
+          </div>
           <div style="max-height:45vh; overflow-y:auto; padding-right:4px;">${listHtml}</div>
           <div style="font-size:11px; color:gray; margin-top:10px;">* 确认后只是暂存分组，记得点左下角绿色「确认并覆盖源文件」才会真正生效哦~</div>
         </div>`;
@@ -12445,6 +12754,17 @@ $menuBtn.on("click", async () => {
         .prepend(
           `<style>${buildPopupThemeCSS("dialog:has(#lulu-prefix-grp-dialog)")}</style>`,
         );
+      $dlg.find("#lulu-prefix-grp-selall").on("click", () => {
+        $dlg.find(".lulu-prefix-grp-chk").prop("checked", true);
+      });
+      $dlg.find("#lulu-prefix-grp-deselall").on("click", () => {
+        $dlg.find(".lulu-prefix-grp-chk").prop("checked", false);
+      });
+      $dlg.find("#lulu-prefix-grp-invert").on("click", () => {
+        $dlg.find(".lulu-prefix-grp-chk").each(function () {
+          $(this).prop("checked", !$(this).is(":checked"));
+        });
+      });
 
       const result = await SillyTavern.callGenericPopup(
         $dlg,
@@ -12789,9 +13109,13 @@ $menuBtn.on("click", async () => {
         </div>
 
         <div id="lulu-wrap-remove-panel" style="display:none; margin-bottom:12px; padding:10px; background:rgba(255,107,107,0.06); border:1px dashed rgba(255,107,107,0.4); border-radius:6px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:6px; flex-wrap:wrap;">
             <span style="font-size:12px; font-weight:bold; color:#ff6b6b;"><i class="fa-solid fa-wand-magic-sparkles"></i> 检测到的包裹层（勾选要去掉的）：</span>
+            <span style="display:flex; gap:4px; flex-shrink:0;">
+              <button id="lulu-wrap-layer-selall" class="menu_button interactable wb-nowrap-btn" style="margin:0; padding:3px 10px; font-size:11px;" title="全选"><i class="fa-solid fa-check-double"></i></button>
+              <button id="lulu-wrap-layer-invert" class="menu_button interactable wb-nowrap-btn" style="margin:0; padding:3px 10px; font-size:11px;" title="反选"><i class="fa-solid fa-retweet"></i></button>
               <button id="lulu-wrap-rescan" class="menu_button interactable wb-nowrap-btn" style="margin:0; padding:3px 10px; font-size:11px;" title="重新扫描选中条目"><i class="fa-solid fa-rotate-right"></i> 重扫</button>
+            </span>
           </div>
           <div id="lulu-wrap-layer-list" style="max-height:30vh; overflow-y:auto; display:flex; flex-direction:column; gap:6px;"></div>
           <div id="lulu-wrap-layer-empty" style="display:none; font-size:12px; color:gray; line-height:1.6; padding:6px 0;">
@@ -12926,6 +13250,14 @@ $menuBtn.on("click", async () => {
       if (isRemove) runLayerScan();
     });
     $dlg.find("#lulu-wrap-rescan").on("click", runLayerScan);
+    $dlg.find("#lulu-wrap-layer-selall").on("click", () => {
+      $dlg.find(".lulu-wrap-layer-chk").prop("checked", true);
+    });
+    $dlg.find("#lulu-wrap-layer-invert").on("click", () => {
+      $dlg.find(".lulu-wrap-layer-chk").each(function () {
+        $(this).prop("checked", !$(this).is(":checked"));
+      });
+    });
 
     // 预设：XML 标签（问标签名后自动拼好 <名> ... </名>）
     $dlg.find("#lulu-wrap-preset-xml").on("click", async () => {
@@ -13691,6 +14023,7 @@ $menuBtn.on("click", async () => {
         ? `
              <button class="menu_button interactable wb-nowrap-btn btn-info wb-group-select-all" style="margin:0; padding:4px 10px; font-size:12px;" title="勾选本组"><i class="fa-solid fa-check-double"></i></button>
              <button class="menu_button interactable wb-nowrap-btn btn-secondary wb-group-deselect-all" style="margin:0; padding:4px 10px; font-size:12px;" title="撤销本组"><i class="fa-regular fa-square"></i></button>
+             <button class="menu_button interactable wb-nowrap-btn btn-warning wb-group-invert" style="margin:0; padding:4px 10px; font-size:12px;" title="反选本组"><i class="fa-solid fa-retweet"></i></button>
           `
         : ``;
 
@@ -13874,6 +14207,18 @@ $menuBtn.on("click", async () => {
         gEntries.forEach((entry) => {
           const index = entryIndexMap.get(entry);
           if (index !== undefined) entryBatchSelected.delete(index);
+        });
+        $ui.find("#wb-entry-batch-count").text(entryBatchSelected.size);
+        renderEntryList();
+      });
+      $gHeader.find(".wb-group-invert").on("click", (e) => {
+        e.stopPropagation();
+        gEntries.forEach((entry) => {
+          const index = entryIndexMap.get(entry);
+          if (index === undefined) return;
+          entryBatchSelected.has(index)
+            ? entryBatchSelected.delete(index)
+            : entryBatchSelected.add(index);
         });
         $ui.find("#wb-entry-batch-count").text(entryBatchSelected.size);
         renderEntryList();
@@ -14075,7 +14420,7 @@ $menuBtn.on("click", async () => {
         }
         let previewHtml = "";
         if (showPreview && entry.content) {
-          previewHtml = `<div class="content-preview">${String(entry.content).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`;
+          previewHtml = `<div class="content-preview" title="点击展开/收起完整内容">${String(entry.content).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`;
         }
 
         let groupTagHtml = "";
@@ -14095,6 +14440,14 @@ $menuBtn.on("click", async () => {
         if (isEntryBatchMode)
           $info.on("click", () => {
             $chk.prop("checked", !$chk.is(":checked")).trigger("change");
+          });
+
+        // 点击内容预览：下拉展开看完整正文，再点一次收起（批量模式下不触发勾选）
+        $info
+          .find(".content-preview")
+          .on("click", function (e) {
+            e.stopPropagation();
+            $(this).toggleClass("lulu-expanded");
           });
 
         const $right = $(
@@ -14868,6 +15221,8 @@ $menuBtn.on("click", async () => {
           </div>
           <div id="lulu-entry-snap-delbar" style="display:none; align-items:center; gap:8px; margin-bottom:10px; padding:8px; background:rgba(255,107,107,0.08); border:1px dashed #ff6b6b; border-radius:6px;">
             <span style="font-size:12px; color:#ff6b6b; font-weight:bold; flex:1;">勾选要删的快照</span>
+            <button id="lulu-entry-snap-selall" class="menu_button interactable wb-nowrap-btn" style="margin:0; padding:5px 10px; font-size:11px;" title="全选"><i class="fa-solid fa-check-double"></i></button>
+            <button id="lulu-entry-snap-invert" class="menu_button interactable wb-nowrap-btn" style="margin:0; padding:5px 10px; font-size:11px;" title="反选"><i class="fa-solid fa-retweet"></i></button>
             <button id="lulu-entry-snap-doconfirm" class="menu_button interactable btn-danger wb-nowrap-btn" style="margin:0; padding:5px 12px; font-size:12px; border:none;"><i class="fa-solid fa-burst"></i> 确认删除</button>
           </div>
           <div id="lulu-entry-snap-list" style="max-height:50vh; overflow-y:auto; padding-right:4px;">${listHtml}</div>
@@ -14926,6 +15281,22 @@ $menuBtn.on("click", async () => {
             $dlg.find(".lulu-entry-snap-delchk").remove();
             $dlg.find(".lulu-entry-snap-apply").show();
           }
+        });
+
+      // 删除模式里的 全选 / 反选
+      $dlg
+        .find("#lulu-entry-snap-selall")
+        .off("click")
+        .on("click", () => {
+          $dlg.find(".lulu-entry-snap-delchk").prop("checked", true);
+        });
+      $dlg
+        .find("#lulu-entry-snap-invert")
+        .off("click")
+        .on("click", () => {
+          $dlg.find(".lulu-entry-snap-delchk").each(function () {
+            $(this).prop("checked", !$(this).is(":checked"));
+          });
         });
 
       // 确认删除
@@ -15776,12 +16147,10 @@ $menuBtn.on("click", async () => {
             }
           : { primary: null, additional: [] };
       const swap = (v) => (v === oldName ? newName : v);
-      if (typeof rebindCharWorldbooks === "function") {
-        await rebindCharWorldbooks("current", {
-          primary: swap(cb.primary),
-          additional: (cb.additional || []).map(swap),
-        });
-      }
+      await luluRebindCharWorldbooksSafe("current", {
+        primary: swap(cb.primary),
+        additional: (cb.additional || []).map(swap),
+      });
     } catch (e) {
       console.error("Lulu 自动检测：改绑失败", e);
     }
